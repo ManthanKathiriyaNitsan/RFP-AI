@@ -1,0 +1,76 @@
+{
+  "page": {
+    "title": "AI Chat Assistant",
+    "subtitle": "Refine your proposals with intelligent suggestions"
+  },
+  "headerActions": [
+    { "id": "home", "label": "Home", "icon": "home", "href": "" },
+    { "id": "newProposal", "label": "New Proposal", "icon": "fileText", "href": "/proposals/new" },
+    { "id": "settings", "label": "Settings", "icon": "settings", "href": "/account-settings" }
+  ],
+  "chat": {
+    "title": "RFP AI Assistant",
+    "statusText": "Online • Ready to help",
+    "inputPlaceholder": "Type your message..."
+  },
+  "sidebar": {
+    "quickSuggestionsTitle": "Quick Suggestions",
+    "recentChatsTitle": "Recent Chats",
+    "recentChatsToastTitle": "Chat history",
+    "recentChatsToastDescriptionPrefix": "Loading chat:"
+  },
+  "quickSuggestions": [
+    {
+      "title": "Improve Timeline",
+      "description": "Add realistic milestones",
+      "prompt": "Help me create a realistic project timeline with milestones"
+    },
+    {
+      "title": "Budget Details",
+      "description": "Break down cost structure",
+      "prompt": "Can you help me structure the budget breakdown for my project?"
+    },
+    {
+      "title": "Risk Assessment",
+      "description": "Identify potential risks",
+      "prompt": "What are the potential risks I should consider for this project?"
+    },
+    {
+      "title": "Vendor Criteria",
+      "description": "Define selection criteria",
+      "prompt": "Help me define vendor selection criteria for my RFP"
+    }
+  ],
+  "recentChats": [
+    { "id": 1, "title": "E-commerce Platform", "time": "2 hours ago" },
+    { "id": 2, "title": "Mobile App RFP", "time": "Yesterday" },
+    { "id": 3, "title": "Cloud Migration", "time": "2 days ago" }
+  ],
+  "initialMessages": [
+    {
+      "id": 1,
+      "isAi": true,
+      "message": "Hello! I'm here to help you refine your RFP. What specific aspect would you like to improve?"
+    },
+    {
+      "id": 2,
+      "isAi": false,
+      "message": "I need help with the technical requirements section"
+    },
+    {
+      "id": 3,
+      "isAi": true,
+      "message": "Great! I can help you structure comprehensive technical requirements. What type of project are you working on?"
+    },
+    {
+      "id": 4,
+      "isAi": false,
+      "message": "It's a web application development project"
+    },
+    {
+      "id": 5,
+      "isAi": true,
+      "message": "Perfect! Here are key technical requirements you should include:\n\n• Technology stack preferences\n• Database requirements\n• Performance benchmarks\n• Security standards\n• Browser compatibility\n• API specifications\n• Scalability requirements"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+@layer utilities {
+  /* Theme toggle icon utilities */
+  .theme-icon-sun {
+    transform: rotate(0deg) scale(1);
+  }
+
+  .dark .theme-icon-sun {
+    transform: rotate(-90deg) scale(0);
+  }
+
+  .theme-icon-moon {
+    transform: rotate(90deg) scale(0);
+  }
+
+  .dark .theme-icon-moon {
+    transform: rotate(0deg) scale(1);
+  }
+
+  /* Status badge utilities */
+  .badge-status-success {
+    background: hsl(152, 76%, 92%);
+    color: hsl(152, 76%, 30%);
+    border-color: hsl(152, 76%, 80%);
+  }
+
+  .dark .badge-status-success {
+    background: hsl(152, 76%, 20%);
+    color: hsl(152, 76%, 70%);
+    border-color: hsl(152, 76%, 30%);
+  }
+
+  .badge-status-warning {
+    background: hsl(38, 92%, 92%);
+    color: hsl(38, 92%, 35%);
+    border-color: hsl(38, 92%, 80%);
+  }
+
+  .dark .badge-status-warning {
+    background: hsl(38, 92%, 20%);
+    color: hsl(38, 92%, 70%);
+    border-color: hsl(38, 92%, 30%);
+  }
+
+  .badge-status-error {
+    background: hsl(0, 100%, 92%);
+    color: hsl(0, 100%, 45%);
+    border-color: hsl(0, 100%, 80%);
+  }
+
+  .dark .badge-status-error {
+    background: hsl(0, 100%, 20%);
+    color: hsl(0, 100%, 70%);
+    border-color: hsl(0, 100%, 35%);
+  }
+}

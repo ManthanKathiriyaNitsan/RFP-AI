@@ -1,0 +1,174 @@
+@layer components {
+  /* Theme-driven gradient and color classes (use CSS variables – org theme from BrandingContext) */
+  .theme-gradient-bg {
+    background: var(--theme-gradient);
+    color: hsl(210, 20%, 98%);
+    transition: background 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .theme-gradient-bg:hover {
+    opacity: 0.95;
+  }
+  .theme-gradient-text {
+    background: var(--theme-gradient-r);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .theme-gradient-fill {
+    background: var(--theme-gradient-r);
+  }
+
+  /* Gradient backgrounds – use variables so org theme applies */
+  .gradient-bg {
+    background: var(--theme-gradient);
+    transition: background 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .ai-gradient {
+    background: var(--theme-gradient);
+    transition: background 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .hero-gradient {
+    background: var(--theme-gradient);
+    transition: background 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .dark .hero-gradient {
+    background: linear-gradient(135deg, hsl(224, 71.4%, 4.1%) 0%, hsl(230, 30%, 8%) 50%, hsl(240, 30%, 12%) 100%);
+  }
+
+  /* Card components */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+  
+  .glass-card {
+    @apply backdrop-blur-md border shadow-sm rounded-xl;
+    background: hsl(0, 0%, 100%);
+    border-color: hsl(220, 13%, 90%);
+    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .dark .glass-card {
+    background: hsl(224, 71.4%, 4.1%);
+    border-color: hsl(215, 27.9%, 16.9%);
+  }
+  
+  .stat-card {
+    @apply glass-card rounded-2xl p-6 card-hover relative overflow-hidden;
+  }
+  
+  .stat-card::before {
+    content: '';
+    @apply absolute inset-0 pointer-events-none;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.03) 0%, transparent 100%);
+  }
+  
+  .dark .stat-card::before {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.1) 0%, transparent 100%);
+  }
+  
+  .proposal-card {
+    @apply glass-card p-5 transition-all duration-300 cursor-pointer;
+  }
+  
+  .proposal-card:hover {
+    @apply shadow-md;
+    border-color: hsl(var(--primary) / 0.3);
+  }
+  
+  .dark .proposal-card:hover {
+    border-color: hsl(var(--primary) / 0.5);
+  }
+
+  /* Navigation */
+  .nav-link {
+    @apply relative transition-all duration-300;
+  }
+  
+  .nav-link::after {
+    content: '';
+    @apply absolute bottom-0 left-0 w-0 h-0.5 transition-all duration-300;
+    background: var(--theme-gradient-r);
+  }
+  
+  .nav-link:hover::after {
+    @apply w-full;
+  }
+
+  /* Form inputs */
+  .modern-input {
+    @apply border-border transition-all duration-300;
+    background: hsl(0, 0%, 100%);
+  }
+
+  .dark .modern-input {
+    background: hsl(215, 27.9%, 16.9%);
+  }
+  
+  .modern-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+  
+  .dark .modern-input:focus {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  /* Hide native date input calendar icon (right-side) – keep only left calendar icon */
+  .input-date-no-indicator::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    position: absolute;
+    right: 0;
+    width: 0;
+    height: 0;
+    cursor: pointer;
+  }
+  .input-date-no-indicator::-moz-calendar-picker-indicator {
+    opacity: 0;
+    position: absolute;
+    right: 0;
+    width: 0;
+    height: 0;
+    cursor: pointer;
+  }
+
+  /* Buttons – theme applied in index.css for .floating-button */
+}
+
+/* Chat typing indicator – 3-dot bounce animation */
+@keyframes typing-dot-bounce {
+  0%, 60%, 100% {
+    opacity: 0.4;
+    transform: translateY(0) scale(0.9);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1);
+  }
+}
+
+.chat-typing-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1rem;
+}
+
+.chat-typing-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--muted-foreground);
+  flex-shrink: 0;
+  animation: typing-dot-bounce 1.2s ease-in-out infinite both;
+}
+
+.chat-typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.chat-typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}

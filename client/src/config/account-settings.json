@@ -1,0 +1,127 @@
+{
+  "page": {
+    "title": "Account Settings",
+    "subtitle": "Manage your profile and preferences"
+  },
+  "headerActions": [
+    { "id": "home", "label": "Home", "icon": "home", "href": "" },
+    { "id": "aiChat", "label": "AI Chat", "icon": "bot", "href": "/ai-chat" },
+    { "id": "newProposal", "label": "New Proposal", "icon": "fileText", "href": "/proposals/new" }
+  ],
+  "sidebar": {
+    "settingsLabel": "Settings",
+    "nav": [
+      { "id": "profile", "label": "Profile", "icon": "user" },
+      { "id": "security", "label": "Security", "icon": "lock" },
+      { "id": "notifications", "label": "Notifications", "icon": "bell" },
+      { "id": "billing", "label": "Billing", "icon": "creditCard" }
+    ],
+    "userCard": {
+      "creditsLabel": "Credits",
+      "creditsSuffix": "credits available",
+      "showCreditsBar": true
+    }
+  },
+  "sections": {
+    "profile": {
+      "title": "Profile Information",
+      "avatar": {
+        "sectionLabel": "Profile Picture",
+        "uploadLabel": "Upload New",
+        "removeLabel": "Remove",
+        "removeConfirmTitle": "Remove Profile Picture",
+        "removeConfirmDescription": "Are you sure you want to remove your profile picture?",
+        "removeConfirmButton": "Remove",
+        "removeCancelButton": "Cancel"
+      },
+      "fields": [
+        { "id": "firstName", "label": "First Name", "type": "text", "gridCol": "half" },
+        { "id": "lastName", "label": "Last Name", "type": "text", "gridCol": "half" },
+        { "id": "email", "label": "Email", "type": "email", "gridCol": "full" },
+        { "id": "company", "label": "Company", "type": "text", "gridCol": "full" },
+        { "id": "jobTitle", "label": "Job Title", "type": "text", "gridCol": "full" },
+        { "id": "bio", "label": "Bio", "type": "textarea", "placeholder": "Tell us about yourself...", "rows": 3, "gridCol": "full" }
+      ],
+      "saveLabel": "Save Changes",
+      "savingLabel": "Saving..."
+    },
+    "security": {
+      "title": "Security Settings",
+      "fields": [
+        { "id": "currentPassword", "label": "Current Password", "type": "password", "placeholder": "Enter current password" },
+        { "id": "newPassword", "label": "New Password", "type": "password", "placeholder": "Enter new password" },
+        { "id": "confirmPassword", "label": "Confirm New Password", "type": "password", "placeholder": "Confirm new password" }
+      ],
+      "twoFactor": {
+        "title": "Two-Factor Authentication",
+        "description": "Add an extra layer of security to your account",
+        "buttonLabel": "Enable 2FA",
+        "confirmTitle": "Enable Two-Factor Authentication",
+        "confirmDescription": "2FA Setup Code: {setupCode}\n\nPlease save this code. Continue to enable 2FA?",
+        "confirmButton": "Enable 2FA",
+        "cancelButton": "Cancel",
+        "successTitle": "2FA Enabled",
+        "successDescription": "Two-factor authentication has been enabled. Please scan the QR code with your authenticator app."
+      },
+      "activeSessions": {
+        "title": "Active Sessions",
+        "sessionLabel": "Current Session",
+        "sessionDescription": "Chrome on macOS • Last active now",
+        "currentBadge": "Current"
+      },
+      "updatePasswordLabel": "Update Password",
+      "updatingLabel": "Updating..."
+    },
+    "notifications": {
+      "title": "Notification Preferences",
+      "toggles": [
+        { "id": "emailNotifications", "label": "Email Notifications", "description": "Receive notifications via email", "defaultValue": true },
+        { "id": "proposalUpdates", "label": "Proposal Updates", "description": "Get notified when proposals are updated", "defaultValue": true },
+        { "id": "collaborationInvites", "label": "Collaboration Invites", "description": "Get notified when invited to collaborate", "defaultValue": true },
+        { "id": "marketingEmails", "label": "Marketing Emails", "description": "Receive updates about new features and tips", "defaultValue": false },
+        { "id": "securityAlerts", "label": "Security Alerts", "description": "Get notified about security-related activities", "defaultValue": true }
+      ],
+      "saveLabel": "Save Preferences",
+      "successTitle": "Preferences saved",
+      "successDescription": "Your notification preferences have been saved."
+    },
+    "billing": {
+      "title": "Billing & Subscription",
+      "plan": {
+        "title": "Current Plan",
+        "planName": "Professional Plan",
+        "statusBadge": "Active",
+        "creditsLabel": "Credits Remaining:",
+        "nextBillingLabel": "Next Billing Date:"
+      },
+      "paymentMethod": {
+        "title": "Payment Method",
+        "maskLabel": "•••• •••• •••• 4242",
+        "expiresLabel": "Expires 12/24",
+        "updateButtonLabel": "Update",
+        "updatePromptTitle": "Update Card Number",
+        "updatePromptDescription": "Enter new card number (16 digits)",
+        "updatePromptPlaceholder": "•••• •••• •••• ••••",
+        "successTitle": "Payment method updated",
+        "successDescription": "Your payment method has been updated successfully.",
+        "invalidTitle": "Invalid card number",
+        "invalidDescription": "Please enter a valid 16-digit card number."
+      },
+      "transactionsTitle": "Recent Transactions",
+      "transactions": [
+        { "id": "1", "description": "Professional Plan", "date": "Dec 15, 2023", "amount": "$79.00" },
+        { "id": "2", "description": "Credit Top-up", "date": "Nov 28, 2023", "amount": "$29.00" }
+      ],
+      "downloadInvoiceLabel": "Download Invoice",
+      "cancelSubscriptionLabel": "Cancel Subscription",
+      "cancelConfirmTitle": "Cancel Subscription",
+      "cancelConfirmDescription": "Are you sure you want to cancel your subscription? This action cannot be undone.",
+      "cancelConfirmButton": "Cancel Subscription",
+      "cancelKeepButton": "Keep Subscription",
+      "cancelSuccessTitle": "Subscription cancelled",
+      "cancelSuccessDescription": "Your subscription has been cancelled. Access will continue until the end of the billing period.",
+      "invoiceDownloadedTitle": "Invoice downloaded",
+      "invoiceDownloadedDescription": "Your invoice has been downloaded."
+    }
+  }
+}
