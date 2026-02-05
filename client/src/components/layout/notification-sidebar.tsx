@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Bell, Check, X, Clock, AlertCircle, Info, CheckCircle2, Trash2, AtSign, Calendar, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -7,7 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useConfirm } from "@/hooks/use-confirm";
-import { fetchCustomerNotifications, type CustomerNotification } from "@/api/customer-data";
+import { useToast } from "@/hooks/use-toast";
+import {
+  fetchCustomerNotifications,
+  markNotificationRead,
+  dismissNotification,
+  markAllNotificationsRead,
+  dismissAllNotifications,
+  type CustomerNotification,
+} from "@/api/customer-data";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 
 interface NotificationSidebarProps {
   open?: boolean;
@@ -52,33 +61,54 @@ const getNotificationColor = (type: CustomerNotification["type"]) => {
 };
 
 export function NotificationSidebar({ open = false, onOpenChange }: NotificationSidebarProps) {
-  const { data: apiNotifications = [] } = useQuery({
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: apiNotifications = [], isError, error, refetch } = useQuery({
     queryKey: ["customer", "notifications"],
     queryFn: fetchCustomerNotifications,
+    refetchInterval: 4000,
   });
-  const [localReadIds, setLocalReadIds] = useState<Set<string>>(new Set());
-  const [localDeletedIds, setLocalDeletedIds] = useState<Set<string>>(new Set());
   const notifications = useMemo(() => {
-    return apiNotifications
-      .filter((n) => !localDeletedIds.has(n.id))
-      .map((n) => ({ ...n, read: n.read || localReadIds.has(n.id) }));
-  }, [apiNotifications, localReadIds, localDeletedIds]);
+    return apiNotifications.map((n) => {
+      const link = n.link ?? (n.meta?.proposalId != null ? `/rfp/${n.meta.proposalId}` : undefined);
+      return {
+        ...n,
+        link,
+        read: n.read,
+        message: n.body ?? n.message ?? "",
+        time: n.createdAt ?? n.time ?? "",
+      };
+    });
+  }, [apiNotifications]);
   const isMobile = useIsMobile();
   const { confirm, ConfirmDialog } = useConfirm();
 
+  const readMutation = useMutation({
+    mutationFn: markNotificationRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onError: () => toast({ title: "Error", description: "Could not mark as read.", variant: "destructive" }),
+  });
+  const dismissMutation = useMutation({
+    mutationFn: dismissNotification,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onError: () => toast({ title: "Error", description: "Could not dismiss notification.", variant: "destructive" }),
+  });
+  const readAllMutation = useMutation({
+    mutationFn: markAllNotificationsRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onError: () => toast({ title: "Error", description: "Could not mark all as read.", variant: "destructive" }),
+  });
+  const dismissAllMutation = useMutation({
+    mutationFn: dismissAllNotifications,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onError: () => toast({ title: "Error", description: "Could not dismiss all.", variant: "destructive" }),
+  });
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const markAsRead = (id: string) => {
-    setLocalReadIds((prev) => new Set(prev).add(id));
-  };
-
-  const markAllAsRead = () => {
-    setLocalReadIds(new Set(notifications.map((n) => n.id)));
-  };
-
-  const deleteNotification = (id: string) => {
-    setLocalDeletedIds((prev) => new Set(prev).add(id));
-  };
+  const markAsRead = (id: string) => readMutation.mutate(id);
+  const markAllAsRead = () => readAllMutation.mutate();
+  const deleteNotification = (id: string) => dismissMutation.mutate(id);
 
   const deleteAllNotifications = async () => {
     const confirmed = await confirm({
@@ -88,9 +118,7 @@ export function NotificationSidebar({ open = false, onOpenChange }: Notification
       cancelText: "Cancel",
       variant: "destructive",
     });
-    if (confirmed) {
-      setLocalDeletedIds(new Set(notifications.map((n) => n.id)));
-    }
+    if (confirmed) dismissAllMutation.mutate();
   };
 
   const sidebarContent = (
@@ -151,7 +179,9 @@ export function NotificationSidebar({ open = false, onOpenChange }: Notification
       {/* Notifications List */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="p-4 space-y-2">
-          {notifications.length === 0 ? (
+          {isError ? (
+            <QueryErrorState refetch={refetch} error={error} className="py-4" />
+          ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Bell className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
               <p className="text-sm font-medium text-foreground mb-1">No notifications</p>

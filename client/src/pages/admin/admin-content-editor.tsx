@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchAdminOptions } from "@/api/admin-data";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { 
   ArrowLeft, 
   Save, 
@@ -13,7 +14,10 @@ import {
   Tag,
   CheckCircle,
   AlertCircle,
-  Clock
+  Clock,
+  Upload,
+  X,
+  ExternalLink
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +57,7 @@ export default function AdminContentEditor() {
     { value: "needs_update", label: "Needs Update" },
   ];
 
+  type AttachmentItem = { name: string; dataUrl: string; size?: number };
   const [formData, setFormData] = useState({
     title: "",
     category: "",
@@ -60,10 +65,11 @@ export default function AdminContentEditor() {
     tags: [] as string[],
     status: "draft" as const,
     newTag: "",
+    attachments: [] as AttachmentItem[],
   });
 
   // Fetch content if editing
-  const { data: content, isLoading } = useQuery<any>({
+  const { data: content, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: [`/api/content/${contentId}`],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/content/${contentId}`);
@@ -83,6 +89,7 @@ export default function AdminContentEditor() {
         tags: c.tags || [],
         status: c.status || "draft",
         newTag: "",
+        attachments: Array.isArray(c.attachments) ? c.attachments : [],
       });
     }
   }, [content]);
@@ -148,7 +155,53 @@ export default function AdminContentEditor() {
       content: formData.content,
       tags: formData.tags,
       status: formData.status,
+      attachments: formData.attachments.length ? formData.attachments : undefined,
     });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    const limit = 10 * 1024 * 1024; // 10MB per file
+    const toRead: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > limit) {
+        toast({ title: "File too large", description: `${file.name} is over 10MB.`, variant: "destructive" });
+        continue;
+      }
+      toRead.push(file);
+    }
+    Promise.all(
+      toRead.map(
+        (file) =>
+          new Promise<AttachmentItem>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: file.name, dataUrl: reader.result as string, size: file.size });
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          })
+      )
+    ).then((newAttachments) => {
+      setFormData((prev) => ({ ...prev, attachments: [...prev.attachments, ...newAttachments] }));
+    }).catch(() => {
+      toast({ title: "Upload failed", description: "Could not read one or more files.", variant: "destructive" });
+    });
+    e.target.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      attachments: prev.attachments.filter((_, i) => i !== index),
+    }));
+  };
+
+  const formatSize = (bytes?: number) => {
+    if (bytes == null) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const getStatusConfig = (status: string) => {
@@ -163,6 +216,14 @@ export default function AdminContentEditor() {
         return { label: "Draft", icon: Clock, className: "bg-gray-500/10 dark:bg-gray-500/20 text-muted-foreground" };
     }
   };
+
+  if (contentId && !isNew && isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -241,6 +302,67 @@ export default function AdminContentEditor() {
                     placeholder="Enter content text..."
                     className="mt-1.5 min-h-[300px] sm:min-h-[400px] text-sm sm:text-base"
                   />
+                )}
+              </div>
+              <div>
+                <Label className="text-xs sm:text-sm">Documents</Label>
+                <p className="text-muted-foreground text-xs mt-0.5 mb-2">Attach PDFs, Word docs, or other files to this content.</p>
+                {!isPreview && (
+                  <label className="flex items-center justify-center gap-2 mt-1.5 p-4 border border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Upload className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Upload document</span>
+                    <input
+                      type="file"
+                      className="sr-only"
+                      multiple
+                      accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,image/*"
+                      onChange={handleFileSelect}
+                    />
+                  </label>
+                )}
+                {formData.attachments.length > 0 && (
+                  <ul className="mt-3 space-y-2">
+                    {formData.attachments.map((att, index) => (
+                      <li
+                        key={`${att.name}-${index}`}
+                        className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/50 border text-sm"
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{att.name}</span>
+                          {att.size != null && (
+                            <span className="text-muted-foreground text-xs shrink-0">{formatSize(att.size)}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {att.dataUrl.startsWith("data:") && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => window.open(att.dataUrl, "_blank")}
+                              title="Open"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {!isPreview && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeAttachment(index)}
+                              title="Remove"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             </CardContent>

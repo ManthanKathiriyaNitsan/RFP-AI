@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { fetchAdminProposalsNewSupport, fetchAdminOptions } from "@/api/admin-data";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -51,7 +52,7 @@ export default function AdminProposalsNew() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: supportData } = useQuery({
+  const { data: supportData, isError, error, refetch } = useQuery({
     queryKey: ["admin", "proposals-new-support"],
     queryFn: fetchAdminProposalsNewSupport,
   });
@@ -257,6 +258,14 @@ export default function AdminProposalsNew() {
   };
 
   const progress = (currentStep / steps.length) * 100;
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto animate-fade-in px-4 sm:px-6 overflow-x-hidden">

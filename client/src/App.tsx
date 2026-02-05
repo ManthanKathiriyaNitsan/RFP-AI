@@ -8,6 +8,10 @@ import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { BrandingProvider } from "@/contexts/BrandingContext";
+import { ApiStatusProvider } from "@/contexts/ApiStatusContext";
+import { ApiStatusBanner } from "@/components/shared/api-status-banner";
+import { AppLoader } from "@/components/shared/app-loader";
+import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { Navigation } from "@/components/layout/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { CustomerSidebar } from "@/components/customer/customer-sidebar";
@@ -23,6 +27,8 @@ import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/pages/admin/admin-dashboard";
 import AdminAnalytics from "@/pages/admin/admin-analytics";
 import AdminProposals from "@/pages/admin/admin-proposals";
+import AdminProposalDetail from "@/pages/admin/admin-proposal-detail";
+import AdminProposalsNew from "@/pages/admin/admin-proposals-new";
 import AdminUsers from "@/pages/admin/admin-users";
 import AdminUsersTerms from "@/pages/admin/admin-users-terms";
 import AdminContent from "@/pages/admin/admin-content";
@@ -45,6 +51,7 @@ import AdminAuditLogs from "@/pages/admin/admin-audit-logs";
 // Customer Pages
 import CustomerDashboard from "@/pages/customer/customer-dashboard";
 import CollaboratorView from "@/pages/collaborator/collaborator-view";
+import CollaboratorAnalytics from "@/pages/collaborator/collaborator-analytics";
 import CreditPurchase from "@/pages/customer/credit-purchase";
 import ProposalBuilder from "@/pages/customer/proposal-builder";
 import ProposalQuestions from "@/pages/customer/proposal-questions";
@@ -189,10 +196,8 @@ function Router() {
       <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
       <Route path="/admin/analytics" component={() => <AdminRoute component={AdminAnalytics} />} />
       <Route path="/admin/proposals" component={() => <AdminRoute component={AdminProposals} />} />
-      <Route path="/admin/proposals/new">
-        {() => <Redirect to="/admin/proposals" />}
-      </Route>
-      <Route path="/admin/proposals/:id" component={() => <AdminRoute component={RFPDetail} />} />
+      <Route path="/admin/proposals/new" component={() => <AdminRoute component={AdminProposalsNew} />} />
+      <Route path="/admin/proposals/:id" component={() => <AdminRoute component={AdminProposalDetail} />} />
       <Route path="/admin/proposals/:id/questions" component={() => <AdminRoute component={ProposalQuestions} />} />
       <Route path="/admin/proposals/:id/generate" component={() => <AdminRoute component={ProposalGenerate} />} />
       <Route path="/admin/proposals/:id/review" component={() => <AdminRoute component={RFPReview} />} />
@@ -217,6 +222,7 @@ function Router() {
       
       {/* Collaborator routes (dedicated panel – only collaborators) */}
       <Route path="/collaborator" component={() => <CollaboratorRoute component={CollaboratorView} />} />
+      <Route path="/collaborator/analytics" component={() => <CollaboratorRoute component={CollaboratorAnalytics} />} />
       <Route path="/collaborator/rfp/:id" component={() => <CollaboratorRoute component={RFPDetail} />} />
       <Route path="/collaborator/rfp/:id/questions" component={() => <CollaboratorRoute component={ProposalQuestions} />} />
       <Route path="/collaborator/rfp/:id/generate" component={() => <CollaboratorRoute component={ProposalGenerate} />} />
@@ -263,20 +269,36 @@ function Router() {
   );
 }
 
+/** Renders app content or full-page loader while session is initializing (e.g. token refresh on refresh). */
+function AppContent() {
+  const { isInitializing } = useAuth();
+  if (isInitializing) {
+    return <AppLoader />;
+  }
+  return (
+    <BrandingProvider>
+      <StoreProvider>
+        <ApiStatusProvider>
+          <TooltipProvider>
+            <Toaster />
+            <ApiStatusBanner />
+            <Router />
+          </TooltipProvider>
+        </ApiStatusProvider>
+      </StoreProvider>
+    </BrandingProvider>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light" storageKey="rfp-ai-theme">
-        <AuthProvider>
-          <BrandingProvider>
-            <StoreProvider>
-              <TooltipProvider>
-                <Toaster />
-                <Router />
-              </TooltipProvider>
-            </StoreProvider>
-          </BrandingProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ErrorBoundary>
       </ThemeProvider>
     </QueryClientProvider>
   );

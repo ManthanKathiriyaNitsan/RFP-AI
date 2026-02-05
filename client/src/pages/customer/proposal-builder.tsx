@@ -3,6 +3,7 @@ import { Link, useLocation as useWouterLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useProposal, useDraft, useCreateProposal, useUpdateProposal } from "@/hooks/use-proposals-api";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import {
   ArrowLeft,
   FileText,
@@ -45,7 +46,7 @@ export default function ProposalBuilder() {
   const editProposalId = new URLSearchParams(location.split("?")[1] || "").get("edit");
   const isEditMode = !!editProposalId;
   const proposalId = isEditMode ? parseInt(editProposalId!, 10) : null;
-  const { data: existingProposal, isLoading: proposalLoading } = useProposal(proposalId);
+  const { data: existingProposal, isLoading: proposalLoading, isError: proposalError, error: proposalErrorObj, refetch: refetchProposal } = useProposal(proposalId);
   const { data: draft } = useDraft(proposalId);
   const createProposalMutation = useCreateProposal();
   const updateProposalMutation = useUpdateProposal(proposalId ?? 0);
@@ -242,6 +243,14 @@ export default function ProposalBuilder() {
     if (currentRole === "collaborator") return "/collaborator";
     return "/rfp-projects";
   };
+
+  if (isEditMode && proposalId && proposalError) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+        <QueryErrorState refetch={refetchProposal} error={proposalErrorObj} />
+      </div>
+    );
+  }
 
   if (isEditMode && proposalLoading) {
     return (

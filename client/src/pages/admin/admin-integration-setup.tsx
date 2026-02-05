@@ -3,6 +3,7 @@ import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { API_PATHS } from "@/lib/api-paths";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchAdminIntegrationSetup } from "@/api/admin-data";
 import { 
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,7 +50,7 @@ export default function AdminIntegrationSetup() {
     description: "",
   });
 
-  const { data: setupData } = useQuery({
+  const { data: setupData, isError, error, refetch } = useQuery({
     queryKey: ["admin", "integrations-setup"],
     queryFn: fetchAdminIntegrationSetup,
   });
@@ -89,7 +91,7 @@ export default function AdminIntegrationSetup() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest("POST", "/api/integrations", data);
+      const response = await apiRequest("POST", API_PATHS.integrations, data);
       return response.json();
     },
     onSuccess: () => {
@@ -136,6 +138,14 @@ export default function AdminIntegrationSetup() {
       syncInterval: parseInt(formData.syncInterval),
     });
   };
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">

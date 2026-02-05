@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Upload, FileText, Tag, Trash2, MoreHorizontal, Search,
-  Filter, Download, History, File, X, Plus, Edit
+  Filter, Download, File, X, Plus, Edit
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { usePrompt } from "@/hooks/use-prompt";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 
 type KbDocument = {
   id: number;
@@ -62,6 +64,7 @@ async function fetchKbVersions(): Promise<KbVersion[]> {
 
 export default function KnowledgeBase() {
   const { toast } = useToast();
+  const { prompt, PromptDialog } = usePrompt();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [searchTerm, setSearchTerm] = useState("");
@@ -71,7 +74,7 @@ export default function KnowledgeBase() {
   const [selectedDocument, setSelectedDocument] = useState<KbDocument | null>(null);
   const [activeTab, setActiveTab] = useState("documents");
 
-  const { data: documentsFromApi = [], isLoading: documentsLoading } = useQuery({
+  const { data: documentsFromApi = [], isLoading: documentsLoading, isError: documentsError, error: documentsErrorObj, refetch: refetchDocuments } = useQuery({
     queryKey: ["customer", "knowledge-base", "documents"],
     queryFn: fetchKbDocuments,
   });
@@ -127,6 +130,20 @@ export default function KnowledgeBase() {
     },
   });
 
+  const updateDocumentMutation = useMutation({
+    mutationFn: async ({ documentId, tags }: { documentId: number; tags: string[] }) => {
+      const res = await apiRequest("PATCH", `/api/v1/customer/knowledge-base/documents/${documentId}`, { tags });
+      return res.json() as Promise<KbDocument>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to update document", variant: "destructive" });
+    },
+  });
+
   const allTags = useMemo(() => Array.from(new Set(documents.flatMap((doc) => doc.tags))), [documents]);
 
   const filteredDocuments = useMemo(() => {
@@ -168,16 +185,47 @@ export default function KnowledgeBase() {
     if (selectedDocument) deleteMutation.mutate(selectedDocument.id);
   };
 
-  const handleAddTag = (_docId: number, tag: string) => {
-    toast({ title: "Tag added", description: `Tag "${tag}" added (save via document edit when supported).` });
+  const handleAddTag = (docId: number, tag: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    if (!doc) return;
+    const currentTags = Array.isArray(doc.tags) ? doc.tags : [];
+    if (currentTags.includes(tag.trim())) return;
+    const newTags = [...currentTags, tag.trim()];
+    updateDocumentMutation.mutate({ documentId: docId, tags: newTags }, {
+      onSuccess: () => toast({ title: "Tag added", description: `Tag "${tag.trim()}" has been added.` }),
+    });
   };
 
-  const handleRemoveTag = (_docId: number, _tag: string) => {};
+  const handleRemoveTag = (docId: number, tag: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    if (!doc) return;
+    const currentTags = Array.isArray(doc.tags) ? doc.tags : [];
+    const newTags = currentTags.filter((t) => t !== tag);
+    updateDocumentMutation.mutate({ documentId: docId, tags: newTags }, {
+      onSuccess: () => toast({ title: "Tag removed", description: `Tag "${tag}" has been removed.` }),
+    });
+  };
+
+  const handleDownload = (doc: KbDocument) => {
+    const content = doc.description?.trim() || `Knowledge base document: ${doc.name}\n\nNo content stored.`;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const baseName = doc.name.replace(/\.[^.]+$/, "") || "document";
+    const filename = `${baseName}.txt`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Download started", description: `${filename} has been downloaded.` });
+  };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-3 sm:space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2">Knowledge Base</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
@@ -200,11 +248,11 @@ export default function KnowledgeBase() {
           <TabsTrigger value="history">Version History</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="documents" className="space-y-4 sm:space-y-6">
+        <TabsContent value="documents" className="space-y-3 sm:space-y-4">
           {/* Filters */}
           <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -230,15 +278,21 @@ export default function KnowledgeBase() {
           </Card>
 
           {/* Documents Grid */}
-          {documentsLoading ? (
+          {documentsError ? (
             <Card>
-              <CardContent className="p-8 sm:p-12 text-center">
+              <CardContent className="p-4 sm:p-6">
+                <QueryErrorState refetch={refetchDocuments} error={documentsErrorObj} />
+              </CardContent>
+            </Card>
+          ) : documentsLoading ? (
+            <Card>
+              <CardContent className="p-6 sm:p-8 text-center">
                 <p className="text-sm text-muted-foreground">Loading documents...</p>
               </CardContent>
             </Card>
           ) : filteredDocuments.length === 0 ? (
             <Card>
-              <CardContent className="p-8 sm:p-12 text-center">
+              <CardContent className="p-6 sm:p-8 text-center">
                 <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">No documents found</h3>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -251,17 +305,17 @@ export default function KnowledgeBase() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {filteredDocuments.map((doc) => (
                 <Card key={doc.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="p-4 sm:p-6 pb-3">
-                    <div className="flex items-start justify-between gap-3">
+                  <CardHeader className="p-3 sm:p-4 pb-2">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <File className="w-5 h-5 text-primary shrink-0" />
-                          <h3 className="font-semibold text-sm sm:text-base truncate">{doc.name}</h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          <File className="w-4 h-4 text-primary shrink-0" />
+                          <h3 className="font-semibold text-sm truncate">{doc.name}</h3>
                         </div>
-                        <p className="text-xs text-muted-foreground mb-2">
+                        <p className="text-xs text-muted-foreground mb-1">
                           {formatFileSize(doc.size)} • {formatTimeAgo(doc.uploadedAt)}
                         </p>
                         {doc.description && (
@@ -275,13 +329,9 @@ export default function KnowledgeBase() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => toast({ title: "Downloading", description: `Downloading ${doc.name}...` })}>
+                          <DropdownMenuItem onClick={() => handleDownload(doc)}>
                             <Download className="w-4 h-4 mr-2" />
                             Download
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast({ title: "Viewing history", description: "Opening version history..." })}>
-                            <History className="w-4 h-4 mr-2" />
-                            View History
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
@@ -295,29 +345,35 @@ export default function KnowledgeBase() {
                       </DropdownMenu>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-4 sm:p-6 pt-0">
-                    <div className="space-y-3">
+                  <CardContent className="p-3 sm:p-4 pt-0">
+                    <div className="space-y-2">
                       <div>
-                        <Label className="text-xs text-muted-foreground mb-2 block">Tags</Label>
-                        <div className="flex flex-wrap gap-2">
+                        <Label className="text-xs text-muted-foreground mb-1 block">Tags</Label>
+                        <div className="flex flex-wrap gap-1.5">
                           {doc.tags.map((tag, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs">
+                            <Badge key={idx} variant="outline" className="text-xs py-0">
                               {tag}
                               <button
                                 onClick={() => handleRemoveTag(doc.id, tag)}
-                                className="ml-1.5 hover:text-destructive"
+                                className="ml-1 hover:text-destructive"
                               >
-                                <X className="w-3 h-3" />
+                                <X className="w-2.5 h-2.5" />
                               </button>
                             </Badge>
                           ))}
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 px-2 text-xs"
-                            onClick={() => {
-                              const tag = prompt("Enter tag name:");
-                              if (tag) handleAddTag(doc.id, tag);
+                            className="h-6 px-1.5 text-xs"
+                            onClick={async () => {
+                              const tag = await prompt({
+                                title: "Add Tag",
+                                description: "Enter a name for the new tag.",
+                                placeholder: "Tag name",
+                                confirmText: "Add",
+                                cancelText: "Cancel",
+                              });
+                              if (tag?.trim()) handleAddTag(doc.id, tag.trim());
                             }}
                           >
                             <Plus className="w-3 h-3 mr-1" />
@@ -325,17 +381,8 @@ export default function KnowledgeBase() {
                           </Button>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="flex items-center text-xs text-muted-foreground pt-0.5">
                         <span>Version {doc.version}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => toast({ title: "Viewing history", description: "Opening version history..." })}
-                        >
-                          <History className="w-3 h-3 mr-1" />
-                          History
-                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -345,12 +392,12 @@ export default function KnowledgeBase() {
           )}
         </TabsContent>
 
-        <TabsContent value="history" className="space-y-4 sm:space-y-6">
+        <TabsContent value="history" className="space-y-3 sm:space-y-4">
           <Card>
-            <CardHeader className="p-4 sm:p-6">
+            <CardHeader className="p-3 sm:p-4">
               <CardTitle className="text-base sm:text-lg">Version History</CardTitle>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
+            <CardContent className="p-3 sm:p-4 pt-0">
               {versionHistoryFromApi.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">No version history available</p>
               ) : (
@@ -436,6 +483,8 @@ export default function KnowledgeBase() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {PromptDialog}
     </div>
   );
 }

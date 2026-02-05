@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -82,7 +83,7 @@ export default function AdminAuditLogs() {
 
   const { dateFrom, dateTo } = useMemo(() => formatDateRangeKey(dateRange), [dateRange]);
 
-  const { data: loginData } = useQuery({
+  const { data: loginData, isError, error, refetch } = useQuery({
     queryKey: ["admin", "audit-logs", "login", dateFrom, dateTo],
     queryFn: () => fetchAdminAuditLogs({ type: "login", dateFrom, dateTo, limit: 100 }),
   });
@@ -141,6 +142,14 @@ export default function AdminAuditLogs() {
     URL.revokeObjectURL(url);
     toast({ title: "Exported", description: `${TYPE_LABELS[type]} logs exported.` });
   };
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">

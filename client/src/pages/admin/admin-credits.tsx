@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +50,7 @@ export default function AdminCredits() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const { prompt, PromptDialog } = usePrompt();
-  const { data } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "credits"],
     queryFn: fetchAdminCredits,
   });
@@ -131,9 +132,17 @@ export default function AdminCredits() {
     }
   };
 
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PromptDialog />
+      {PromptDialog}
       <Dialog open={allocateOpen} onOpenChange={setAllocateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -234,7 +243,7 @@ export default function AdminCredits() {
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
                 <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               </div>
-              <Badge className="bg-primary text-white text-[10px] sm:text-xs">Active</Badge>
+              <Badge className="bg-primary text-white text-[10px] sm:text-xs shrink-0">Active</Badge>
             </div>
             <p className="text-2xl sm:text-3xl font-bold">{remainingCredits.toLocaleString()}</p>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">Available Credits</p>

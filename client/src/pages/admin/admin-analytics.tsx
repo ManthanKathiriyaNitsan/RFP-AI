@@ -21,6 +21,7 @@ import {
 import { fetchAdminAnalytics, fetchAdminOptions } from "@/api/admin-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,7 +40,7 @@ const KPI_ICON_MAP: Record<string, LucideIcon> = {
 export default function AdminAnalytics() {
   const { toast } = useToast();
   const [dateRange, setDateRange] = useState("6months");
-  const { data } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "analytics", dateRange],
     queryFn: () => fetchAdminAnalytics({ dateRange }),
   });
@@ -62,9 +63,17 @@ export default function AdminAnalytics() {
   const isMobile = useIsMobile();
   const { prompt, PromptDialog } = usePrompt();
 
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PromptDialog />
+      {PromptDialog}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-analytics-title">{analyticsTitle}</h1>
@@ -189,7 +198,7 @@ export default function AdminAnalytics() {
                 <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                 <CardTitle className="text-sm sm:text-base font-semibold">Win/Loss Analysis</CardTitle>
               </div>
-              <Badge variant="outline" className="text-emerald-600 bg-emerald-500/10 border-emerald-500/20 text-xs shrink-0">
+              <Badge variant="outline" className="text-white bg-emerald-600 border-emerald-500/20 text-xs shrink-0">
                 68% Win Rate
               </Badge>
             </div>
@@ -232,7 +241,7 @@ export default function AdminAnalytics() {
                 <LineChart className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                 <CardTitle className="text-sm sm:text-base font-semibold">Revenue Trend</CardTitle>
               </div>
-              <Badge variant="outline" className="text-primary bg-primary/10 border-primary/20 text-xs shrink-0">
+              <Badge variant="outline" className="text-white bg-primary border-primary/20 text-xs shrink-0">
                 +44.6% YoY
               </Badge>
             </div>

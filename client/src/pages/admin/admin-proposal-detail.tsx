@@ -13,6 +13,7 @@ import {
   proposalKeys,
 } from "@/hooks/use-proposals-api";
 import { addCollaboration, updateCollaboration, deleteCollaboration, fetchCollaborations } from "@/api/proposals";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { 
   ArrowLeft, 
   Edit, 
@@ -80,7 +81,8 @@ import {
   downloadProposalJson,
 } from "@/lib/export-proposal";
 import { fetchAdminOptions } from "@/api/admin-data";
-import { getPermissionsForRole, type CollaboratorPermissions } from "@/lib/collaborator-roles";
+import type { CollaboratorPermissions } from "@/api/customer-data";
+import { ProposalDiscussionTab } from "@/components/customer/proposal-discussion";
 
 const COLLABORATOR_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   viewer: Eye,
@@ -106,9 +108,12 @@ export default function AdminProposalDetail() {
   });
   const proposalStatuses = optionsData?.proposalStatuses ?? [];
   const collaboratorRoles = optionsData?.collaboratorRoles ?? [];
+  const collaboratorRolePermissions = (optionsData as { collaboratorRolePermissions?: Record<string, CollaboratorPermissions> })?.collaboratorRolePermissions ?? {};
   const collaboratorPermissions = (optionsData as { collaboratorPermissions?: { key: string; label: string }[] })?.collaboratorPermissions ?? [];
   const pageTitles = (optionsData as { pageTitles?: Record<string, string> })?.pageTitles ?? {};
   const backToProposalsLabel = pageTitles.backToProposals ?? "Back to Proposals";
+  const getPermissionsForRole = (role: string): CollaboratorPermissions =>
+    collaboratorRolePermissions[(role || "viewer").toLowerCase()] ?? { canView: true, canEdit: false, canComment: false, canReview: false, canGenerateAi: false };
   const [isEditing, setIsEditing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [oldContent, setOldContent] = useState<any>(null);
@@ -208,7 +213,7 @@ export default function AdminProposalDetail() {
   };
 
   // Fetch proposal data
-  const { data: proposal, isLoading } = useQuery<any>({
+  const { data: proposal, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: [`/api/proposals/${id}`],
     enabled: !!id,
   });
@@ -504,7 +509,7 @@ export default function AdminProposalDetail() {
               <FileText className="w-4 h-4 text-primary" />
               Executive Summary
             </h2>
-            <p className="text-muted-foreground p-0 leading-relaxed whitespace-pre-wrap">
+            <p className="text-muted-foreground dark:text-foreground/90 p-0 leading-relaxed whitespace-pre-wrap">
               {typeof content.executiveSummary === 'string' ? content.executiveSummary : ''}
             </p>
           </section>
@@ -517,7 +522,7 @@ export default function AdminProposalDetail() {
               <FileText className="w-4 h-4 text-primary" />
               Introduction
             </h2>
-            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
               {typeof content.introduction === 'string' ? content.introduction : ''}
             </p>
           </section>
@@ -558,7 +563,7 @@ export default function AdminProposalDetail() {
               <CheckCircle className="w-4 h-4 text-primary" />
               Requirements
             </h2>
-            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
               {content.requirements.map((req: string, idx: number) => (
                 <li key={idx} className="leading-relaxed">{req}</li>
               ))}
@@ -573,7 +578,7 @@ export default function AdminProposalDetail() {
               <FileText className="w-4 h-4 text-primary" />
               Solution Approach
             </h2>
-            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
               {typeof content.solutionApproach === 'string' ? content.solutionApproach : ''}
             </p>
           </section>
@@ -586,7 +591,7 @@ export default function AdminProposalDetail() {
               <FileText className="w-4 h-4 text-primary" />
               Technical Specifications
             </h2>
-            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
               {content.technicalSpecifications.map((spec: string, idx: number) => (
                 <li key={idx} className="leading-relaxed">{spec}</li>
               ))}
@@ -601,7 +606,7 @@ export default function AdminProposalDetail() {
               <FileText className="w-4 h-4 text-primary" />
               Deliverables
             </h2>
-            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
               {content.deliverables.map((deliverable: string, idx: number) => (
                 <li key={idx} className="leading-relaxed">{deliverable}</li>
               ))}
@@ -617,7 +622,7 @@ export default function AdminProposalDetail() {
               Timeline
             </h2>
             {typeof content.timeline === 'string' ? (
-              <p className="text-muted-foreground m-0 leading-relaxed text-sm whitespace-pre-wrap">
+              <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed text-sm whitespace-pre-wrap">
                 {content.timeline}
               </p>
             ) : typeof content.timeline === 'object' && content.timeline !== null ? (
@@ -629,7 +634,7 @@ export default function AdminProposalDetail() {
                         {key.replace('phase', '')}
                       </span>
                     </div>
-                    <p className="text-muted-foreground m-0 leading-relaxed text-sm flex-1">
+                    <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed text-sm flex-1">
                       {typeof value === 'string' ? value : String(value)}
                     </p>
                   </div>
@@ -647,7 +652,7 @@ export default function AdminProposalDetail() {
               Team
             </h2>
             {typeof content.team === 'string' ? (
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                 {content.team}
               </p>
             ) : typeof content.team === 'object' && content.team !== null ? (
@@ -657,7 +662,7 @@ export default function AdminProposalDetail() {
                     <span className="font-medium text-foreground capitalize min-w-0 sm:min-w-[120px]">
                       {key.replace(/([A-Z])/g, ' $1').trim()}:
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground dark:text-foreground/90">
                       {typeof value === 'string' ? value : String(value)}
                     </span>
                   </div>
@@ -675,7 +680,7 @@ export default function AdminProposalDetail() {
               Pricing
             </h2>
             {typeof content.pricing === 'string' ? (
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                 {content.pricing}
               </p>
             ) : typeof content.pricing === 'object' && content.pricing !== null ? (
@@ -685,7 +690,7 @@ export default function AdminProposalDetail() {
                     <span className="font-medium text-foreground capitalize min-w-0 sm:min-w-[140px]">
                       {key.replace(/([A-Z])/g, ' $1').trim()}:
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground dark:text-foreground/90">
                       {typeof value === 'string' ? value : String(value)}
                     </span>
                   </div>
@@ -703,11 +708,11 @@ export default function AdminProposalDetail() {
               Next Steps
             </h2>
             {typeof content.nextSteps === 'string' ? (
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                 {content.nextSteps}
               </p>
             ) : Array.isArray(content.nextSteps) ? (
-              <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+              <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                 {content.nextSteps.map((step: any, idx: number) => (
                   <li key={idx} className="leading-relaxed">
                     {typeof step === 'string' ? step : String(step)}
@@ -715,7 +720,7 @@ export default function AdminProposalDetail() {
                 ))}
               </ul>
             ) : typeof content.nextSteps === 'object' && content.nextSteps !== null ? (
-              <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+              <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                 {Object.values(content.nextSteps).map((step: any, idx: number) => (
                   <li key={idx} className="leading-relaxed">
                     {typeof step === 'string' ? step : String(step)}
@@ -730,10 +735,18 @@ export default function AdminProposalDetail() {
   };
 
 
+  if (id && isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading proposal...</div>
+        <div className="text-muted-foreground dark:text-foreground/90">Loading proposal...</div>
       </div>
     );
   }
@@ -743,7 +756,7 @@ export default function AdminProposalDetail() {
       <div className="flex flex-col items-center justify-center h-64">
         <AlertCircle className="w-12 h-12 text-muted-foreground mb-2" />
         <h3 className="text-lg font-semibold mb-2">Proposal not found</h3>
-        <p className="text-muted-foreground mb-2">The proposal you're looking for doesn't exist.</p>
+        <p className="text-muted-foreground dark:text-foreground/90 mb-2">The proposal you're looking for doesn't exist.</p>
         <Link href="/admin/proposals">
           <Button>
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -862,6 +875,18 @@ export default function AdminProposalDetail() {
             <TabsTrigger value="content" className="text-xs sm:text-sm">Content</TabsTrigger>
             <TabsTrigger value="team" className="text-xs sm:text-sm">Team</TabsTrigger>
             <TabsTrigger value="activity" className="text-xs sm:text-sm">Activity</TabsTrigger>
+            <TabsTrigger value="discussion" className="text-xs sm:text-sm inline-flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5" />
+              Discussion
+            </TabsTrigger>
+            {id && (
+              <TabsTrigger asChild value="questions" className="text-xs sm:text-sm">
+                <Link href={`/admin/proposals/${id}/questions`} className="inline-flex items-center justify-center gap-1.5">
+                  <ListTodo className="w-3.5 h-3.5" />
+                  Questions
+                </Link>
+              </TabsTrigger>
+            )}
           </TabsList>
           {activeTab === "content" && (
             <Button
@@ -966,9 +991,11 @@ export default function AdminProposalDetail() {
                     placeholder="Enter proposal description..."
                   />
                 ) : (
-                  <p className="text-muted-foreground">
-                    {formData.description || "No description provided."}
-                  </p>
+                  <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border/50 bg-muted/20 p-3">
+                    <p className="text-muted-foreground dark:text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {formData.description || "No description provided."}
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -989,12 +1016,12 @@ export default function AdminProposalDetail() {
                   </CardDescription>
                 </div>
                 {isGenerating ? (
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 shrink-0">
+                  <Badge variant="outline" className="bg-primary text-white border-primary/20 shrink-0">
                     <Clock className="w-3 h-3 mr-1 animate-spin" />
                     Generating {generationProgress}%
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 shrink-0">
+                  <Badge variant="outline" className="bg-primary text-white border-primary/20 shrink-0">
                     <Sparkles className="w-3 h-3 mr-1" />
                     AI Generated
                   </Badge>
@@ -1002,18 +1029,17 @@ export default function AdminProposalDetail() {
               </div>
             </CardHeader>
             <CardContent>
-              {oldContent && newContent ? (
+              {oldContent && (isGenerating || newContent) ? (
                 <div className="relative">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Left Side - Old Content */}
+                    {/* Left Side - Current Content */}
                     <div className="space-y-4">
                       <div className="grid grid-cols-3 items-center px-4 py-3 border-b sticky top-0 bg-background z-10">
-                               <h3 className="text-base sm:text-lg font-semibold flex items-center justify-start gap-2 text-foreground">
+                        <h3 className="text-base sm:text-lg font-semibold flex items-center justify-start gap-2 text-foreground">
                           <FileText className="w-4 h-4 text-foreground/70" />
                           Current Content
                         </h3>
                         <div></div>
-                 
                         <div className="flex justify-end">
                           <Badge variant="outline" className="text-xs text-foreground/90 border-border bg-muted/50">Original</Badge>
                         </div>
@@ -1023,20 +1049,19 @@ export default function AdminProposalDetail() {
                       </div>
                     </div>
 
-                    {/* Right Side - New Content */}
+                    {/* Right Side - New Content (skeleton while generating, then content) */}
                     <div className="space-y-4 lg:border-l lg:pl-6">
                       <div className="grid grid-cols-3 items-center px-4 py-3 border-b sticky top-0 bg-background z-10">
-                           <h3 className="text-base sm:text-lg font-semibold flex items-center justify-start gap-2 text-foreground">
-                          <Sparkles className={`w-4 h-4 text-primary ${isGenerating ? 'animate-pulse' : ''}`} />
+                        <h3 className="text-base sm:text-lg font-semibold flex items-center justify-start gap-2 text-foreground">
+                          <Sparkles className={`w-4 h-4 text-primary ${isGenerating ? "animate-pulse" : ""}`} />
                           New Content
                         </h3>
                         <div></div>
-                     
                         <div className="flex justify-end">
-                          <Badge variant="outline" className={`text-xs ${isGenerating ? 'bg-primary/10 text-primary border-primary/20' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'}`}>
+                          <Badge variant="outline" className={`text-xs text-white ${isGenerating ? "bg-primary border-primary/20" : "bg-emerald-600 border-emerald-500/20"}`}>
                             {isGenerating ? (
                               <>
-                                <Sparkles className="w-3 h-3 mr-1" />
+                                <Sparkles className="w-3 h-3 mr-1 animate-pulse" />
                                 {generationProgress}%
                               </>
                             ) : (
@@ -1049,17 +1074,32 @@ export default function AdminProposalDetail() {
                         </div>
                       </div>
                       <div className="prose max-w-none space-y-6 px-4">
-                        {renderContentSections(newContent, true, isEditing)}
-                        {generationProgress < 100 && isGenerating && (
-                          <div className="flex items-center justify-center py-8">
-                            <div className="flex flex-col items-center gap-2">
-                              <Clock className="w-6 h-6 text-primary animate-spin" />
-                              <p className="text-sm text-muted-foreground">Generating remaining sections...</p>
+                        {isGenerating && !newContent ? (
+                          <div className="space-y-4 py-2" aria-label="Content generating">
+                            <div className="h-3 w-full rounded bg-muted animate-pulse" style={{ animationDuration: "1.2s" }} />
+                            <div className="h-3 w-[95%] rounded bg-muted animate-pulse" style={{ animationDuration: "1.2s", animationDelay: "0.1s" }} />
+                            <div className="h-3 w-[88%] rounded bg-muted animate-pulse" style={{ animationDuration: "1.2s", animationDelay: "0.2s" }} />
+                            <div className="h-3 w-[92%] rounded bg-muted animate-pulse" style={{ animationDuration: "1.2s", animationDelay: "0.3s" }} />
+                            <div className="h-3 w-[75%] rounded bg-muted animate-pulse" style={{ animationDuration: "1.2s", animationDelay: "0.4s" }} />
+                            <div className="h-3 w-[70%] rounded bg-muted animate-pulse" style={{ animationDuration: "1.2s", animationDelay: "0.5s" }} />
+                            <div className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
+                              <Clock className="w-4 h-4 animate-spin text-primary" />
+                              <span>Generating content...</span>
                             </div>
                           </div>
-                        )}
+                        ) : newContent ? (
+                          <>
+                            {renderContentSections(newContent, true, isEditing)}
+                            {generationProgress < 100 && isGenerating && (
+                              <div className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
+                                <Clock className="w-4 h-4 animate-spin text-primary" />
+                                <span>Generating remaining sections...</span>
+                              </div>
+                            )}
+                          </>
+                        ) : null}
                       </div>
-                      {generationProgress >= 100 && (
+                      {!isGenerating && newContent && (
                         <div className="sticky bottom-0 pt-4 border-t bg-background/95 backdrop-blur mt-4 z-20">
                           <div className="flex flex-col sm:flex-row gap-2">
                             <Button
@@ -1107,9 +1147,17 @@ export default function AdminProposalDetail() {
                         nextSteps: "",
                       };
                       if (isFullDocumentContent(content)) {
-                        return (
+                        const fullText = (content as { fullDocument: string }).fullDocument ?? "";
+                        return isEditing ? (
+                          <Textarea
+                            value={fullText}
+                            onChange={(e) => setContentData({ ...content, fullDocument: e.target.value })}
+                            className="w-full min-h-[400px] font-normal leading-relaxed whitespace-pre-wrap resize-y"
+                            placeholder="Proposal content (markdown supported)"
+                          />
+                        ) : (
                           <div className="prose prose-sm sm:prose-base max-w-none text-foreground dark:prose-invert">
-                            <ReactMarkdown>{(content as { fullDocument: string }).fullDocument}</ReactMarkdown>
+                            <ReactMarkdown>{fullText}</ReactMarkdown>
                           </div>
                         );
                       }
@@ -1129,7 +1177,7 @@ export default function AdminProposalDetail() {
                             placeholder="Enter executive summary..."
                           />
                         ) : (
-                          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                             {typeof content.executiveSummary === 'string' && content.executiveSummary 
                               ? content.executiveSummary 
                               : "No executive summary available. Generate AI content to create one."}
@@ -1151,7 +1199,7 @@ export default function AdminProposalDetail() {
                             placeholder="Enter introduction..."
                           />
                         ) : (
-                          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                             {typeof content.introduction === 'string' && content.introduction
                               ? content.introduction 
                               : "No introduction available. Generate AI content to create one."}
@@ -1297,13 +1345,13 @@ export default function AdminProposalDetail() {
                           </div>
                         ) : (
                           Array.isArray(content.requirements) && content.requirements.length > 0 ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                               {content.requirements.map((req: string, idx: number) => (
                                 <li key={idx} className="leading-relaxed">{req}</li>
                               ))}
                             </ul>
                           ) : (
-                            <p className="text-muted-foreground">No requirements listed. Generate AI content to create requirements.</p>
+                            <p className="text-muted-foreground dark:text-foreground/90">No requirements listed. Generate AI content to create requirements.</p>
                           )
                         )}
                       </section>
@@ -1322,7 +1370,7 @@ export default function AdminProposalDetail() {
                             placeholder="Enter solution approach..."
                           />
                         ) : (
-                          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                             {typeof content.solutionApproach === 'string' && content.solutionApproach
                               ? content.solutionApproach 
                               : "No solution approach available. Generate AI content to create one."}
@@ -1375,13 +1423,13 @@ export default function AdminProposalDetail() {
                           </div>
                         ) : (
                           Array.isArray(content.technicalSpecifications) && content.technicalSpecifications.length > 0 ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                               {content.technicalSpecifications.map((spec: string, idx: number) => (
                                 <li key={idx} className="leading-relaxed">{spec}</li>
                               ))}
                             </ul>
                           ) : (
-                            <p className="text-muted-foreground">No technical specifications listed. Generate AI content to create specifications.</p>
+                            <p className="text-muted-foreground dark:text-foreground/90">No technical specifications listed. Generate AI content to create specifications.</p>
                           )
                         )}
                       </section>
@@ -1430,13 +1478,13 @@ export default function AdminProposalDetail() {
                             </Button>
                           </div>
                         ) : Array.isArray(content.deliverables) && content.deliverables.length > 0 ? (
-                          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                          <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                             {content.deliverables.map((deliverable: string, idx: number) => (
                               <li key={idx} className="leading-relaxed">{deliverable}</li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-muted-foreground">No deliverables listed. Generate AI content to create deliverables.</p>
+                          <p className="text-muted-foreground dark:text-foreground/90">No deliverables listed. Generate AI content to create deliverables.</p>
                         )}
                       </section>
 
@@ -1455,7 +1503,7 @@ export default function AdminProposalDetail() {
                           />
                         ) : (
                           typeof content.timeline === 'string' ? (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                               {content.timeline}
                             </p>
                           ) : typeof content.timeline === 'object' && content.timeline !== null ? (
@@ -1467,14 +1515,14 @@ export default function AdminProposalDetail() {
                                       {key.replace('phase', '')}
                                     </span>
                                   </div>
-                                  <p className="text-muted-foreground m-0 leading-relaxed flex-1">
+                                  <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed flex-1">
                                     {typeof value === 'string' ? value : String(value)}
                                   </p>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-muted-foreground m-0 leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed whitespace-pre-wrap">
                               No timeline available. Generate AI content to create a timeline.
                             </p>
                           )
@@ -1496,7 +1544,7 @@ export default function AdminProposalDetail() {
                           />
                         ) : (
                           typeof content.team === 'string' ? (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                               {content.team}
                             </p>
                           ) : typeof content.team === 'object' && content.team !== null ? (
@@ -1506,14 +1554,14 @@ export default function AdminProposalDetail() {
                                   <span className="text-sm font-medium text-foreground capitalize min-w-0 sm:min-w-[120px]">
                                     {key.replace(/([A-Z])/g, ' $1').trim()}:
                                   </span>
-                                  <span className="text-muted-foreground text-sm">
+                                  <span className="text-muted-foreground dark:text-foreground/90 text-sm">
                                     {typeof value === 'string' ? value : String(value)}
                                   </span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                               No team information available. Generate AI content to create team details.
                             </p>
                           )
@@ -1535,7 +1583,7 @@ export default function AdminProposalDetail() {
                           />
                         ) : (
                           typeof content.pricing === 'string' ? (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                               {content.pricing}
                             </p>
                           ) : typeof content.pricing === 'object' && content.pricing !== null ? (
@@ -1545,14 +1593,14 @@ export default function AdminProposalDetail() {
                                   <span className="text-sm font-medium text-foreground capitalize min-w-0 sm:min-w-[140px]">
                                     {key.replace(/([A-Z])/g, ' $1').trim()}:
                                   </span>
-                                  <span className="text-muted-foreground text-sm">
+                                  <span className="text-muted-foreground dark:text-foreground/90 text-sm">
                                     {typeof value === 'string' ? value : String(value)}
                                   </span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                               No pricing information available. Generate AI content to create pricing details.
                             </p>
                           )
@@ -1604,11 +1652,11 @@ export default function AdminProposalDetail() {
                           </div>
                         ) : (
                           typeof content.nextSteps === 'string' ? (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                               {content.nextSteps}
                             </p>
                           ) : Array.isArray(content.nextSteps) ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                               {content.nextSteps.map((step: any, idx: number) => (
                                 <li key={idx} className="leading-relaxed">
                                   {typeof step === 'string' ? step : String(step)}
@@ -1616,7 +1664,7 @@ export default function AdminProposalDetail() {
                               ))}
                             </ul>
                           ) : typeof content.nextSteps === 'object' && content.nextSteps !== null ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                               {Object.values(content.nextSteps).map((step: any, idx: number) => (
                                 <li key={idx} className="leading-relaxed">
                                   {typeof step === 'string' ? step : String(step)}
@@ -1624,7 +1672,7 @@ export default function AdminProposalDetail() {
                               ))}
                             </ul>
                           ) : (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                               No next steps available. Generate AI content to create next steps.
                             </p>
                           )
@@ -1649,8 +1697,8 @@ export default function AdminProposalDetail() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <CardTitle>Assigned collaborators</CardTitle>
-                  <CardDescription>View and manage who can work on this proposal. You have full control to add or remove collaborators.</CardDescription>
+                  <CardTitle className="mb-2">Assigned collaborators</CardTitle>
+                  <CardDescription className="mt-1">View and manage who can work on this proposal. You have full control to add or remove collaborators.</CardDescription>
                 </div>
                 <Button onClick={openInviteDialog}>
                   <UserPlus className="w-4 h-4 mr-2" />
@@ -1725,8 +1773,8 @@ export default function AdminProposalDetail() {
         <TabsContent value="activity" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Activity Log</CardTitle>
-              <CardDescription>Recent activity on this proposal</CardDescription>
+              <CardTitle className="mb-2">Activity Log</CardTitle>
+              <CardDescription className="mt-1">Recent activity on this proposal</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -1753,6 +1801,16 @@ export default function AdminProposalDetail() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="discussion" className="mt-6">
+          {id && (
+            <ProposalDiscussionTab
+              proposalId={id}
+              canComment={true}
+              questionsHref="/admin/proposals"
+            />
+          )}
         </TabsContent>
       </Tabs>
 

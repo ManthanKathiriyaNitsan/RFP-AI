@@ -17,6 +17,7 @@ import {
   proposalKeys,
 } from "@/hooks/use-proposals-api";
 import { addCollaboration, updateCollaboration, deleteCollaboration, fetchCollaborations, fetchProposalActivity } from "@/api/proposals";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import {
   ArrowLeft,
   Edit,
@@ -83,7 +84,8 @@ import {
   downloadProposalDocx,
   downloadProposalXlsx,
 } from "@/lib/export-proposal";
-import { COLLABORATOR_ROLE_OPTIONS, getPermissionsForRole, DEFAULT_COLLABORATOR_PERMISSIONS } from "@/lib/collaborator-roles";
+import { useCollaboratorRoleOptions } from "@/hooks/use-collaborator-role-options";
+import { ProposalDiscussionTab } from "@/components/customer/proposal-discussion";
 
 /** Reveals text letter-by-letter with a blinking cursor, matching left-panel paragraph style. */
 function TypingReveal({
@@ -121,7 +123,7 @@ function TypingReveal({
 
   return (
     <div className={className}>
-      <span className="text-muted-foreground p-0 leading-relaxed whitespace-pre-wrap font-normal text-[15px]">
+      <span className="text-muted-foreground dark:text-foreground/90 p-0 leading-relaxed whitespace-pre-wrap font-normal text-[15px]">
         {visible}
       </span>
       {!isComplete && (
@@ -157,7 +159,8 @@ export default function RFPDetail() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
   const [selectedInviteUser, setSelectedInviteUser] = useState<{ id: number; email: string; firstName: string; lastName: string } | null>(null);
-  const [invitePermissions, setInvitePermissions] = useState(DEFAULT_COLLABORATOR_PERMISSIONS);
+  const { roleOptions, getPermissionsForRole, defaultPermissions } = useCollaboratorRoleOptions();
+  const [invitePermissions, setInvitePermissions] = useState(defaultPermissions);
   const [inviteProjects, setInviteProjects] = useState<number[]>([]);
   const [isEditCollaboratorOpen, setIsEditCollaboratorOpen] = useState(false);
   const [editCollaboratorRow, setEditCollaboratorRow] = useState<{ c: { id: number; userId: number; role: string; user?: { id: number; email: string; firstName: string; lastName: string } }; proposalTitle: string } | null>(null);
@@ -176,7 +179,7 @@ export default function RFPDetail() {
     role: "collaborator",
   });
 
-  const { data: proposal, isLoading: proposalLoading } = useProposal(proposalId);
+  const { data: proposal, isLoading: proposalLoading, isError: proposalError, error: proposalErrorObj, refetch: refetchProposal } = useProposal(proposalId);
   const { data: proposalsListData } = useProposalsList();
   const myProposals = proposalsListData ?? [];
   const myProposalIds = myProposals.map((p) => p.id);
@@ -195,9 +198,16 @@ export default function RFPDetail() {
   const myActivityEntries = isCollaborator && user?.id ? activityEntries.filter((e) => e.userId === user.id) : [];
   const isLoading = !!rfpId && (proposalLoading || !proposal);
   const collaborations = collaborationsData;
-  const canEdit = !isCollaborator || myCollaboration?.canEdit === true;
-  const canGenerateAi = !isCollaborator || myCollaboration?.canGenerateAi === true;
+  const isEditorRole = (myCollaboration?.role ?? "").toLowerCase() === "editor";
+  const canEdit = fromAdmin || !isCollaborator || myCollaboration?.canEdit === true || isEditorRole;
+  const canGenerateAi =
+    fromAdmin ||
+    !isCollaborator ||
+    myCollaboration?.canGenerateAi === true ||
+    isEditorRole ||
+    (isCollaborator && myCollaboration?.canEdit === true);
   const canComment = isCollaborator && myCollaboration?.canComment === true;
+  const canCommentDiscussion = !isCollaborator || (myCollaboration?.canComment === true);
   const canReview = isCollaborator && myCollaboration?.canReview === true;
 
   const [formData, setFormData] = useState({
@@ -341,7 +351,7 @@ export default function RFPDetail() {
       setSelectedInviteUser(null);
       setInviteProjects([]);
       setInviteRole("viewer");
-      setInvitePermissions(DEFAULT_COLLABORATOR_PERMISSIONS);
+      setInvitePermissions(defaultPermissions);
     } catch (e) {
       toast({ title: "Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
     }
@@ -653,10 +663,10 @@ export default function RFPDetail() {
             </h3>
           ),
           p: ({ children }) => (
-            <p className="text-muted-foreground p-0 leading-relaxed whitespace-pre-wrap">{children}</p>
+            <p className="text-muted-foreground dark:text-foreground/90 p-0 leading-relaxed whitespace-pre-wrap">{children}</p>
           ),
-          ul: ({ children }) => <ul className="list-disc list-inside text-muted-foreground space-y-2">{children}</ul>,
-          ol: ({ children }) => <ol className="list-decimal list-inside text-muted-foreground space-y-2">{children}</ol>,
+          ul: ({ children }) => <ul className="list-disc list-inside text-muted-foreground dark:text-foreground/90 space-y-2">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-inside text-muted-foreground dark:text-foreground/90 space-y-2">{children}</ol>,
           li: ({ children }) => <li className="leading-relaxed">{children}</li>,
         }}
       >
@@ -693,11 +703,11 @@ export default function RFPDetail() {
             ) : (
               (() => {
                 const es = content.executiveSummary;
-                if (typeof es === 'string' && es) return <p className="text-muted-foreground p-0 leading-relaxed whitespace-pre-wrap">{es}</p>;
+                if (typeof es === 'string' && es) return <p className="text-muted-foreground dark:text-foreground/90 p-0 leading-relaxed whitespace-pre-wrap">{es}</p>;
                 if (es && typeof es === 'object' && (es as any).description) {
                   const o = es as { description?: string; keyPoints?: string[]; budgetImpact?: string };
                   return (
-                    <div className="space-y-2 text-muted-foreground">
+                    <div className="space-y-2 text-muted-foreground dark:text-foreground/90">
                       <p className="p-0 leading-relaxed whitespace-pre-wrap">{o.description}</p>
                       {Array.isArray(o.keyPoints) && o.keyPoints.length > 0 && <ul className="list-disc list-inside">{o.keyPoints.map((p: string, i: number) => <li key={i}>{p}</li>)}</ul>}
                       {o.budgetImpact && <p className="font-medium text-foreground">Budget impact: {o.budgetImpact}</p>}
@@ -727,11 +737,11 @@ export default function RFPDetail() {
             ) : (
               (() => {
                 const intro = content.introduction;
-                if (typeof intro === 'string' && intro) return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{intro}</p>;
+                if (typeof intro === 'string' && intro) return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{intro}</p>;
                 if (intro && typeof intro === 'object' && (intro as any).description) {
                   const o = intro as { description?: string; problemStatement?: string; solutionOverview?: string };
                   return (
-                    <div className="space-y-2 text-muted-foreground">
+                    <div className="space-y-2 text-muted-foreground dark:text-foreground/90">
                       <p className="leading-relaxed">{o.description}</p>
                       {o.problemStatement && <p><span className="font-medium text-foreground">Problem: </span>{o.problemStatement}</p>}
                       {o.solutionOverview && <p><span className="font-medium text-foreground">Solution: </span>{o.solutionOverview}</p>}
@@ -773,7 +783,7 @@ export default function RFPDetail() {
               {Array.isArray((content.projectOverview as any).projectScope) && (content.projectOverview as any).projectScope.length > 0 && (
                 <div>
                   <Label className="text-xs text-muted-foreground">Scope</Label>
-                  <ul className="list-disc list-inside text-sm text-muted-foreground mt-1">{(content.projectOverview as any).projectScope.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground dark:text-foreground/90 mt-1">{(content.projectOverview as any).projectScope.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul>
                 </div>
               )}
             </div>
@@ -787,7 +797,7 @@ export default function RFPDetail() {
               <CheckCircle className="w-4 h-4 text-primary" />
               Requirements
             </h2>
-            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
               {content.requirements.map((req: string, idx: number) => (
                 <li key={idx} className="leading-relaxed">{req}</li>
               ))}
@@ -812,11 +822,11 @@ export default function RFPDetail() {
             ) : (
               (() => {
                 const sa = content.solutionApproach;
-                if (typeof sa === 'string' && sa) return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{sa}</p>;
+                if (typeof sa === 'string' && sa) return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{sa}</p>;
                 if (sa && typeof sa === 'object' && (sa as any).description) {
                   const o = sa as { description?: string; keySteps?: string[]; technologiesUsed?: string[] };
                   return (
-                    <div className="space-y-2 text-muted-foreground">
+                    <div className="space-y-2 text-muted-foreground dark:text-foreground/90">
                       <p className="leading-relaxed">{o.description}</p>
                       {Array.isArray(o.keySteps) && o.keySteps.length > 0 && <><span className="font-medium text-foreground">Key steps: </span><ul className="list-disc list-inside mt-1">{o.keySteps.map((s: string, i: number) => <li key={i}>{s}</li>)}</ul></>}
                       {Array.isArray(o.technologiesUsed) && o.technologiesUsed.length > 0 && <p><span className="font-medium text-foreground">Technologies: </span>{o.technologiesUsed.join(", ")}</p>}
@@ -836,7 +846,7 @@ export default function RFPDetail() {
               <FileText className="w-4 h-4 text-primary" />
               Technical Specifications
             </h2>
-            <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
               {content.technicalSpecifications.map((spec: string, idx: number) => (
                 <li key={idx} className="leading-relaxed">{spec}</li>
               ))}
@@ -857,7 +867,7 @@ export default function RFPDetail() {
               const desc = (deliv as any)?.description;
               const standards = (deliv as any)?.qualityStandards;
               return (
-                <div className="space-y-2 text-muted-foreground">
+                <div className="space-y-2 text-muted-foreground dark:text-foreground/90">
                   {desc && <p className="leading-relaxed">{desc}</p>}
                   {list.length > 0 && <ul className="list-disc list-inside">{list.map((d: string, i: number) => <li key={i}>{d}</li>)}</ul>}
                   {Array.isArray(standards) && standards.length > 0 && <p><span className="font-medium text-foreground">Quality standards: </span>{standards.join(", ")}</p>}
@@ -875,12 +885,12 @@ export default function RFPDetail() {
               Timeline
             </h2>
             {typeof content.timeline === 'string' ? (
-              <p className="text-muted-foreground m-0 leading-relaxed text-sm whitespace-pre-wrap">
+              <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed text-sm whitespace-pre-wrap">
                 {content.timeline}
               </p>
             ) : typeof content.timeline === 'object' && content.timeline !== null ? (
               (content.timeline as any).description ? (
-                <p className="text-muted-foreground m-0 leading-relaxed text-sm whitespace-pre-wrap">{(content.timeline as any).description}</p>
+                <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed text-sm whitespace-pre-wrap">{(content.timeline as any).description}</p>
               ) : (
                 <div className="space-y-3">
                   {Object.entries(content.timeline).map(([key, value]) => (
@@ -890,7 +900,7 @@ export default function RFPDetail() {
                           {key.replace('phase', '')}
                         </span>
                       </div>
-                      <p className="text-muted-foreground m-0 leading-relaxed text-sm flex-1">
+                      <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed text-sm flex-1">
                         {typeof value === 'string' ? value : String(value)}
                       </p>
                     </div>
@@ -909,12 +919,12 @@ export default function RFPDetail() {
               Team
             </h2>
             {typeof content.team === 'string' ? (
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                 {content.team}
               </p>
             ) : typeof content.team === 'object' && content.team !== null ? (
               (content.team as any).description ? (
-                <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{(content.team as any).description}</p>
+                <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{(content.team as any).description}</p>
               ) : (
                 <div className="space-y-2">
                   {Object.entries(content.team).map(([key, value]) => (
@@ -922,7 +932,7 @@ export default function RFPDetail() {
                       <span className="font-medium text-foreground capitalize min-w-0 sm:min-w-[120px]">
                         {key.replace(/([A-Z])/g, ' $1').trim()}:
                       </span>
-                      <span className="text-muted-foreground">
+                      <span className="text-muted-foreground dark:text-foreground/90">
                         {typeof value === 'string' ? value : String(value)}
                       </span>
                     </div>
@@ -941,12 +951,12 @@ export default function RFPDetail() {
               Pricing
             </h2>
             {typeof content.pricing === 'string' ? (
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                 {content.pricing}
               </p>
             ) : typeof content.pricing === 'object' && content.pricing !== null ? (
               (content.pricing as any).description ? (
-                <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{(content.pricing as any).description}</p>
+                <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{(content.pricing as any).description}</p>
               ) : (
                 <div className="space-y-2">
                   {Object.entries(content.pricing).map(([key, value]) => (
@@ -954,7 +964,7 @@ export default function RFPDetail() {
                       <span className="font-medium text-foreground capitalize min-w-0 sm:min-w-[140px]">
                         {key.replace(/([A-Z])/g, ' $1').trim()}:
                       </span>
-                      <span className="text-muted-foreground">
+                      <span className="text-muted-foreground dark:text-foreground/90">
                         {typeof value === 'string' ? value : String(value)}
                       </span>
                     </div>
@@ -974,12 +984,12 @@ export default function RFPDetail() {
             </h2>
             {(() => {
               const ns = content.nextSteps;
-              if (typeof ns === 'string' && ns) return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{ns}</p>;
+              if (typeof ns === 'string' && ns) return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{ns}</p>;
               const actions = Array.isArray(ns) ? ns : (ns as any)?.keyActions ?? (ns && typeof ns === 'object' ? Object.values(ns).filter((v: any) => typeof v === 'string') : []);
               const desc = (ns as any)?.description;
               if (desc || (Array.isArray(actions) && actions.length > 0)) {
                 return (
-                  <div className="space-y-2 text-muted-foreground">
+                  <div className="space-y-2 text-muted-foreground dark:text-foreground/90">
                     {desc && <p className="leading-relaxed">{desc}</p>}
                     {Array.isArray(actions) && actions.length > 0 && (
                       <ul className="list-disc list-inside">{actions.map((step: any, idx: number) => <li key={idx}>{typeof step === 'string' ? step : String(step)}</li>)}</ul>
@@ -994,6 +1004,14 @@ export default function RFPDetail() {
       </div>
     );
   };
+
+  if (proposalId && proposalError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetchProposal} error={proposalErrorObj} />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -1108,6 +1126,18 @@ export default function RFPDetail() {
             <TabsTrigger value="content" className="text-xs sm:text-sm">Content</TabsTrigger>
             <TabsTrigger value="team" className="text-xs sm:text-sm">Team</TabsTrigger>
             <TabsTrigger value="activity" className="text-xs sm:text-sm">Activity</TabsTrigger>
+            <TabsTrigger value="discussion" className="text-xs sm:text-sm inline-flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5" />
+              Discussion
+            </TabsTrigger>
+            {proposalId && (
+              <TabsTrigger asChild value="questions" className="text-xs sm:text-sm">
+                <Link href={`${rfpBase}/${proposalId}/questions`} className="inline-flex items-center justify-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5" />
+                  Questions
+                </Link>
+              </TabsTrigger>
+            )}
           </TabsList>
           {activeTab === "content" && canGenerateAi && (
             <Button
@@ -1242,7 +1272,7 @@ export default function RFPDetail() {
                   />
                 ) : (
                   <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border/50 bg-muted/20 p-3">
-                    <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    <p className="text-muted-foreground dark:text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap break-words">
                       {formData.description || "No description provided."}
                     </p>
                   </div>
@@ -1367,7 +1397,7 @@ export default function RFPDetail() {
                                   onChange={(e) =>
                                     setEditableNewContent({ ...(editableNewContent ?? newContent), fullDocument: e.target.value })
                                   }
-                                  className="w-full text-muted-foreground leading-relaxed whitespace-pre-wrap font-normal text-[15px] border border-input rounded-md bg-background p-3 resize-y min-h-[200px] focus-visible:ring-2 focus-visible:ring-ring"
+                                  className="w-full text-foreground leading-relaxed whitespace-pre-wrap font-normal text-[15px] border border-input rounded-md bg-background p-3 resize-y min-h-[200px] focus-visible:ring-2 focus-visible:ring-ring"
                                   placeholder="AI-generated proposal"
                                 />
                               ) : (
@@ -1427,7 +1457,14 @@ export default function RFPDetail() {
                         nextSteps: "",
                       };
                       if (isFullDocumentContent(content)) {
-                        return (
+                        return isEditing ? (
+                          <Textarea
+                            value={getFullDocumentText(content)}
+                            onChange={(e) => setContentData({ ...content, fullDocument: e.target.value })}
+                            className="w-full min-h-[400px] font-normal text-foreground leading-relaxed whitespace-pre-wrap resize-y border border-input rounded-md bg-background p-4 focus-visible:ring-2 focus-visible:ring-ring"
+                            placeholder="Proposal content (markdown supported)"
+                          />
+                        ) : (
                           <div className="prose prose-sm sm:prose-base max-w-none text-foreground dark:prose-invert">
                             <ReactMarkdown>{getFullDocumentText(content)}</ReactMarkdown>
                           </div>
@@ -1452,12 +1489,12 @@ export default function RFPDetail() {
                           (() => {
                             const es = content.executiveSummary;
                             if (typeof es === 'string' && es) {
-                              return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{es}</p>;
+                              return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{es}</p>;
                             }
                             if (es && typeof es === 'object' && (es as any).description) {
                               const o = es as { description?: string; keyPoints?: string[]; budgetImpact?: string };
                               return (
-                                <div className="space-y-3 text-muted-foreground">
+                                <div className="space-y-3 text-muted-foreground dark:text-foreground/90">
                                   <p className="leading-relaxed whitespace-pre-wrap">{o.description}</p>
                                   {Array.isArray(o.keyPoints) && o.keyPoints.length > 0 && (
                                     <ul className="list-disc list-inside space-y-1">{o.keyPoints.map((p: string, i: number) => <li key={i}>{p}</li>)}</ul>
@@ -1466,7 +1503,7 @@ export default function RFPDetail() {
                                 </div>
                               );
                             }
-                            return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">No executive summary available. Generate AI content to create one.</p>;
+                            return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">No executive summary available. Generate AI content to create one.</p>;
                           })() )}
                       </section>
 
@@ -1486,19 +1523,19 @@ export default function RFPDetail() {
                         ) : (() => {
                           const intro = content.introduction;
                           if (typeof intro === 'string' && intro) {
-                            return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{intro}</p>;
+                            return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{intro}</p>;
                           }
                           if (intro && typeof intro === 'object' && (intro as any).description) {
                             const o = intro as { description?: string; problemStatement?: string; solutionOverview?: string };
                             return (
-                              <div className="space-y-3 text-muted-foreground">
+                              <div className="space-y-3 text-muted-foreground dark:text-foreground/90">
                                 <p className="leading-relaxed whitespace-pre-wrap">{o.description}</p>
                                 {o.problemStatement && <p className="leading-relaxed"><span className="font-medium text-foreground">Problem: </span>{o.problemStatement}</p>}
                                 {o.solutionOverview && <p className="leading-relaxed"><span className="font-medium text-foreground">Solution: </span>{o.solutionOverview}</p>}
                               </div>
                             );
                           }
-                          return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">No introduction available. Generate AI content to create one.</p>;
+                          return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">No introduction available. Generate AI content to create one.</p>;
                         })()}
                       </section>
 
@@ -1531,7 +1568,7 @@ export default function RFPDetail() {
                             {Array.isArray((content.projectOverview as any).projectScope) && (content.projectOverview as any).projectScope.length > 0 && (
                               <div>
                                 <Label className="text-xs text-muted-foreground">Scope</Label>
-                                <ul className="list-disc list-inside space-y-1 text-muted-foreground mt-1">
+                                <ul className="list-disc list-inside space-y-1 text-muted-foreground dark:text-foreground/90 mt-1">
                                   {(content.projectOverview as any).projectScope.map((s: string, i: number) => <li key={i}>{s}</li>)}
                                 </ul>
                               </div>
@@ -1547,13 +1584,13 @@ export default function RFPDetail() {
                           Requirements
                         </h2>
                         {(Array.isArray(content.requirements) && content.requirements.length > 0) ? (
-                          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                          <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                             {content.requirements.map((req: string, idx: number) => (
                               <li key={idx} className="leading-relaxed">{req}</li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-muted-foreground">No requirements listed. Generate AI content to create requirements.</p>
+                          <p className="text-muted-foreground dark:text-foreground/90">No requirements listed. Generate AI content to create requirements.</p>
                         )}
                       </section>
 
@@ -1573,12 +1610,12 @@ export default function RFPDetail() {
                         ) : (() => {
                           const sa = content.solutionApproach;
                           if (typeof sa === 'string' && sa) {
-                            return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{sa}</p>;
+                            return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{sa}</p>;
                           }
                           if (sa && typeof sa === 'object' && (sa as any).description) {
                             const o = sa as { description?: string; keySteps?: string[]; technologiesUsed?: string[] };
                             return (
-                              <div className="space-y-3 text-muted-foreground">
+                              <div className="space-y-3 text-muted-foreground dark:text-foreground/90">
                                 <p className="leading-relaxed whitespace-pre-wrap">{o.description}</p>
                                 {Array.isArray(o.keySteps) && o.keySteps.length > 0 && (
                                   <div>
@@ -1592,7 +1629,7 @@ export default function RFPDetail() {
                               </div>
                             );
                           }
-                          return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">No solution approach available. Generate AI content to create one.</p>;
+                          return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">No solution approach available. Generate AI content to create one.</p>;
                         })()}
                       </section>
 
@@ -1603,13 +1640,13 @@ export default function RFPDetail() {
                           Technical Specifications
                         </h2>
                         {Array.isArray(content.technicalSpecifications) && content.technicalSpecifications.length > 0 ? (
-                          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+                          <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
                             {content.technicalSpecifications.map((spec: string, idx: number) => (
                               <li key={idx} className="leading-relaxed">{spec}</li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-muted-foreground">No technical specifications listed. Generate AI content to create specifications.</p>
+                          <p className="text-muted-foreground dark:text-foreground/90">No technical specifications listed. Generate AI content to create specifications.</p>
                         )}
                       </section>
 
@@ -1626,7 +1663,7 @@ export default function RFPDetail() {
                           const standards = deliv && typeof deliv === 'object' ? (deliv as any).qualityStandards : null;
                           if (list.length > 0 || desc || (Array.isArray(standards) && standards.length > 0)) {
                             return (
-                              <div className="space-y-3 text-muted-foreground">
+                              <div className="space-y-3 text-muted-foreground dark:text-foreground/90">
                                 {desc && <p className="leading-relaxed">{desc}</p>}
                                 {list.length > 0 && (
                                   <ul className="list-disc list-inside space-y-1">{list.map((d: string, i: number) => <li key={i}>{d}</li>)}</ul>
@@ -1637,7 +1674,7 @@ export default function RFPDetail() {
                               </div>
                             );
                           }
-                          return <p className="text-muted-foreground">No deliverables listed. Generate AI content to create deliverables.</p>;
+                          return <p className="text-muted-foreground dark:text-foreground/90">No deliverables listed. Generate AI content to create deliverables.</p>;
                         })()}
                       </section>
 
@@ -1648,12 +1685,12 @@ export default function RFPDetail() {
                           Timeline
                         </h2>
                         {typeof content.timeline === 'string' ? (
-                          <p className="text-muted-foreground m-0 leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed whitespace-pre-wrap">
                             {content.timeline}
                           </p>
                         ) : typeof content.timeline === 'object' && content.timeline !== null ? (
                           (content.timeline as any).description ? (
-                            <p className="text-muted-foreground m-0 leading-relaxed whitespace-pre-wrap">{(content.timeline as any).description}</p>
+                            <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed whitespace-pre-wrap">{(content.timeline as any).description}</p>
                           ) : (
                             <div className="space-y-3">
                               {Object.entries(content.timeline).map(([key, value]) => (
@@ -1663,7 +1700,7 @@ export default function RFPDetail() {
                                       {key.replace('phase', '')}
                                     </span>
                                   </div>
-                                  <p className="text-muted-foreground m-0 leading-relaxed flex-1">
+                                  <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed flex-1">
                                     {typeof value === 'string' ? value : String(value)}
                                   </p>
                                 </div>
@@ -1671,7 +1708,7 @@ export default function RFPDetail() {
                             </div>
                           )
                         ) : (
-                          <p className="text-muted-foreground m-0 leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed whitespace-pre-wrap">
                             No timeline available. Generate AI content to create a timeline.
                           </p>
                         )}
@@ -1684,12 +1721,12 @@ export default function RFPDetail() {
                           Team
                         </h2>
                         {typeof content.team === 'string' ? (
-                          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                             {content.team}
                           </p>
                         ) : typeof content.team === 'object' && content.team !== null ? (
                           (content.team as any).description ? (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{(content.team as any).description}</p>
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{(content.team as any).description}</p>
                           ) : (
                           <div className="space-y-2">
                             {Object.entries(content.team).map(([key, value]) => (
@@ -1705,7 +1742,7 @@ export default function RFPDetail() {
                           </div>
                           )
                         ) : (
-                          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                             No team information available. Generate AI content to create team details.
                           </p>
                         )}
@@ -1718,12 +1755,12 @@ export default function RFPDetail() {
                           Pricing
                         </h2>
                         {typeof content.pricing === 'string' ? (
-                          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                             {content.pricing}
                           </p>
                         ) : typeof content.pricing === 'object' && content.pricing !== null ? (
                           (content.pricing as any).description ? (
-                            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{(content.pricing as any).description}</p>
+                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{(content.pricing as any).description}</p>
                           ) : (
                           <div className="space-y-2">
                             {Object.entries(content.pricing).map(([key, value]) => (
@@ -1739,7 +1776,7 @@ export default function RFPDetail() {
                           </div>
                           )
                         ) : (
-                          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
                             No pricing information available. Generate AI content to create pricing details.
                           </p>
                         )}
@@ -1754,13 +1791,13 @@ export default function RFPDetail() {
                         {(() => {
                           const ns = content.nextSteps;
                           if (typeof ns === 'string' && ns) {
-                            return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{ns}</p>;
+                            return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">{ns}</p>;
                           }
                           const actions = Array.isArray(ns) ? ns : (ns && typeof ns === 'object' && (ns as any).keyActions) ? (ns as any).keyActions : (ns && typeof ns === 'object') ? Object.values(ns).filter((v: any) => typeof v === 'string' || Array.isArray(v)).flat() : [];
                           const desc = ns && typeof ns === 'object' && !Array.isArray(ns) ? (ns as any).description : null;
                           if (desc || actions.length > 0) {
                             return (
-                              <div className="space-y-2 text-muted-foreground">
+                              <div className="space-y-2 text-muted-foreground dark:text-foreground/90">
                                 {desc && <p className="leading-relaxed">{desc}</p>}
                                 {actions.length > 0 && (
                                   <ul className="list-disc list-inside space-y-1">
@@ -1772,7 +1809,7 @@ export default function RFPDetail() {
                               </div>
                             );
                           }
-                          return <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">No next steps available. Generate AI content to create next steps.</p>;
+                          return <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">No next steps available. Generate AI content to create next steps.</p>;
                         })()}
                       </section>
                     </div>
@@ -1794,8 +1831,8 @@ export default function RFPDetail() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <CardTitle>Assigned collaborators</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="mb-2">Assigned collaborators</CardTitle>
+                  <CardDescription className="mt-1">
                     {isCollaborator
                       ? "Collaborators assigned to this proposal."
                       : "View and manage who can work on this proposal. You have full control to add or remove collaborators."}
@@ -1858,7 +1895,7 @@ export default function RFPDetail() {
                                   Change role
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
-                                  {COLLABORATOR_ROLE_OPTIONS.map((r) => (
+                                  {roleOptions.map((r) => (
                                     <DropdownMenuItem key={r.value} onClick={() => handleChangeRoleRow(c, r.value)}>
                                       <r.icon className="w-4 h-4 mr-2" />
                                       {r.label}
@@ -1900,8 +1937,8 @@ export default function RFPDetail() {
           {isCollaborator && (
             <Card className="mb-6">
               <CardHeader>
-                <CardTitle>My changes</CardTitle>
-                <CardDescription>Your edits and version history on this proposal</CardDescription>
+                <CardTitle className="mb-2">My changes</CardTitle>
+                <CardDescription className="mt-1">Your edits and version history on this proposal</CardDescription>
               </CardHeader>
               <CardContent>
                 {myActivityEntries.length > 0 ? (
@@ -1927,8 +1964,8 @@ export default function RFPDetail() {
           )}
           <Card>
             <CardHeader>
-              <CardTitle>Activity Log</CardTitle>
-              <CardDescription>Recent activity on this proposal</CardDescription>
+              <CardTitle className="mb-2">Activity Log</CardTitle>
+              <CardDescription className="mt-1">Recent activity on this proposal</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -1974,6 +2011,16 @@ export default function RFPDetail() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="discussion" className="mt-6">
+          {proposalId && (
+            <ProposalDiscussionTab
+              proposalId={proposalId}
+              canComment={canCommentDiscussion}
+              questionsHref={rfpBase}
+            />
+          )}
+        </TabsContent>
       </Tabs>
 
       <Dialog open={isEditCollaboratorOpen} onOpenChange={setIsEditCollaboratorOpen}>
@@ -1989,7 +2036,7 @@ export default function RFPDetail() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {COLLABORATOR_ROLE_OPTIONS.map((r) => (
+                {roleOptions.map((r) => (
                   <SelectItem key={r.value} value={r.value}><div className="flex items-center gap-2"><r.icon className="w-4 h-4" /><span>{r.label}</span></div></SelectItem>
                 ))}
               </SelectContent>
@@ -2101,7 +2148,7 @@ export default function RFPDetail() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {COLLABORATOR_ROLE_OPTIONS.map((r) => (
+                  {roleOptions.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
                       <div className="flex items-center gap-2">
                         <r.icon className="w-4 h-4" />

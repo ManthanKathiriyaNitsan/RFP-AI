@@ -86,7 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth.user, auth.access_token]);
 
   const login = async (email: string, password: string): Promise<User> => {
-    const res = await apiRequest("POST", "/api/v1/auth/login", { email, password });
+    let res: Response;
+    try {
+      res = await apiRequest("POST", "/api/v1/auth/login", { email, password });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/Unable to connect|network|fetch|connection/i.test(msg)) {
+        throw new Error("Cannot connect to server. Please check your connection and try again.");
+      }
+      throw e;
+    }
     const text = await res.text();
     let data: TokenResponse;
     try {

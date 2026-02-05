@@ -8,7 +8,7 @@ import { insertProposalSchema, insertChatMessageSchema } from "@shared/schema";
 const ROLE_TO_PERMISSIONS: Record<string, { canView: boolean; canEdit: boolean; canComment: boolean; canReview: boolean; canGenerateAi: boolean }> = {
   viewer: { canView: true, canEdit: false, canComment: false, canReview: false, canGenerateAi: false },
   commenter: { canView: true, canEdit: false, canComment: true, canReview: false, canGenerateAi: false },
-  editor: { canView: true, canEdit: true, canComment: true, canReview: false, canGenerateAi: false },
+  editor: { canView: true, canEdit: true, canComment: true, canReview: false, canGenerateAi: true },
   reviewer: { canView: true, canEdit: true, canComment: true, canReview: true, canGenerateAi: false },
   contributor: { canView: true, canEdit: true, canComment: true, canReview: true, canGenerateAi: true },
 };
@@ -560,12 +560,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   type QuestionRecord = { id: number; proposalId: number; question: string; order: number; source: string; createdAt: string };
   type AnswerRecord = { id: number; questionId: number; answer: string; respondentToken?: string | null; createdAt: string; updatedAt: string };
   type ShareTokenRecord = { id: number; proposalId: number; token: string; createdAt: string };
+  type AnswerCommentRecord = { id: number; proposalId: number; answerId: number; authorId: number; authorName: string; text: string; mentions: number[]; parentId: number | null; createdAt: string };
   const proposalQuestionsStore: QuestionRecord[] = [];
   const proposalAnswersStore: AnswerRecord[] = [];
   const shareTokensStore: ShareTokenRecord[] = [];
+  const answerCommentsStore: AnswerCommentRecord[] = [];
+  type SuggestionRecord = { id: number; proposalId: number; answerId: number; suggestedBy: number; suggestedByName: string; suggestedText: string; message: string; status: "pending" | "accepted" | "rejected"; createdAt: string };
+  type ProposalChatRecord = { id: number; proposalId: number; authorId: number; authorName: string; text: string; createdAt: string };
+  const suggestionStore: SuggestionRecord[] = [];
+  const proposalChatStore: ProposalChatRecord[] = [];
   let questionNextId = 1;
   let answerNextId = 1;
   let shareTokenNextId = 1;
+  let commentNextId = 1;
+  let suggestionNextId = 1;
+  let proposalChatNextId = 1;
   const isoNow = () => new Date().toISOString();
 
   async function ensureProposalExists(proposalId: number): Promise<boolean> {
@@ -697,6 +706,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error) {
       res.status(400).json({ message: "Failed to save answers" });
+    }
+  });
+
+  // Generate AI answers for questions (contract: questionIds + options.tone, options.detailLevel → { answers: [{ questionId, answer, generatedAt }] })
+  app.post("/api/v1/proposals/:id/answers/generate", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const questionIds = Array.isArray(req.body?.questionIds) ? req.body.questionIds.map((x: unknown) => Number(x)).filter(Number.isInteger) : [];
+      const options = req.body?.options ?? {};
+      const tone = options.tone ?? "professional";
+      const detailLevel = options.detailLevel ?? "detailed";
+      const questions = proposalQuestionsStore.filter((q) => q.proposalId === proposalId && questionIds.includes(q.id));
+      const now = new Date().toISOString();
+      const answers = questions.map((q) => ({
+        questionId: q.id,
+        answer: `[AI-generated placeholder for: "${q.question.slice(0, 60)}..." — tone: ${tone}, length: ${detailLevel}. Replace with real LLM in backend.]`,
+        generatedAt: now,
+      }));
+      res.json({ answers });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to generate answers" });
+    }
+  });
+
+  app.get("/api/v1/proposals/:id/answers/:answerId/comments", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      const answerId = parseInt(req.params.answerId);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const list = answerCommentsStore.filter((c) => c.proposalId === proposalId && c.answerId === answerId);
+      const byParent = new Map<number | null, AnswerCommentRecord[]>();
+      list.forEach((c) => {
+        const key = c.parentId ?? null;
+        if (!byParent.has(key)) byParent.set(key, []);
+        byParent.get(key)!.push(c);
+      });
+      const root = (byParent.get(null) ?? []).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const comments = root.map((c) => ({
+        ...c,
+        replies: (byParent.get(c.id) ?? []).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      }));
+      res.json({ comments });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/v1/proposals/:id/answers/:answerId/comments", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      const answerId = parseInt(req.params.answerId);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const { text, mentions = [], parentId = null } = req.body ?? {};
+      const userId = (req as any).user?.id ?? 1;
+      const userName = (req as any).user ? `${(req as any).user.firstName ?? ""} ${(req as any).user.lastName ?? ""}`.trim() || "User" : "User";
+      const now = isoNow();
+      const rec: AnswerCommentRecord = {
+        id: commentNextId++,
+        proposalId,
+        answerId,
+        authorId: userId,
+        authorName: userName,
+        text: typeof text === "string" ? text : "",
+        mentions: Array.isArray(mentions) ? mentions : [],
+        parentId: parentId != null ? Number(parentId) : null,
+        createdAt: now,
+      };
+      answerCommentsStore.push(rec);
+      res.status(201).json(rec);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to add comment" });
+    }
+  });
+
+  app.get("/api/v1/proposals/:id/chat", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const list = proposalChatStore.filter((c) => c.proposalId === proposalId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      res.json({ messages: list });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch proposal chat" });
+    }
+  });
+
+  app.post("/api/v1/proposals/:id/chat", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const { text } = req.body ?? {};
+      const userId = (req as any).user?.id ?? 1;
+      const userName = (req as any).user ? `${(req as any).user.firstName ?? ""} ${(req as any).user.lastName ?? ""}`.trim() || "User" : "User";
+      const now = isoNow();
+      const rec: ProposalChatRecord = {
+        id: proposalChatNextId++,
+        proposalId,
+        authorId: userId,
+        authorName: userName,
+        text: typeof text === "string" ? text : "",
+        createdAt: now,
+      };
+      proposalChatStore.push(rec);
+      res.status(201).json(rec);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to send message" });
+    }
+  });
+
+  app.get("/api/v1/proposals/:id/comments", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const allComments = answerCommentsStore.filter((c) => c.proposalId === proposalId);
+      const questions = proposalQuestionsStore.filter((q) => q.proposalId === proposalId).sort((a, b) => a.order - b.order);
+      const answers = proposalAnswersStore.filter((a) => questions.some((q) => q.id === a.questionId));
+      const questionById = new Map(questions.map((q) => [q.id, q]));
+      const answerIdsByQuestionId = new Map<number, number[]>();
+      answers.forEach((a) => {
+        if (!answerIdsByQuestionId.has(a.questionId)) answerIdsByQuestionId.set(a.questionId, []);
+        answerIdsByQuestionId.get(a.questionId)!.push(a.id);
+      });
+      const groups: { answerId: number; questionId: number; questionText: string; comments: { id: number; authorName: string; text: string; parentId: number | null; createdAt: string; replies: unknown[] }[] }[] = [];
+      const answerIdsWithComments = [...new Set(allComments.map((c) => c.answerId))];
+      for (const q of questions) {
+        const answerIds = answerIdsByQuestionId.get(q.id) ?? [];
+        for (const answerId of answerIds) {
+          if (!answerIdsWithComments.includes(answerId)) continue;
+          const list = allComments.filter((c) => c.answerId === answerId);
+          const byParent = new Map<number | null, AnswerCommentRecord[]>();
+          list.forEach((c) => {
+            const key = c.parentId ?? null;
+            if (!byParent.has(key)) byParent.set(key, []);
+            byParent.get(key)!.push(c);
+          });
+          const root = (byParent.get(null) ?? []).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          const comments = root.map((c) => ({
+            ...c,
+            replies: (byParent.get(c.id) ?? []).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+          }));
+          groups.push({ answerId, questionId: q.id, questionText: q.question, comments });
+        }
+      }
+      res.json({ groups });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch proposal comments" });
+    }
+  });
+
+  app.get("/api/v1/proposals/:id/suggestions", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const list = suggestionStore.filter((s) => s.proposalId === proposalId);
+      res.json({ suggestions: list });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch suggestions" });
+    }
+  });
+
+  app.post("/api/v1/proposals/:id/answers/:answerId/suggestions", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      const answerId = parseInt(req.params.answerId);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const { suggestedText, message = "" } = req.body ?? {};
+      const userId = (req as any).user?.id ?? 1;
+      const userName = (req as any).user ? `${(req as any).user.firstName ?? ""} ${(req as any).user.lastName ?? ""}`.trim() || "User" : "User";
+      const now = isoNow();
+      const rec: SuggestionRecord = {
+        id: suggestionNextId++,
+        proposalId,
+        answerId,
+        suggestedBy: userId,
+        suggestedByName: userName,
+        suggestedText: typeof suggestedText === "string" ? suggestedText : "",
+        message: typeof message === "string" ? message : "",
+        status: "pending",
+        createdAt: now,
+      };
+      suggestionStore.push(rec);
+      res.status(201).json(rec);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to create suggestion" });
+    }
+  });
+
+  app.patch("/api/v1/proposals/:id/suggestions/:suggestionId", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      const suggestionId = parseInt(req.params.suggestionId);
+      const { status } = req.body ?? {};
+      if (status !== "accepted" && status !== "rejected") return res.status(400).json({ message: "status must be accepted or rejected" });
+      const rec = suggestionStore.find((s) => s.proposalId === proposalId && s.id === suggestionId);
+      if (!rec) return res.status(404).json({ message: "Suggestion not found" });
+      rec.status = status;
+      res.json(rec);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to update suggestion" });
     }
   });
 
@@ -879,6 +1087,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/v1/customer/knowledge-base/documents/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const body = req.body || {};
+      const doc = customerKbDocuments.find((d) => d.id === id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      if (Array.isArray(body.tags)) {
+        doc.tags = body.tags;
+      }
+      res.json(doc);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update document" });
+    }
+  });
+
   app.delete("/api/v1/customer/knowledge-base/documents/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -1002,6 +1225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Content Library (in-memory store; replace with DB in production)
+  type ContentAttachment = { name: string; dataUrl: string; size?: number };
   type ContentItemRecord = {
     id: number;
     title: string;
@@ -1014,6 +1238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     lastUsed: string;
     lastUpdated: string;
     author: string;
+    attachments?: ContentAttachment[];
   };
   const CONTENT_CATEGORY_ICONS: Record<string, string> = {
     "Company Overview": "BookOpen",
@@ -1085,6 +1310,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const body = req.body || {};
       const now = formatDate(new Date());
+      const attachments = Array.isArray(body.attachments)
+        ? body.attachments.filter(
+            (a: unknown) =>
+              a && typeof a === "object" && "name" in a && "dataUrl" in a && typeof (a as ContentAttachment).name === "string" && typeof (a as ContentAttachment).dataUrl === "string"
+          ).map((a: ContentAttachment) => ({
+            name: a.name,
+            dataUrl: a.dataUrl,
+            size: typeof a.size === "number" ? a.size : undefined,
+          }))
+        : [];
       const item: ContentItemRecord = {
         id: contentNextId++,
         title: typeof body.title === "string" ? body.title : "",
@@ -1097,6 +1332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastUsed: "",
         lastUpdated: now,
         author: typeof body.author === "string" ? body.author : "Admin",
+        attachments: attachments.length ? attachments : undefined,
       };
       contentStore.push(item);
       res.status(201).json(item);
@@ -1117,6 +1353,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof body.status === "string") item.status = body.status;
       if (Array.isArray(body.tags)) item.tags = body.tags;
       if (typeof body.starred === "boolean") item.starred = body.starred;
+      if (Array.isArray(body.attachments)) {
+        const attachments = body.attachments.filter(
+          (a: unknown) =>
+            a && typeof a === "object" && "name" in a && "dataUrl" in a && typeof (a as ContentAttachment).name === "string" && typeof (a as ContentAttachment).dataUrl === "string"
+        ).map((a: ContentAttachment) => ({
+          name: a.name,
+          dataUrl: a.dataUrl,
+          size: typeof a.size === "number" ? a.size : undefined,
+        }));
+        item.attachments = attachments.length ? attachments : undefined;
+      }
       item.lastUpdated = formatDate(new Date());
       res.json(item);
     } catch (error) {
@@ -1746,7 +1993,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: security (stub + in-memory config for session and IP)
+  // Admin: AI config (stub; in-memory for local dev when not using external backend)
+  type AIConfigFeatures = { autoSuggest?: boolean; contentFiltering?: boolean; allowBulkGenerate?: boolean; allowToneSelection?: boolean };
+  type AIConfigStore = {
+    defaultModel?: string;
+    defaultTemperature?: number;
+    defaultMaxTokens?: number;
+    systemPromptDefault?: string;
+    features?: AIConfigFeatures;
+  };
+  const aiConfigStore: AIConfigStore = {
+    defaultModel: "gpt-4o",
+    defaultTemperature: 0.7,
+    defaultMaxTokens: 2048,
+    systemPromptDefault: "",
+    features: { autoSuggest: true, contentFiltering: true, allowBulkGenerate: true, allowToneSelection: true },
+  };
+  app.get("/api/v1/admin/ai-config", async (_req, res) => {
+    try {
+      res.json({
+        defaultModel: aiConfigStore.defaultModel,
+        defaultTemperature: aiConfigStore.defaultTemperature,
+        defaultMaxTokens: aiConfigStore.defaultMaxTokens,
+        systemPromptDefault: aiConfigStore.systemPromptDefault ?? "",
+        creditsUsed: "0",
+        aiModels: [
+          { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", speed: "Fast", quality: "High", cost: "$$" },
+          { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", speed: "Faster", quality: "Good", cost: "$" },
+        ],
+        qualityMetrics: [
+          { label: "Relevance", value: 92, target: 90 },
+          { label: "Brand Voice Match", value: 78, target: 85 },
+        ],
+        features: aiConfigStore.features,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch AI config" });
+    }
+  });
+  app.patch("/api/v1/admin/ai-config", async (req, res) => {
+    try {
+      const body = req.body || {};
+      if (body.defaultModel !== undefined) aiConfigStore.defaultModel = String(body.defaultModel);
+      if (body.defaultTemperature !== undefined) aiConfigStore.defaultTemperature = Number(body.defaultTemperature);
+      if (body.defaultMaxTokens !== undefined) aiConfigStore.defaultMaxTokens = Number(body.defaultMaxTokens);
+      if (body.systemPromptDefault !== undefined) aiConfigStore.systemPromptDefault = String(body.systemPromptDefault);
+      if (body.features !== undefined && typeof body.features === "object") {
+        const f = body.features as Record<string, unknown>;
+        aiConfigStore.features = {
+          autoSuggest: f.autoSuggest !== undefined ? Boolean(f.autoSuggest) : aiConfigStore.features?.autoSuggest,
+          contentFiltering: f.contentFiltering !== undefined ? Boolean(f.contentFiltering) : aiConfigStore.features?.contentFiltering,
+          allowBulkGenerate: f.allowBulkGenerate !== undefined ? Boolean(f.allowBulkGenerate) : aiConfigStore.features?.allowBulkGenerate,
+          allowToneSelection: f.allowToneSelection !== undefined ? Boolean(f.allowToneSelection) : aiConfigStore.features?.allowToneSelection,
+        };
+      }
+      res.json({
+        defaultModel: aiConfigStore.defaultModel,
+        defaultTemperature: aiConfigStore.defaultTemperature,
+        defaultMaxTokens: aiConfigStore.defaultMaxTokens,
+        systemPromptDefault: aiConfigStore.systemPromptDefault,
+        features: aiConfigStore.features,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update AI config" });
+    }
+  });
+
+  // Admin: security (stub + in-memory config for session, IP, 2FA)
   type SecurityConfig = {
     sessionIdleMinutes?: number;
     sessionMaxDurationMinutes?: number;
@@ -1754,6 +2067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ipRestrictionEnabled?: boolean;
     ipAllowlist?: string[];
     ipDenylist?: string[];
+    requireTwoFactorForAllUsers?: boolean;
   };
   const securityConfig: SecurityConfig = {
     sessionIdleMinutes: 30,
@@ -1762,6 +2076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ipRestrictionEnabled: false,
     ipAllowlist: [],
     ipDenylist: [],
+    requireTwoFactorForAllUsers: false,
   };
 
   app.get("/api/v1/admin/security", async (_req, res) => {
@@ -1798,6 +2113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (body.ipRestrictionEnabled !== undefined) securityConfig.ipRestrictionEnabled = Boolean(body.ipRestrictionEnabled);
       if (Array.isArray(body.ipAllowlist)) securityConfig.ipAllowlist = body.ipAllowlist.filter((e: unknown) => typeof e === "string");
       if (Array.isArray(body.ipDenylist)) securityConfig.ipDenylist = body.ipDenylist.filter((e: unknown) => typeof e === "string");
+      if (body.requireTwoFactorForAllUsers !== undefined) securityConfig.requireTwoFactorForAllUsers = Boolean(body.requireTwoFactorForAllUsers);
       const payload = {
         defaultPasswordLength: "12",
         defaultSessionDuration: "90",

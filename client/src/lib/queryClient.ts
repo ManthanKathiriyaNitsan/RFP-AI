@@ -1,9 +1,19 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
+import { notifyApiUnavailable } from "@/contexts/ApiStatusContext";
+
+const NETWORK_ERROR_MESSAGE = "Unable to connect. Please check your network and try again.";
+
+function isNetworkError(e: unknown): boolean {
+  if (e instanceof TypeError && (e.message === "Failed to fetch" || e.message === "Load failed")) return true;
+  if (e instanceof Error && /fetch|network|connection/i.test(e.message)) return true;
+  return false;
+}
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status >= 500) notifyApiUnavailable();
     const text = (await res.text()) || res.statusText;
     // 429 = rate limited; show a clear message
     if (res.status === 429) {
@@ -73,17 +83,25 @@ export async function apiRequest(
     ...(options.skipAuth ? {} : getAuthHeaders()),
     ...(data ? { "Content-Type": "application/json" } : {}),
   };
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
-  if (!options.skipAuth && res.status === 401 && !retried && (await tryRefreshToken())) {
-    return apiRequest(method, path, data, true);
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+    if (!options.skipAuth && res.status === 401 && !retried && (await tryRefreshToken())) {
+      return apiRequest(method, path, data, true);
+    }
+    await throwIfResNotOk(res);
+    return res;
+  } catch (e) {
+    if (isNetworkError(e)) {
+      notifyApiUnavailable();
+      throw new Error(NETWORK_ERROR_MESSAGE);
+    }
+    throw e;
   }
-  await throwIfResNotOk(res);
-  return res;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -92,33 +110,40 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    let path = queryKey[0] as string;
-    if (queryKey.length > 1 && queryKey[1] && typeof queryKey[1] === "object") {
-      const params = new URLSearchParams();
-      const queryParams = queryKey[1] as Record<string, unknown>;
-      Object.entries(queryParams).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-      if (params.toString()) path += `?${params.toString()}`;
+    try {
+      let path = queryKey[0] as string;
+      if (queryKey.length > 1 && queryKey[1] && typeof queryKey[1] === "object") {
+        const params = new URLSearchParams();
+        const queryParams = queryKey[1] as Record<string, unknown>;
+        Object.entries(queryParams).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            params.append(key, String(value));
+          }
+        });
+        if (params.toString()) path += `?${params.toString()}`;
+      }
+      const url = getApiUrl(path);
+      const doFetch = (headers?: Record<string, string>) =>
+        fetch(url, {
+          credentials: "include",
+          headers: headers ?? getAuthHeaders(),
+        });
+      let res = await doFetch();
+      if (res.status === 401 && (await tryRefreshToken())) {
+        res = await doFetch(getAuthHeaders());
+      }
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+      await throwIfResNotOk(res);
+      return await res.json();
+    } catch (e) {
+      if (isNetworkError(e)) {
+        notifyApiUnavailable();
+        throw new Error(NETWORK_ERROR_MESSAGE);
+      }
+      throw e;
     }
-    const url = getApiUrl(path);
-    const doFetch = (headers?: Record<string, string>) =>
-      fetch(url, {
-        credentials: "include",
-        headers: headers ?? getAuthHeaders(),
-      });
-    let res = await doFetch();
-    if (res.status === 401 && (await tryRefreshToken())) {
-      // Retry with freshly read token from storage (refresh just updated it)
-      res = await doFetch(getAuthHeaders());
-    }
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
-    }
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({

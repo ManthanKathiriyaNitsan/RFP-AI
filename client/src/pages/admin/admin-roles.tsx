@@ -13,6 +13,7 @@ import {
 import { Shield, Plus, Pencil, Trash2, Save, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ export default function AdminRoles() {
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin", "roles"],
     queryFn: fetchAdminRoles,
   });
@@ -189,6 +190,14 @@ export default function AdminRoles() {
         </div>
       );
     });
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

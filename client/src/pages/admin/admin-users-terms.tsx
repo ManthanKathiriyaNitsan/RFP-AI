@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,7 +54,7 @@ interface Term {
 export default function AdminUsersTerms() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: termsData } = useQuery({
+  const { data: termsData, isError, error, refetch } = useQuery({
     queryKey: ["admin", "terms"],
     queryFn: fetchAdminTerms,
   });
@@ -224,6 +225,14 @@ export default function AdminUsersTerms() {
       description: `${term.title} has been archived.`,
     });
   };
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">

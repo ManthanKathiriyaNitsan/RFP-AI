@@ -28,12 +28,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AdminUsage() {
   const [dateRange, setDateRange] = useState("7days");
-  const { data } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "usage", dateRange],
     queryFn: () => fetchAdminUsage({ dateRange }),
   });
@@ -52,6 +53,14 @@ export default function AdminUsage() {
   const usageTitle = pageTitles.usage ?? "Usage Analytics";
   const { toast } = useToast();
   const isMobile = useIsMobile();
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">

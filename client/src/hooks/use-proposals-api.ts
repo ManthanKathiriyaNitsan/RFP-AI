@@ -18,18 +18,30 @@ import {
   submitPublicAnswers as apiSubmitPublicAnswers,
   generateProposalContent as apiGenerateProposalContent,
   generateProposalQuestions as apiGenerateProposalQuestions,
+  generateAnswers as apiGenerateAnswers,
+  type GenerateAnswersRequest,
   fetchCollaborations,
   fetchMyCollaborations,
   fetchMyCollaboration,
   addCollaboration as apiAddCollaboration,
   updateCollaboration as apiUpdateCollaboration,
   deleteCollaboration as apiDeleteCollaboration,
+  fetchAnswerComments as apiFetchAnswerComments,
+  addAnswerComment as apiAddAnswerComment,
+  fetchProposalComments as apiFetchProposalComments,
+  fetchProposalChat as apiFetchProposalChat,
+  addProposalChatMessage as apiAddProposalChatMessage,
+  fetchProposalSuggestions as apiFetchProposalSuggestions,
+  createSuggestion as apiCreateSuggestion,
+  updateSuggestionStatus as apiUpdateSuggestionStatus,
   type Proposal,
   type ProposalCreateInput,
   type ProposalUpdateInput,
   type QuestionCreateInput,
   type CollaborationCreateInput,
   type CollaborationUpdateInput,
+  type AddCommentRequest,
+  type AnswerComment,
 } from "@/api/proposals";
 import { searchUsers as apiSearchUsers } from "@/api/users";
 
@@ -40,6 +52,10 @@ export const proposalKeys = {
   draft: (proposalId: number) => [...proposalKeys.all, "draft", proposalId] as const,
   questions: (proposalId: number) => [...proposalKeys.all, "detail", proposalId, "questions"] as const,
   answers: (proposalId: number) => [...proposalKeys.all, "detail", proposalId, "answers"] as const,
+  answerComments: (proposalId: number, answerId: number) => [...proposalKeys.all, "detail", proposalId, "answers", answerId, "comments"] as const,
+  proposalComments: (proposalId: number) => [...proposalKeys.all, "detail", proposalId, "comments"] as const,
+  proposalChat: (proposalId: number) => [...proposalKeys.all, "detail", proposalId, "chat"] as const,
+  suggestions: (proposalId: number) => [...proposalKeys.all, "detail", proposalId, "suggestions"] as const,
   publicByToken: (token: string) => ["proposals", "public", token] as const,
   collaborations: (proposalId: number) => [...proposalKeys.all, "detail", proposalId, "collaborations"] as const,
   myCollaborations: () => [...proposalKeys.all, "my-collaborations"] as const,
@@ -234,6 +250,17 @@ export function useGenerateProposalQuestions(proposalId: number) {
   });
 }
 
+export function useGenerateAnswers(proposalId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GenerateAnswersRequest) => apiGenerateAnswers(proposalId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: proposalKeys.answers(proposalId) });
+      qc.invalidateQueries({ queryKey: proposalKeys.draft(proposalId) });
+    },
+  });
+}
+
 // --- Collaborations ---
 
 export function useCollaborations(proposalId: number | null | undefined) {
@@ -299,6 +326,86 @@ export function useDeleteCollaboration(proposalId: number) {
       qc.invalidateQueries({ queryKey: proposalKeys.collaborations(proposalId) });
       qc.invalidateQueries({ queryKey: proposalKeys.list() });
       qc.invalidateQueries({ queryKey: proposalKeys.myCollaborations() });
+    },
+  });
+}
+
+export function useAnswerComments(proposalId: number | null, answerId: number | null) {
+  return useQuery({
+    queryKey: proposalKeys.answerComments(proposalId!, answerId!),
+    queryFn: () => apiFetchAnswerComments(proposalId!, answerId!),
+    enabled: typeof proposalId === "number" && proposalId > 0 && typeof answerId === "number" && answerId > 0,
+    refetchInterval: 4000,
+  });
+}
+
+export function useAddAnswerComment(proposalId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ answerId, ...body }: AddCommentRequest & { answerId: number }) =>
+      apiAddAnswerComment(proposalId, answerId, body),
+    onSuccess: (_, { answerId }) => {
+      qc.invalidateQueries({ queryKey: proposalKeys.answerComments(proposalId, answerId) });
+      qc.invalidateQueries({ queryKey: proposalKeys.proposalComments(proposalId) });
+    },
+  });
+}
+
+export function useProposalComments(proposalId: number | null | undefined) {
+  return useQuery({
+    queryKey: proposalKeys.proposalComments(proposalId!),
+    queryFn: () => apiFetchProposalComments(proposalId!),
+    enabled: typeof proposalId === "number" && proposalId > 0,
+    refetchInterval: 4000,
+  });
+}
+
+export function useProposalChat(proposalId: number | null | undefined) {
+  return useQuery({
+    queryKey: proposalKeys.proposalChat(proposalId!),
+    queryFn: () => apiFetchProposalChat(proposalId!),
+    enabled: typeof proposalId === "number" && proposalId > 0,
+    refetchInterval: 4000,
+  });
+}
+
+export function useAddProposalChatMessage(proposalId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { text: string }) => apiAddProposalChatMessage(proposalId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: proposalKeys.proposalChat(proposalId) });
+    },
+  });
+}
+
+export function useProposalSuggestions(proposalId: number | null) {
+  return useQuery({
+    queryKey: proposalKeys.suggestions(proposalId!),
+    queryFn: () => apiFetchProposalSuggestions(proposalId!),
+    enabled: typeof proposalId === "number" && proposalId > 0,
+  });
+}
+
+export function useCreateSuggestion(proposalId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ answerId, suggestedText, message }: { answerId: number; suggestedText: string; message?: string }) =>
+      apiCreateSuggestion(proposalId, answerId, { suggestedText, message }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: proposalKeys.suggestions(proposalId) });
+    },
+  });
+}
+
+export function useUpdateSuggestionStatus(proposalId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ suggestionId, status }: { suggestionId: number; status: "accepted" | "rejected" }) =>
+      apiUpdateSuggestionStatus(proposalId, suggestionId, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: proposalKeys.suggestions(proposalId) });
+      qc.invalidateQueries({ queryKey: proposalKeys.answers(proposalId) });
     },
   });
 }

@@ -29,9 +29,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 
 export default function AdminAIConfig() {
-  const { data } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "ai-config"],
     queryFn: fetchAdminAIConfig,
   });
@@ -55,9 +56,11 @@ export default function AdminAIConfig() {
   const [temperature, setTemperature] = useState([defaultTemperature]);
   const [maxTokens, setMaxTokens] = useState([defaultMaxTokens]);
   const [systemPrompt, setSystemPrompt] = useState(systemPromptDefault);
-  const [autoSuggest, setAutoSuggest] = useState(true);
-  const [contentFiltering, setContentFiltering] = useState(true);
-  const [saveUnsaved, setSaveUnsaved] = useState(false);
+  const features = data?.features ?? {};
+  const [autoSuggest, setAutoSuggest] = useState(features.autoSuggest ?? true);
+  const [contentFiltering, setContentFiltering] = useState(features.contentFiltering ?? true);
+  const [allowBulkGenerate, setAllowBulkGenerate] = useState(features.allowBulkGenerate ?? true);
+  const [allowToneSelection, setAllowToneSelection] = useState(features.allowToneSelection ?? true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -71,9 +74,18 @@ export default function AdminAIConfig() {
   useEffect(() => {
     if (data?.defaultMaxTokens != null) setMaxTokens([data.defaultMaxTokens]);
   }, [data?.defaultMaxTokens]);
+  useEffect(() => {
+    const f = data?.features;
+    if (f && typeof f === "object") {
+      if (f.autoSuggest !== undefined) setAutoSuggest(f.autoSuggest);
+      if (f.contentFiltering !== undefined) setContentFiltering(f.contentFiltering);
+      if (f.allowBulkGenerate !== undefined) setAllowBulkGenerate(f.allowBulkGenerate);
+      if (f.allowToneSelection !== undefined) setAllowToneSelection(f.allowToneSelection);
+    }
+  }, [data?.features]);
 
   const saveMutation = useMutation({
-    mutationFn: (payload: { defaultModel?: string; defaultTemperature?: number; defaultMaxTokens?: number; systemPromptDefault?: string }) =>
+    mutationFn: (payload: Parameters<typeof updateAdminAIConfig>[0]) =>
       updateAdminAIConfig(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "ai-config"] });
@@ -83,6 +95,14 @@ export default function AdminAIConfig() {
       toast({ title: "Save failed", description: err.message || "Could not save AI configuration.", variant: "destructive" });
     },
   });
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -102,8 +122,11 @@ export default function AdminAIConfig() {
               setTemperature([defaultTemperature]);
               setMaxTokens([defaultMaxTokens]);
               setSystemPrompt(systemPromptDefault || "");
-              setAutoSuggest(true);
-              setContentFiltering(true);
+              const f = data?.features ?? {};
+              setAutoSuggest(f.autoSuggest ?? true);
+              setContentFiltering(f.contentFiltering ?? true);
+              setAllowBulkGenerate(f.allowBulkGenerate ?? true);
+              setAllowToneSelection(f.allowToneSelection ?? true);
               toast({
                 title: "Reset to defaults",
                 description: "AI configuration has been reset to loaded values. Save to persist.",
@@ -124,6 +147,12 @@ export default function AdminAIConfig() {
                 defaultTemperature: temperature[0],
                 defaultMaxTokens: maxTokens[0],
                 systemPromptDefault: systemPrompt,
+                features: {
+                  autoSuggest,
+                  contentFiltering,
+                  allowBulkGenerate,
+                  allowToneSelection,
+                },
               });
             }}
           >
@@ -317,6 +346,28 @@ export default function AdminAIConfig() {
                   </div>
                 </div>
                 <Switch checked={contentFiltering} onCheckedChange={setContentFiltering} data-testid="switch-content-filter" className="shrink-0" />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-medium">Allow bulk generate</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Let users generate AI answers for all questions at once</p>
+                  </div>
+                </div>
+                <Switch checked={allowBulkGenerate} onCheckedChange={setAllowBulkGenerate} data-testid="switch-allow-bulk-generate" className="shrink-0" />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <Sliders className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-medium">Allow tone selection</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Let users choose tone and length (detail level) for AI answers</p>
+                  </div>
+                </div>
+                <Switch checked={allowToneSelection} onCheckedChange={setAllowToneSelection} data-testid="switch-allow-tone-selection" className="shrink-0" />
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">

@@ -33,7 +33,7 @@ export const ROLE_TO_PERMISSIONS: Record<string, CollaboratorPermissions> = {
     canEdit: true,
     canComment: true,
     canReview: false,
-    canGenerateAi: false,
+    canGenerateAi: true,
   },
   reviewer: {
     canView: true,
@@ -63,7 +63,12 @@ export type RoleOption = { value: string; label: string; description?: string; i
 export const COLLABORATOR_ROLE_OPTIONS: RoleOption[] = [
   { value: "viewer", label: "Viewer", description: "Can view only", icon: Eye },
   { value: "commenter", label: "Commenter", description: "Can view and comment", icon: MessageSquare },
-  { value: "editor", label: "Editor", description: "Can edit answers", icon: FileEdit },
+  { value: "editor", label: "Editor", description: "Can edit content and generate AI document", icon: FileEdit },
   { value: "reviewer", label: "Reviewer", description: "Can review and approve", icon: CheckCircle },
   { value: "contributor", label: "Contributor", description: "Full access including AI", icon: Sparkles },
 ];
+
+/** Roles that can be assigned when inviting or editing a collaborator. Matches admin (Viewer, Editor, Reviewer). */
+export const ASSIGNABLE_COLLABORATOR_ROLE_OPTIONS: RoleOption[] = COLLABORATOR_ROLE_OPTIONS.filter((r) =>
+  ["viewer", "editor", "reviewer"].includes(r.value)
+);

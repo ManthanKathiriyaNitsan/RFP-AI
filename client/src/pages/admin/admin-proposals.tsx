@@ -18,10 +18,12 @@ import {
   XCircle,
   AlertCircle,
   FileText,
-  ArrowUpDown
+  ArrowUpDown,
+  Plus
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -77,7 +79,7 @@ export default function AdminProposals() {
   const proposalsTitle = pageTitles.proposals ?? "Proposals";
 
   // Fetch real proposals from API (admin sees all proposals); refetch periodically for real-time updates
-  const { data: apiProposals = [], isLoading: isLoadingProposals } = useQuery<any[]>({
+  const { data: apiProposals = [], isLoading: isLoadingProposals, isError: proposalsError, error: proposalsErrorObj, refetch: refetchProposals } = useQuery<any[]>({
     queryKey: ["/api/proposals", { userId: user?.id, userRole: user?.role }],
     enabled: !!user?.id,
     refetchInterval: 20000, // Refetch every 20s so list stays in sync
@@ -318,6 +320,12 @@ export default function AdminProposals() {
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-proposals-title">{proposalsTitle}</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage and track all RFP proposals in one place.</p>
         </div>
+        <Link href="/admin/proposals/new" className="w-full sm:w-auto shrink-0">
+          <Button className="w-full sm:w-auto theme-gradient-bg text-white border-0 hover:opacity-95">
+            <Plus className="w-4 h-4 mr-2" />
+            New Proposal
+          </Button>
+        </Link>
       </div>
 
       <Tabs defaultValue="all" className="w-full">
@@ -356,7 +364,13 @@ export default function AdminProposals() {
           </div>
         </div>
 
-            {isLoadingProposals ? (
+            {proposalsError ? (
+              <Card className="border shadow-sm">
+                <CardContent className="p-6">
+                  <QueryErrorState refetch={refetchProposals} error={proposalsErrorObj} />
+                </CardContent>
+              </Card>
+            ) : isLoadingProposals ? (
               <Card className="border shadow-sm">
                 <CardContent className="p-8">
                   <div className="flex items-center justify-center">

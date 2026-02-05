@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -50,7 +51,7 @@ export default function AdminSubscriptionBilling() {
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
-  const { data: plansData } = useQuery({ queryKey: ["admin", "billing-plans"], queryFn: fetchAdminBillingPlans });
+  const { data: plansData, isError, error, refetch } = useQuery({ queryKey: ["admin", "billing-plans"], queryFn: fetchAdminBillingPlans });
   const { data: invoicesData } = useQuery({ queryKey: ["admin", "billing-invoices"], queryFn: fetchAdminInvoices });
   const { data: apiUsers = [] } = useQuery<{ id: number; email?: string; firstName?: string; lastName?: string }[]>({
     queryKey: ["/api/v1/users"],
@@ -183,6 +184,14 @@ export default function AdminSubscriptionBilling() {
 
   const userName = (u: { firstName?: string; lastName?: string; email?: string }) =>
     [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `User ${u.id}`;
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">

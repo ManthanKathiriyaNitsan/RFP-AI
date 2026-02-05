@@ -10,8 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useProposalsList, proposalKeys } from "@/hooks/use-proposals-api";
 import { fetchCollaborations } from "@/api/proposals";
 import { Link, useLocation } from "wouter";
-import { usePrompt } from "@/hooks/use-prompt";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import type { Proposal } from "@/api/proposals";
 
 export default function CustomerDashboard() {
@@ -19,8 +19,7 @@ export default function CustomerDashboard() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const isMobile = useIsMobile();
-  const { prompt, PromptDialog } = usePrompt();
-  const { data: proposalsData, isLoading: proposalsLoading } = useProposalsList();
+  const { data: proposalsData, isLoading: proposalsLoading, isError: proposalsError, error: proposalsErrorObj, refetch: refetchProposals } = useProposalsList();
   const proposals = proposalsData ?? [];
   const proposalIds = proposals.map((p) => p.id);
   const collaborationQueries = useQueries({
@@ -33,6 +32,14 @@ export default function CustomerDashboard() {
   const allCollaborations = collaborationQueries.flatMap((q) => q.data ?? []);
   const uniqueCollaboratorIds = new Set(allCollaborations.map((c) => c.userId));
   const isLoading = proposalsLoading;
+
+  if (proposalsError) {
+    return (
+      <div className="p-4 sm:p-6">
+        <QueryErrorState refetch={refetchProposals} error={proposalsErrorObj} />
+      </div>
+    );
+  }
 
   // Deadlines from proposals (API data): proposals with dueDate in the future, sorted by date
   const upcomingDeadlines = useMemo(() => {
@@ -57,10 +64,11 @@ export default function CustomerDashboard() {
     collaborators: uniqueCollaboratorIds.size,
   };
 
+  /** Completion % derived from proposal status (dynamic from API). */
   const calculateCompletion = (proposal: Proposal) => {
     if (proposal.status === "completed") return 100;
     if (proposal.status === "draft") return 25;
-    return 65; // in_progress: fixed value from API context (no per-proposal progress API yet)
+    return 65; // in_progress
   };
 
   const averageCompletion = proposals.length > 0
@@ -121,7 +129,6 @@ export default function CustomerDashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-8">
-      <PromptDialog />
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -204,16 +211,16 @@ export default function CustomerDashboard() {
                 <Progress value={averageCompletion} className="h-2" />
               </div>
               {proposals.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {proposals.slice(0, 3).map((proposal: Proposal) => {
                     const completion = calculateCompletion(proposal);
                     return (
-                      <div key={proposal.id} className="space-y-1">
-                        <div className="flex justify-between text-xs">
+                      <div key={proposal.id}>
+                        <div className="flex justify-between text-xs mb-1.5">
                           <span className="truncate flex-1">{proposal.title}</span>
-                          <span className="ml-2 font-medium">{completion}%</span>
+                          <span className="ml-2 font-medium shrink-0">{completion}%</span>
                         </div>
-                        <Progress value={completion} className="h-1.5" />
+                        <Progress value={completion} className="h-2" />
                       </div>
                     );
                   })}
@@ -329,88 +336,6 @@ export default function CustomerDashboard() {
           )}
         </CardContent>
       </Card>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-        <Card className="card-hover">
-          <CardContent className="p-4 sm:p-6 text-center">
-            <img 
-              src="https://images.unsplash.com/photo-1497366216548-37526070297c?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=200" 
-              alt="Modern office workspace" 
-              className="w-full h-24 sm:h-32 object-cover rounded-lg mb-3 sm:mb-4" 
-            />
-            <h3 className="font-semibold text-sm sm:text-base mb-1 sm:mb-2">Start New Project</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-              Create a new RFP with AI assistance
-            </p>
-            <Link href="/proposals/new">
-              <Button className="w-full text-xs sm:text-sm theme-gradient-bg text-white border-0 hover:opacity-95">Get Started</Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover">
-          <CardContent className="p-4 sm:p-6 text-center">
-            <img 
-              src="https://images.unsplash.com/photo-1552664730-d307ca884978?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=200" 
-              alt="Professional team meeting" 
-              className="w-full h-24 sm:h-32 object-cover rounded-lg mb-3 sm:mb-4" 
-            />
-            <h3 className="font-semibold text-sm sm:text-base mb-1 sm:mb-2">Invite Collaborators</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-              Add team members to your proposals
-            </p>
-            <Button 
-              variant="secondary" 
-              className="w-full text-xs sm:text-sm"
-              onClick={async () => {
-                const email = await prompt({
-                  title: "Invite Collaborator",
-                  description: "Enter collaborator email address",
-                  placeholder: "user@example.com",
-                  type: "email",
-                });
-                if (email && email.includes("@")) {
-                  toast({
-                    title: "Invitation sent",
-                    description: `Invitation has been sent to ${email}. They will receive an email with access instructions.`,
-                  });
-                } else if (email) {
-                  toast({
-                    title: "Invalid email",
-                    description: "Please enter a valid email address.",
-                    variant: "destructive",
-                  });
-                }
-              }}
-            >
-              Invite Team
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover sm:col-span-2 md:col-span-1">
-          <CardContent className="p-4 sm:p-6 text-center">
-            <img 
-              src="https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=200" 
-              alt="AI technology interface" 
-              className="w-full h-24 sm:h-32 object-cover rounded-lg mb-3 sm:mb-4" 
-            />
-            <h3 className="font-semibold text-sm sm:text-base mb-1 sm:mb-2">Buy Credits</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-              Purchase more AI processing credits
-            </p>
-            <Link href="/credits">
-              <Button
-                variant="outline"
-                className="w-full border-green-600 text-green-600 hover:bg-green-50 hover:border-green-600 hover:text-green-700 text-xs sm:text-sm dark:border-green-500 dark:text-green-400 dark:hover:bg-green-950/60 dark:hover:border-green-400 dark:hover:text-green-100 dark:focus-visible:ring-green-500/40"
-              >
-                Purchase
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Floating Action Button */}
       <Link href="/proposals/new">

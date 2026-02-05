@@ -43,6 +43,7 @@ import {
   TooltipProps,
 } from "recharts";
 import { fetchAdminDashboard, fetchAdminOptions } from "@/api/admin-data";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 
 const STATS_ICON_MAP: Record<string, LucideIcon> = {
   FileText,
@@ -116,7 +117,7 @@ const RevenueTooltip = ({ active, payload, label }: TooltipProps<any, any>) => {
 };
 
 export default function AdminDashboard() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin", "dashboard"],
     queryFn: fetchAdminDashboard,
   });
@@ -154,6 +155,14 @@ export default function AdminDashboard() {
         return { label: "Draft", icon: FileText, className: "badge-status-draft" };
     }
   };
+
+  if (isError) {
+    return (
+      <div className="space-y-4 sm:space-y-6 animate-fade-in">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   if (isLoading && !data) {
     return (

@@ -1,10 +1,16 @@
 import { useState, useMemo } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
 import {
   ArrowLeft, CheckCircle, X, Lock, Unlock, Filter, Search,
-  FileText, MessageSquare, Clock, User
+  FileText, MessageSquare, Clock, User, Reply
 } from "lucide-react";
-import { useMyCollaboration, useProposalQuestions, useProposalAnswers } from "@/hooks/use-proposals-api";
+import { useProposal, useMyCollaboration, useProposalQuestions, useProposalAnswers, useAddAnswerComment, useProposalSuggestions, useUpdateSuggestionStatus, proposalKeys } from "@/hooks/use-proposals-api";
+import { QueryErrorState } from "@/components/shared/query-error-state";
+import { fetchAnswerComments } from "@/api/proposals";
+import type { AnswerComment } from "@/api/proposals";
+import type { AnswerSuggestion } from "@/api/proposals";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +38,7 @@ export default function RFPReview() {
   const rfpId = params.id;
   const proposalId = rfpId ? parseInt(rfpId, 10) : null;
   const isCollaborator = location.startsWith("/collaborator");
+  const { data: proposal, isError: proposalError, error: proposalErrorObj, refetch: refetchProposal } = useProposal(proposalId);
   const { data: myCollaboration } = useMyCollaboration(isCollaborator ? proposalId : null);
   const { data: questions = [] } = useProposalQuestions(proposalId);
   const { data: answersFromApi = [], isLoading: answersLoading } = useProposalAnswers(proposalId);
@@ -48,6 +55,36 @@ export default function RFPReview() {
     comments: Record<number, { id: number; author: string; text: string; createdAt: Date }[]>;
   }>({ status: {}, locked: new Set(), comments: {} });
   const [newComment, setNewComment] = useState<{ [key: number]: string }>({});
+  const [replyTo, setReplyTo] = useState<{ answerId: number; commentId: number } | null>(null);
+  const [replyText, setReplyText] = useState<{ [key: number]: string }>({});
+
+  const answerIds = useMemo(() => questions.map((q) => {
+    const ans = answersFromApi.find((a) => a.questionId === q.id);
+    return ans?.id ?? q.id;
+  }), [questions, answersFromApi]);
+  const commentQueries = useQueries({
+    queries: (proposalId != null ? answerIds : []).map((answerId: number) => ({
+      queryKey: proposalKeys.answerComments(proposalId!, answerId),
+      queryFn: () => fetchAnswerComments(proposalId!, answerId),
+      enabled: !!proposalId && !!answerId,
+    })),
+  });
+  const apiCommentsByAnswerId = useMemo(() => {
+    const map: Record<number, AnswerComment[]> = {};
+    commentQueries.forEach((q: { data?: AnswerComment[] }, i: number) => {
+      const aid = answerIds[i];
+      if (aid == null) return;
+      const list = q.data ?? [];
+      const flat: AnswerComment[] = [];
+      list.forEach((c: AnswerComment) => {
+        flat.push(c);
+        (c.replies ?? []).forEach((r: AnswerComment) => flat.push(r));
+      });
+      flat.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      map[aid] = flat;
+    });
+    return map;
+  }, [commentQueries, answerIds]);
 
   const answers: ReviewAnswerItem[] = useMemo(() => {
     return questions.map((q) => {
@@ -63,10 +100,15 @@ export default function RFPReview() {
         status: status as "approved" | "pending" | "draft" | "rejected",
         submittedAt: ans?.updatedAt ? new Date(ans.updatedAt) : null,
         locked: localOverrides.locked.has(key),
-        comments: localOverrides.comments[key] ?? [],
+        comments: (apiCommentsByAnswerId[key] ?? []).map((c) => ({
+          id: c.id,
+          author: c.authorName,
+          text: c.text,
+          createdAt: new Date(c.createdAt),
+        })).concat(localOverrides.comments[key] ?? []),
       };
     });
-  }, [questions, answersFromApi, localOverrides]);
+  }, [questions, answersFromApi, localOverrides, apiCommentsByAnswerId]);
 
   const filteredAnswers = answers.filter((answer) => {
     const matchesSearch = !searchTerm || 
@@ -140,26 +182,86 @@ export default function RFPReview() {
     });
   };
 
-  const handleAddComment = (answerId: number) => {
-    const comment = newComment[answerId];
-    if (!comment || !comment.trim()) return;
-    const answer = answers.find((a) => a.id === answerId);
-    if (answer) {
-      const newCommentObj = { id: answer.comments.length + 1, author: "You", text: comment.trim(), createdAt: new Date() };
-      setLocalOverrides((prev) => ({
-        ...prev,
-        comments: {
-          ...prev.comments,
-          [answerId]: [...(prev.comments[answerId] ?? []), newCommentObj],
-        },
-      }));
-      setNewComment((prev) => ({ ...prev, [answerId]: "" }));
-      toast({ title: "Comment added", description: "Your comment has been added." });
+  const addCommentMutation = useAddAnswerComment(proposalId ?? 0);
+
+  const handleAddComment = (answerId: number, parentId?: number | null) => {
+    const text = parentId != null ? replyText[answerId] : newComment[answerId];
+    if (!text || !text.trim()) return;
+    if (proposalId != null) {
+      addCommentMutation.mutate(
+        { answerId, text: text.trim(), parentId: parentId ?? null },
+        {
+          onSuccess: () => {
+            if (parentId != null) {
+              setReplyTo(null);
+              setReplyText((prev) => ({ ...prev, [answerId]: "" }));
+            } else {
+              setNewComment((prev) => ({ ...prev, [answerId]: "" }));
+            }
+            toast({ title: "Comment added", description: "Your comment has been added." });
+          },
+          onError: (e) => {
+            const answer = answers.find((a) => a.id === answerId);
+            const newCommentObj = { id: (answer?.comments.length ?? 0) + 1, author: "You", text: text.trim(), createdAt: new Date() };
+            setLocalOverrides((prev) => ({
+              ...prev,
+              comments: {
+                ...prev.comments,
+                [answerId]: [...(prev.comments[answerId] ?? []), newCommentObj],
+              },
+            }));
+            if (parentId != null) setReplyTo(null);
+            setNewComment((prev) => ({ ...prev, [answerId]: "" }));
+            setReplyText((prev) => ({ ...prev, [answerId]: "" }));
+            toast({ title: "Comment saved locally", description: "Backend may not be available; comment saved locally.", variant: "destructive" });
+          },
+        }
+      );
+    } else {
+      const answer = answers.find((a) => a.id === answerId);
+      if (answer) {
+        const newCommentObj = { id: answer.comments.length + 1, author: "You", text: text.trim(), createdAt: new Date() };
+        setLocalOverrides((prev) => ({
+          ...prev,
+          comments: {
+            ...prev.comments,
+            [answerId]: [...(prev.comments[answerId] ?? []), newCommentObj],
+          },
+        }));
+        setNewComment((prev) => ({ ...prev, [answerId]: "" }));
+        toast({ title: "Comment added", description: "Your comment has been added." });
+      }
     }
   };
 
   const approvedCount = answers.filter(a => a.status === "approved").length;
   const pendingCount = answers.filter(a => a.status === "pending").length;
+
+  const { data: suggestionsList = [] } = useProposalSuggestions(proposalId);
+  const updateSuggestionMutation = useUpdateSuggestionStatus(proposalId ?? 0);
+  const pendingSuggestions = useMemo(() => (suggestionsList as AnswerSuggestion[]).filter((s) => s.status === "pending"), [suggestionsList]);
+  const isOwner = !isCollaborator;
+
+  const handleAcceptSuggestion = (suggestionId: number) => {
+    updateSuggestionMutation.mutate(
+      { suggestionId, status: "accepted" },
+      { onSuccess: () => toast({ title: "Suggestion accepted" }), onError: () => toast({ title: "Failed to accept", variant: "destructive" }) }
+    );
+  };
+  const handleRejectSuggestion = (suggestionId: number) => {
+    updateSuggestionMutation.mutate(
+      { suggestionId, status: "rejected" },
+      { onSuccess: () => toast({ title: "Suggestion rejected" }), onError: () => toast({ title: "Failed to reject", variant: "destructive" }) }
+    );
+  };
+
+  if (proposalId && proposalError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetchProposal} error={proposalErrorObj} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -182,6 +284,38 @@ export default function RFPReview() {
           </p>
         </div>
       </div>
+
+      {/* Suggested changes (owner only) */}
+      {isOwner && pendingSuggestions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Suggested changes</CardTitle>
+            <p className="text-xs text-muted-foreground">Collaborators have suggested edits. Accept to apply or reject.</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingSuggestions.map((s) => {
+              const answerRow = answers.find((a) => a.id === s.answerId || a.questionId === s.answerId);
+              const questionLabel = answerRow?.question ?? questions.find((q) => q.id === s.answerId)?.question ?? `Answer #${s.answerId}`;
+              return (
+                <div key={s.id} className="p-3 rounded-lg border bg-muted/30 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">{questionLabel.slice(0, 80)}...</p>
+                  <p className="text-sm">{s.suggestedText.slice(0, 200)}{s.suggestedText.length > 200 ? "..." : ""}</p>
+                  {s.message && <p className="text-xs text-muted-foreground">Note: {s.message}</p>}
+                  <p className="text-xs text-muted-foreground">By {s.suggestedByName}</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="text-green-600 border-green-600" onClick={() => handleAcceptSuggestion(s.id)} disabled={updateSuggestionMutation.isPending}>
+                      Accept
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-600" onClick={() => handleRejectSuggestion(s.id)} disabled={updateSuggestionMutation.isPending}>
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -339,12 +473,12 @@ export default function RFPReview() {
                 </div>
               </div>
 
-              {/* Comments */}
+              {/* Comments (with reply threads) */}
               <div>
                 <Label className="text-xs sm:text-sm mb-2 block">Comments</Label>
                 <div className="space-y-2 mb-3">
                   {answer.comments.map((comment) => (
-                    <div key={comment.id} className="p-3 rounded-lg border bg-muted/30">
+                    <div key={comment.id} className={cn("p-3 rounded-lg border bg-muted/30", (apiCommentsByAnswerId[answer.id]?.some((c) => c.id === comment.id) || apiCommentsByAnswerId[answer.id]?.some((c) => (c.replies ?? []).some((r) => r.id === comment.id))) ? "" : "border-l-4 border-l-primary/50")}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-medium">{comment.author}</span>
                         <span className="text-xs text-muted-foreground">
@@ -352,9 +486,43 @@ export default function RFPReview() {
                         </span>
                       </div>
                       <p className="text-sm">{comment.text}</p>
+                      {canComment && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="mt-2 h-7 text-xs text-muted-foreground"
+                          onClick={() => setReplyTo({ answerId: answer.id, commentId: comment.id })}
+                        >
+                          <Reply className="w-3 h-3 mr-1" />
+                          Reply
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
+                {canComment && replyTo?.answerId === answer.id && (
+                  <div className="flex gap-2 mb-2">
+                    <Textarea
+                      placeholder="Write a reply..."
+                      value={replyText[answer.id] || ""}
+                      onChange={(e) => setReplyText({ ...replyText, [answer.id]: e.target.value })}
+                      className="flex-1 text-sm min-h-[60px]"
+                    />
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        size="sm"
+                        onClick={() => handleAddComment(answer.id, replyTo.commentId)}
+                        disabled={addCommentMutation.isPending || !(replyText[answer.id] ?? "").trim()}
+                        className="text-xs sm:text-sm"
+                      >
+                        Reply
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setReplyTo(null); setReplyText((prev) => ({ ...prev, [answer.id]: "" })); }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {canComment && (
                   <div className="flex gap-2">
                     <Input
@@ -372,6 +540,7 @@ export default function RFPReview() {
                     <Button
                       size="sm"
                       onClick={() => handleAddComment(answer.id)}
+                      disabled={addCommentMutation.isPending}
                       className="text-xs sm:text-sm"
                     >
                       <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />

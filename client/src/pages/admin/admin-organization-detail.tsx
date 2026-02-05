@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -36,8 +37,11 @@ import { Link } from "wouter";
 import {
   fetchAdminOrganization,
   updateAdminOrganization,
+  deleteAdminOrganization,
   type OrganizationItem,
 } from "@/api/admin-data";
+import { useConfirm } from "@/hooks/use-confirm";
+import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
 
 function useOrgId(): number | null {
   const [, params] = useRoute("/admin/organizations/:id");
@@ -50,7 +54,7 @@ export default function AdminOrganizationDetail() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: org, isLoading } = useQuery({
+  const { data: org, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin", "organization", orgId],
     queryFn: () => fetchAdminOrganization(orgId!),
     enabled: orgId != null,
@@ -66,6 +70,9 @@ export default function AdminOrganizationDetail() {
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsForm, setSettingsForm] = useState<{ timezone?: string; defaultRole?: string }>({});
+  const [archiving, setArchiving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const customers = useMemo(() => (org?.customerIds ?? []).slice(), [org?.customerIds]);
   const customerUsers = useMemo(() => {
@@ -151,8 +158,54 @@ export default function AdminOrganizationDetail() {
     }
   };
 
+  const handleArchiveToggle = async () => {
+    if (orgId == null || !org) return;
+    setArchiving(true);
+    const newArchived = !org.archived;
+    const updated = await updateAdminOrganization(orgId, { archived: newArchived });
+    setArchiving(false);
+    if (updated) {
+      qc.setQueryData(["admin", "organization", orgId], updated);
+      qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
+      toast({ title: newArchived ? "Organization archived" : "Organization unarchived" });
+    } else {
+      toast({ title: "Failed to update", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (orgId == null || !org) return;
+    const ok = await confirm({
+      title: "Delete organization?",
+      description: `This will permanently delete "${org.name}". This action cannot be undone.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      variant: "destructive",
+    });
+    if (!ok) return;
+    setDeleting(true);
+    const success = await deleteAdminOrganization(orgId);
+    setDeleting(false);
+    if (success) {
+      qc.removeQueries({ queryKey: ["admin", "organization", orgId] });
+      qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
+      toast({ title: "Organization deleted" });
+      window.location.href = "/admin/organizations";
+    } else {
+      toast({ title: "Failed to delete organization", variant: "destructive" });
+    }
+  };
+
   if (orgId == null) {
     return <Redirect to="/admin/organizations" />;
+  }
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
   }
 
   if (isLoading || (org === undefined && orgId != null)) {
@@ -182,6 +235,7 @@ export default function AdminOrganizationDetail() {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link href="/admin/organizations">
@@ -198,16 +252,27 @@ export default function AdminOrganizationDetail() {
               }}
               className="max-w-[240px] font-medium"
               placeholder="Organization name"
+              disabled={org.archived}
             />
-            {nameDirty && (
+            {nameDirty && !org.archived && (
               <Button size="sm" onClick={handleSaveName}>
                 <Save className="w-4 h-4 mr-1" />
                 Save name
               </Button>
             )}
           </div>
+          {org.archived && <Badge variant="secondary">Archived</Badge>}
         </div>
-        {org.archived && <Badge variant="secondary">Archived</Badge>}
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleArchiveToggle} disabled={archiving}>
+            {org.archived ? <ArchiveRestore className="w-4 h-4 mr-1" /> : <Archive className="w-4 h-4 mr-1" />}
+            {org.archived ? "Unarchive" : "Archive"}
+          </Button>
+          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={handleDelete} disabled={deleting}>
+            <Trash2 className="w-4 h-4 mr-1" />
+            Delete
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -352,7 +417,7 @@ export default function AdminOrganizationDetail() {
                   </SelectItem>
                 ))}
                 {availableToAdd.length === 0 && (
-                  <SelectItem value="" disabled>
+                  <SelectItem value="__no_users__" disabled>
                     No users available to add
                   </SelectItem>
                 )}

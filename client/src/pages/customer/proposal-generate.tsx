@@ -4,6 +4,7 @@ import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useProposal, useProposalQuestions, useGenerateProposalContent, useUpdateProposal, useMyCollaboration } from "@/hooks/use-proposals-api";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { ArrowLeft, FileText, Sparkles, CheckCircle, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ export default function ProposalGenerate() {
   const rfpBase = fromAdmin ? "/admin/proposals" : isCollaborator ? "/collaborator/rfp" : "/rfp";
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
 
-  const { data: proposal, isLoading: proposalLoading } = useProposal(id);
+  const { data: proposal, isLoading: proposalLoading, isError: proposalError, error: proposalErrorObj, refetch: refetchProposal } = useProposal(id);
   const { data: myCollaboration } = useMyCollaboration(isCollaborator ? id : null);
   const { data: questionsData = [] } = useProposalQuestions(id);
   const generateMutation = useGenerateProposalContent(id ?? 0);

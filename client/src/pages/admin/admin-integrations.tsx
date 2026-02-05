@@ -21,10 +21,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 
 export default function AdminIntegrations() {
   const [activeTab, setActiveTab] = useState("connected");
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin", "integrations"],
     queryFn: fetchAdminIntegrations,
   });
@@ -66,9 +67,17 @@ export default function AdminIntegrations() {
     return colors[logo] || "bg-primary";
   };
 
+  if (isError) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
-      <PromptDialog />
+      {PromptDialog}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-integrations-title">Integrations</h1>

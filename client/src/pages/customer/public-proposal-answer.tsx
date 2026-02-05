@@ -4,13 +4,14 @@ import { usePublicProposalByToken, useSubmitPublicAnswers } from "@/hooks/use-pr
 import { FileText, Send, CheckCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
 export default function PublicProposalAnswer() {
   const params = useParams();
   const token = params?.token ?? null;
-  const { data, isLoading, isError, error } = usePublicProposalByToken(token);
+  const { data, isLoading, isError, error, refetch } = usePublicProposalByToken(token);
   const submitMutation = useSubmitPublicAnswers();
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -67,9 +68,15 @@ export default function PublicProposalAnswer() {
       <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
         <Card className="max-w-md w-full">
           <CardContent className="pt-6">
-            <p className="text-muted-foreground text-center">
-              {isError && error instanceof Error ? error.message : "This share link is invalid or has expired."}
-            </p>
+            {isError ? (
+              <QueryErrorState
+                refetch={refetch}
+                error={error instanceof Error ? error : undefined}
+                message={error instanceof Error ? error.message : "Unable to load this proposal."}
+              />
+            ) : (
+              <p className="text-muted-foreground text-center">This share link is invalid or has expired.</p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -13,26 +13,15 @@ import {
   type OrganizationItem,
 } from "@/api/admin-data";
 import { useBranding, hexToHsl } from "@/contexts/BrandingContext";
-import { getApiUrl } from "@/lib/api";
-import { authStorage } from "@/lib/auth";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { 
-  Settings, 
   Building,
   Palette,
   Bell,
-  Globe,
-  Mail,
   Save,
   Upload,
   Image,
   Check,
-  Server,
-  HardDrive,
-  Key,
-  Archive,
-  Plus,
-  Trash2,
-  Copy,
   Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -47,7 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AdminSettings() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "settings"],
     queryFn: fetchAdminSettings,
   });
@@ -58,13 +47,8 @@ export default function AdminSettings() {
   const colorPresets = data?.colorPresets ?? [];
   const organization = data?.organization ?? { companyName: "", industry: "", description: "", website: "", supportEmail: "" };
   const billing = data?.billing ?? { planName: "", planPrice: "", billingInterval: "" };
-  const localization = data?.localization ?? { locale: "en", timezone: "UTC", dateFormat: "", currency: "USD" };
   const defaultTheme = (data as { defaultTheme?: string })?.defaultTheme ?? colorPresets[0]?.name ?? "";
   const settingsIndustries = optionsData?.settingsIndustries ?? [];
-  const locales = optionsData?.locales ?? [];
-  const timezones = optionsData?.timezones ?? [];
-  const dateFormats = optionsData?.dateFormats ?? [];
-  const currencies = optionsData?.currencies ?? [];
   const [selectedColor, setSelectedColor] = useState("");
   const effectiveColor = selectedColor || defaultTheme;
   const selectedPreset = colorPresets.find((p) => p.name === effectiveColor) ?? colorPresets[0];
@@ -77,8 +61,26 @@ export default function AdminSettings() {
     queryFn: fetchAdminOrganizations,
   });
   const organizations = (Array.isArray(orgsList) ? orgsList : []) as OrganizationItem[];
-  const [selectedOrgId, setSelectedOrgId] = useState<number | null>(null);
+  const [selectedOrgId, setSelectedOrgId] = useState<number | null>(() => {
+    try {
+      const s = localStorage.getItem("admin_selected_org_id");
+      return s ? parseInt(s, 10) : null;
+    } catch {
+      return null;
+    }
+  });
   const effectiveOrgId = selectedOrgId ?? organizations[0]?.id ?? null;
+
+  useEffect(() => {
+    if (effectiveOrgId != null) {
+      try {
+        localStorage.setItem("admin_selected_org_id", String(effectiveOrgId));
+        window.dispatchEvent(new CustomEvent("admin_selected_org_changed", { detail: { orgId: effectiveOrgId } }));
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [effectiveOrgId]);
   const { data: selectedOrg } = useQuery({
     queryKey: ["admin", "organization", effectiveOrgId],
     queryFn: () => fetchAdminOrganization(effectiveOrgId!),
@@ -88,6 +90,7 @@ export default function AdminSettings() {
   const orgPrimaryLogoUrl = orgSettings.primaryLogoUrl ?? "";
   const orgFaviconUrl = orgSettings.faviconUrl ?? "";
   const orgColorTheme = orgSettings.colorTheme ?? defaultTheme;
+  const selectedOrgName = selectedOrg?.name ?? organizations.find((o) => o.id === effectiveOrgId)?.name ?? "";
 
   useEffect(() => {
     if (orgColorTheme) setSelectedColor(orgColorTheme);
@@ -114,38 +117,6 @@ export default function AdminSettings() {
       void refetchBranding(effectiveOrgId ?? undefined);
     };
   }, [effectiveOrgId, refetchBranding]);
-
-  const [emailHost, setEmailHost] = useState(data?.emailServer?.host ?? "");
-  const [emailPort, setEmailPort] = useState(data?.emailServer?.port ?? 587);
-  const [emailUser, setEmailUser] = useState(data?.emailServer?.user ?? "");
-  const [emailFrom, setEmailFrom] = useState(data?.emailServer?.from ?? "");
-  const [emailSecure, setEmailSecure] = useState(data?.emailServer?.secure ?? true);
-  const [storageProvider, setStorageProvider] = useState(data?.storage?.provider ?? "local");
-  const [storageBucket, setStorageBucket] = useState(data?.storage?.bucket ?? "");
-  const [storageRegion, setStorageRegion] = useState(data?.storage?.region ?? "");
-  const [newApiKeyName, setNewApiKeyName] = useState("");
-  const [savingEmail, setSavingEmail] = useState(false);
-  const [savingStorage, setSavingStorage] = useState(false);
-  const [creatingKey, setCreatingKey] = useState(false);
-  const [backupRunning, setBackupRunning] = useState(false);
-
-  useEffect(() => {
-    if (data?.emailServer) {
-      setEmailHost(data.emailServer.host ?? "");
-      setEmailPort(data.emailServer.port ?? 587);
-      setEmailUser(data.emailServer.user ?? "");
-      setEmailFrom(data.emailServer.from ?? "");
-      setEmailSecure(data.emailServer.secure ?? true);
-    }
-    if (data?.storage) {
-      setStorageProvider(data.storage.provider ?? "local");
-      setStorageBucket(data.storage.bucket ?? "");
-      setStorageRegion(data.storage.region ?? "");
-    }
-  }, [data?.emailServer, data?.storage]);
-
-  const apiKeys = data?.apiKeys ?? [];
-  const backups = data?.backups ?? [];
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingFavicon, setUploadingFavicon] = useState(false);
@@ -270,78 +241,13 @@ export default function AdminSettings() {
     }
   };
 
-  const handleSaveEmail = async () => {
-    setSavingEmail(true);
-    const updated = await updateAdminSettings({ emailServer: { host: emailHost, port: emailPort, user: emailUser, from: emailFrom, secure: emailSecure } });
-    setSavingEmail(false);
-    if (updated) {
-      qc.setQueryData(["admin", "settings"], updated);
-      toast({ title: "Email server saved", description: "SMTP settings updated." });
-    } else {
-      toast({ title: "Failed to save email settings", variant: "destructive" });
-    }
-  };
-
-  const handleSaveStorage = async () => {
-    setSavingStorage(true);
-    const updated = await updateAdminSettings({ storage: { provider: storageProvider, bucket: storageBucket, region: storageRegion } });
-    setSavingStorage(false);
-    if (updated) {
-      qc.setQueryData(["admin", "settings"], updated);
-      toast({ title: "Storage settings saved", description: "Storage provider config updated." });
-    } else {
-      toast({ title: "Failed to save storage settings", variant: "destructive" });
-    }
-  };
-
-  const handleCreateApiKey = async () => {
-    const name = newApiKeyName.trim();
-    if (!name) {
-      toast({ title: "Enter a name for the key", variant: "destructive" });
-      return;
-    }
-    setCreatingKey(true);
-    const updated = await updateAdminSettings({}, { create: { name } });
-    setCreatingKey(false);
-    if (updated) {
-      qc.setQueryData(["admin", "settings"], updated);
-      setNewApiKeyName("");
-      toast({ title: "API key created", description: "Store the key securely; it won't be shown again." });
-    } else {
-      toast({ title: "Failed to create API key", variant: "destructive" });
-    }
-  };
-
-  const handleRevokeApiKey = async (id: string) => {
-    const updated = await updateAdminSettings({}, { revoke: [id] });
-    if (updated) {
-      qc.setQueryData(["admin", "settings"], updated);
-      toast({ title: "API key revoked", variant: "destructive" });
-    } else {
-      toast({ title: "Failed to revoke key", variant: "destructive" });
-    }
-  };
-
-  const handleTriggerBackup = async () => {
-    setBackupRunning(true);
-    try {
-      const token = authStorage.getAccessToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(getApiUrl("/api/v1/admin/settings/backup"), { method: "POST", headers, credentials: "include" });
-      if (res.ok) {
-        const backup = await res.json();
-        qc.setQueryData(["admin", "settings"], (prev: typeof data) => (prev ? { ...prev, backups: [backup, ...(prev.backups ?? [])] } : prev));
-        toast({ title: "Backup started", description: "Backup completed successfully." });
-      } else {
-        toast({ title: "Backup failed", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Backup failed", variant: "destructive" });
-    } finally {
-      setBackupRunning(false);
-    }
-  };
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -379,6 +285,37 @@ export default function AdminSettings() {
         </Button>
       </div>
 
+      {/* Organization selector: visible on all tabs so you can select an org and switch anytime */}
+      <Card className="border shadow-sm bg-muted/30">
+        <CardContent className="p-4 sm:p-4 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
+            <Building className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Working on organization</span>
+          </div>
+          <Select
+            value={effectiveOrgId != null ? String(effectiveOrgId) : ""}
+            onValueChange={(v) => setSelectedOrgId(v ? parseInt(v, 10) : null)}
+          >
+            <SelectTrigger className="w-full sm:max-w-xs bg-background">
+              <SelectValue placeholder="Select organization" />
+            </SelectTrigger>
+            <SelectContent>
+              {organizations.map((org) => (
+                <SelectItem key={org.id} value={String(org.id)}>
+                  {org.name}
+                </SelectItem>
+              ))}
+              {organizations.length === 0 && (
+                <SelectItem value="__no_orgs__" disabled>No organizations. Create one under Admin → Organizations.</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          {selectedOrgName && (
+            <span className="text-xs text-muted-foreground">All changes below apply to this organization where applicable.</span>
+          )}
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="organization" className="w-full">
         <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 flex justify-start">
           <TabsList className="bg-muted/50 overflow-y-hidden inline-flex w-max min-w-full sm:w-auto justify-start">
@@ -390,12 +327,6 @@ export default function AdminSettings() {
             </TabsTrigger>
             <TabsTrigger value="notifications" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap">
               <Bell className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 shrink-0" /> <span className="hidden sm:inline">Notifications</span><span className="sm:hidden">Alerts</span>
-            </TabsTrigger>
-            <TabsTrigger value="localization" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap">
-              <Globe className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 shrink-0" /> <span className="hidden sm:inline">Localization</span><span className="sm:hidden">Locale</span>
-            </TabsTrigger>
-              <TabsTrigger value="system" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap">
-              <Server className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 shrink-0" /> System
             </TabsTrigger>
           </TabsList>
         </div>
@@ -481,37 +412,7 @@ export default function AdminSettings() {
         </TabsContent>
 
         <TabsContent value="branding" className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base">Organization</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Select the organization whose branding you want to edit. Changes apply site-wide for that org.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="space-y-2">
-                <Label className="text-xs sm:text-sm">Organization</Label>
-                <Select
-                  value={effectiveOrgId != null ? String(effectiveOrgId) : ""}
-                  onValueChange={(v) => setSelectedOrgId(v ? parseInt(v, 10) : null)}
-                >
-                  <SelectTrigger className="w-full max-w-xs">
-                    <SelectValue placeholder="Select organization" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {organizations.map((org) => (
-                      <SelectItem key={org.id} value={String(org.id)}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
-                    {organizations.length === 0 && (
-                      <SelectItem value="" disabled>No organizations. Create one under Admin → Organizations.</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          {effectiveOrgId != null && (
+          {effectiveOrgId != null ? (
             <>
               <Card className="border shadow-sm">
                 <CardHeader className="p-4 sm:p-6">
@@ -521,7 +422,12 @@ export default function AdminSettings() {
                 <CardContent className="p-4 sm:p-6 pt-0">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     <div>
-                      <Label className="text-xs sm:text-sm mb-2 sm:mb-3 block">Primary Logo</Label>
+                      <div className="flex flex-wrap items-baseline gap-2 mb-2 sm:mb-3">
+                        <Label className="text-xs sm:text-sm block">Primary Logo</Label>
+                        {selectedOrgName && (
+                          <span className="text-xs text-muted-foreground font-normal">({selectedOrgName})</span>
+                        )}
+                      </div>
                       <div className="border-2 border-dashed border-border rounded-xl p-4 sm:p-8 text-center hover:border-primary/50 transition-colors">
                         {orgPrimaryLogoUrl ? (
                           <img src={orgPrimaryLogoUrl} alt="Logo" className="w-24 h-24 mx-auto rounded-xl object-contain bg-muted mb-3" />
@@ -649,6 +555,14 @@ export default function AdminSettings() {
                 </CardContent>
               </Card>
             </>
+          ) : (
+            <Card className="border shadow-sm">
+              <CardContent className="p-6 text-center text-muted-foreground">
+                <Building className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-medium">No organization selected</p>
+                <p className="text-xs mt-1">Use the &quot;Working on organization&quot; dropdown above to select an organization, then you can edit its logo, favicon, and color theme here.</p>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
@@ -705,218 +619,6 @@ export default function AdminSettings() {
                 {savingNotifications ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 Save notification preferences
               </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="system" className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <Mail className="w-4 h-4" />
-                Email server (SMTP)
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Configure SMTP for transactional and notification emails</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <Label className="text-xs sm:text-sm">Host</Label>
-                  <Input className="mt-1.5" value={emailHost} onChange={(e) => setEmailHost(e.target.value)} placeholder="smtp.example.com" />
-                </div>
-                <div>
-                  <Label className="text-xs sm:text-sm">Port</Label>
-                  <Input type="number" className="mt-1.5" value={emailPort} onChange={(e) => setEmailPort(Number(e.target.value) || 587)} placeholder="587" />
-                </div>
-                <div>
-                  <Label className="text-xs sm:text-sm">Username</Label>
-                  <Input className="mt-1.5" value={emailUser} onChange={(e) => setEmailUser(e.target.value)} placeholder="SMTP user" type="text" autoComplete="off" />
-                </div>
-                <div>
-                  <Label className="text-xs sm:text-sm">From address</Label>
-                  <Input className="mt-1.5" value={emailFrom} onChange={(e) => setEmailFrom(e.target.value)} placeholder="noreply@example.com" type="email" />
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="email-secure" checked={emailSecure} onChange={(e) => setEmailSecure(e.target.checked)} className="rounded" />
-                <Label htmlFor="email-secure" className="text-xs sm:text-sm">Use TLS/SSL</Label>
-              </div>
-              <Button size="sm" onClick={handleSaveEmail} disabled={savingEmail}>
-                {savingEmail ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                Save email settings
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <HardDrive className="w-4 h-4" />
-                Storage provider
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Where files and uploads are stored</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
-              <div className="space-y-2">
-                <Label className="text-xs sm:text-sm">Provider</Label>
-                <Select value={storageProvider} onValueChange={setStorageProvider}>
-                  <SelectTrigger className="max-w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="local">Local</SelectItem>
-                    <SelectItem value="s3">Amazon S3</SelectItem>
-                    <SelectItem value="gcs">Google Cloud Storage</SelectItem>
-                    <SelectItem value="azure">Azure Blob</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {(storageProvider === "s3" || storageProvider === "gcs" || storageProvider === "azure") && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <Label className="text-xs sm:text-sm">Bucket / container</Label>
-                    <Input className="mt-1.5" value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)} placeholder="bucket-name" />
-                  </div>
-                  <div>
-                    <Label className="text-xs sm:text-sm">Region</Label>
-                    <Input className="mt-1.5" value={storageRegion} onChange={(e) => setStorageRegion(e.target.value)} placeholder="us-east-1" />
-                  </div>
-                </div>
-              )}
-              <Button size="sm" onClick={handleSaveStorage} disabled={savingStorage}>
-                {savingStorage ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                Save storage settings
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <Key className="w-4 h-4" />
-                API keys
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Create and revoke API keys for programmatic access</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
-              <div className="flex gap-2 flex-wrap">
-                <Input className="max-w-[200px]" value={newApiKeyName} onChange={(e) => setNewApiKeyName(e.target.value)} placeholder="Key name" />
-                <Button size="sm" onClick={handleCreateApiKey} disabled={creatingKey || !newApiKeyName.trim()}>
-                  {creatingKey ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-                  Create key
-                </Button>
-              </div>
-              {apiKeys.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">No API keys yet. Create one to get started.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {apiKeys.map((k) => (
-                    <li key={k.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50 text-sm">
-                      <span className="font-medium">{k.name}</span>
-                      <span className="text-xs text-muted-foreground mr-2">{k.lastUsedAt ? `Used ${k.lastUsedAt}` : `Created ${k.createdAt}`}</span>
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleRevokeApiKey(k.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <Archive className="w-4 h-4" />
-                Backup
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Trigger a full backup and view recent backups</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
-              <Button size="sm" onClick={handleTriggerBackup} disabled={backupRunning}>
-                {backupRunning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Copy className="w-4 h-4 mr-2" />}
-                {backupRunning ? "Creating backup…" : "Create backup now"}
-              </Button>
-              {backups.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">No backups yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {backups.slice(0, 10).map((b) => (
-                    <li key={b.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50 text-sm">
-                      <span>{new Date(b.createdAt).toLocaleString()}</span>
-                      <span className="text-xs text-muted-foreground">{b.size ?? "—"} • {b.status}</span>
-                      <Button variant="outline" size="sm" onClick={() => toast({ title: "Download", description: "Backend would provide download URL." })}>
-                        Download
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="localization" className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base">Language & Region</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Configure language and regional preferences</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <Label className="text-xs sm:text-sm">Language</Label>
-                  <Select defaultValue={localization.locale ?? locales[0]?.value ?? ""}>
-                    <SelectTrigger className="mt-1.5 text-sm sm:text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locales.map((opt: { value: string; label: string }) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs sm:text-sm">Timezone</Label>
-                  <Select defaultValue={localization.timezone ?? timezones[0]?.value ?? ""}>
-                    <SelectTrigger className="mt-1.5 text-sm sm:text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {timezones.map((opt: { value: string; label: string }) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs sm:text-sm">Date Format</Label>
-                  <Select defaultValue={localization.dateFormat ?? dateFormats[0]?.value ?? ""}>
-                    <SelectTrigger className="mt-1.5 text-sm sm:text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {dateFormats.map((opt: { value: string; label: string }) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs sm:text-sm">Currency</Label>
-                  <Select defaultValue={localization.currency ?? currencies[0]?.value ?? ""}>
-                    <SelectTrigger className="mt-1.5 text-sm sm:text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {currencies.map((opt: { value: string; label: string }) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>

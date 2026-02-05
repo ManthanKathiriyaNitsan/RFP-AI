@@ -10,14 +10,19 @@ export interface MeResponse {
   organizationId?: number | null;
 }
 
-/** Fetch the current user's organization id (for branding). Returns null if not available or API not implemented. */
+/** Fetch the current user's organization id (for branding). Returns null if not available, API not implemented, or network error. */
 export async function fetchMyOrganizationId(): Promise<number | null> {
-  const token = authStorage.getAccessToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(getApiUrl("/api/v1/me"), { credentials: "include", headers });
-  if (!res.ok) return null;
-  const data = (await res.json()) as MeResponse;
-  const id = data?.organizationId;
-  return typeof id === "number" && !Number.isNaN(id) ? id : null;
+  try {
+    const token = authStorage.getAccessToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(getApiUrl("/api/v1/me"), { credentials: "include", headers });
+    if (!res.ok) return null;
+    const data = (await res.json()) as MeResponse;
+    const id = data?.organizationId;
+    return typeof id === "number" && !Number.isNaN(id) ? id : null;
+  } catch {
+    // Network error or backend unreachable: return null so app continues with default branding.
+    return null;
+  }
 }

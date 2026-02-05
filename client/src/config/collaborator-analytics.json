@@ -1,0 +1,26 @@
+{
+  "pageTitle": "My Analytics",
+  "pageDescription": "Your contribution and activity on assigned proposals.",
+  "dateRanges": [
+    { "value": "7days", "label": "Last 7 days" },
+    { "value": "30days", "label": "Last 30 days" },
+    { "value": "90days", "label": "Last 90 days" }
+  ],
+  "kpiMetrics": [
+    { "label": "Proposals assigned", "value": 12, "change": "+2", "icon": "FileText" },
+    { "label": "Comments added", "value": 48, "change": "+12", "icon": "MessageSquare" },
+    { "label": "Content edits", "value": 24, "change": "+5", "icon": "Edit" },
+    { "label": "Reviews completed", "value": 8, "change": "+1", "icon": "CheckCircle" }
+  ],
+  "activityByWeek": [
+    { "week": "Week 1", "comments": 8, "edits": 4, "reviews": 2 },
+    { "week": "Week 2", "comments": 12, "edits": 6, "reviews": 1 },
+    { "week": "Week 3", "comments": 10, "edits": 5, "reviews": 2 },
+    { "week": "Week 4", "comments": 18, "edits": 9, "reviews": 3 }
+  ],
+  "proposalsByStatus": [
+    { "status": "In progress", "count": 5 },
+    { "status": "Draft", "count": 3 },
+    { "status": "Completed", "count": 4 }
+  ]
+}

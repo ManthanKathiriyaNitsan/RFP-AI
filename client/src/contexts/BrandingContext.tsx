@@ -79,6 +79,15 @@ export function BrandingProvider({
       const orgId = overrideOrgId ?? effectiveOrgId;
       const next = await fetchBranding(orgId);
       setData(next);
+    } catch {
+      // Keep default branding when API is unreachable (e.g. backend not running, offline).
+      // Global API status banner can still show connection issues; avoid crashing the app.
+      setData({
+        primaryLogoUrl: null,
+        faviconUrl: null,
+        colorTheme: "Default",
+        colorPresets: [],
+      });
     } finally {
       setIsLoading(false);
     }

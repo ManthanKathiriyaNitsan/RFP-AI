@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -37,7 +38,7 @@ export default function AdminKnowledgeBase() {
   const [rebuilding, setRebuilding] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin", "knowledge-base"],
     queryFn: fetchAdminKnowledgeBase,
   });
@@ -86,6 +87,14 @@ export default function AdminKnowledgeBase() {
       toast({ title: "Restore failed", variant: "destructive" });
     }
   };
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

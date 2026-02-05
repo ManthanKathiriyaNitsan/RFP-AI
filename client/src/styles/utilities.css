@@ -16,40 +16,40 @@
     transform: rotate(0deg) scale(1);
   }
 
-  /* Status badge utilities */
+  /* Status badge utilities - white text in both modes */
   .badge-status-success {
-    background: hsl(152, 76%, 92%);
-    color: hsl(152, 76%, 30%);
-    border-color: hsl(152, 76%, 80%);
+    background: hsl(152, 76%, 38%);
+    color: #ffffff;
+    border-color: hsl(152, 76%, 30%);
   }
 
   .dark .badge-status-success {
     background: hsl(152, 76%, 20%);
-    color: hsl(152, 76%, 70%);
+    color: #ffffff;
     border-color: hsl(152, 76%, 30%);
   }
 
   .badge-status-warning {
-    background: hsl(38, 92%, 92%);
-    color: hsl(38, 92%, 35%);
-    border-color: hsl(38, 92%, 80%);
+    background: hsl(38, 92%, 42%);
+    color: #ffffff;
+    border-color: hsl(38, 92%, 35%);
   }
 
   .dark .badge-status-warning {
     background: hsl(38, 92%, 20%);
-    color: hsl(38, 92%, 70%);
+    color: #ffffff;
     border-color: hsl(38, 92%, 30%);
   }
 
   .badge-status-error {
-    background: hsl(0, 100%, 92%);
-    color: hsl(0, 100%, 45%);
-    border-color: hsl(0, 100%, 80%);
+    background: hsl(0, 100%, 42%);
+    color: #ffffff;
+    border-color: hsl(0, 100%, 35%);
   }
 
   .dark .badge-status-error {
     background: hsl(0, 100%, 20%);
-    color: hsl(0, 100%, 70%);
+    color: #ffffff;
     border-color: hsl(0, 100%, 35%);
   }
 }

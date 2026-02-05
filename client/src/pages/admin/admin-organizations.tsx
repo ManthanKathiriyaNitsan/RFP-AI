@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
 import { fetchAdminOrganizations } from "@/api/admin-data";
@@ -36,7 +37,7 @@ export default function AdminOrganizations() {
   const [localOrgs, setLocalOrgs] = useState<Organization[]>([]);
   const [nextId, setNextId] = useState(100);
 
-  const { data: apiOrgs = [] } = useQuery({
+  const { data: apiOrgs = [], isError, error, refetch } = useQuery({
     queryKey: ["admin", "organizations"],
     queryFn: fetchAdminOrganizations,
   });
@@ -105,6 +106,14 @@ export default function AdminOrganizations() {
       toast({ title: "Delete", description: "Connect backend to persist delete." });
     }
   };
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">

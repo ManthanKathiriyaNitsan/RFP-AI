@@ -13,6 +13,7 @@ import {
 import { FileText, Plus, Pencil, Trash2, Lock, Unlock, Save, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +32,7 @@ export default function AdminRfpTemplates() {
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin", "rfp-templates"],
     queryFn: fetchAdminRfpTemplates,
   });
@@ -164,6 +165,14 @@ export default function AdminRfpTemplates() {
       toast({ title: "Failed to delete template", variant: "destructive" });
     }
   };
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

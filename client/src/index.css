@@ -473,135 +473,135 @@ body {
   }
 
   .badge-status-success {
-    background: hsl(152, 76%, 92%);
-    color: hsl(152, 76%, 30%);
-    border-color: hsl(152, 76%, 80%);
+    background: hsl(152, 76%, 38%);
+    color: #ffffff;
+    border-color: hsl(152, 76%, 30%);
   }
 
   .dark .badge-status-success {
     background: hsl(152, 76%, 20%);
-    color: hsl(152, 76%, 70%);
+    color: #ffffff;
     border-color: hsl(152, 76%, 30%);
   }
 
   .badge-status-warning {
-    background: hsl(38, 92%, 92%);
-    color: hsl(38, 92%, 35%);
-    border-color: hsl(38, 92%, 80%);
+    background: hsl(38, 92%, 42%);
+    color: #ffffff;
+    border-color: hsl(38, 92%, 35%);
   }
 
   .dark .badge-status-warning {
     background: hsl(38, 92%, 20%);
-    color: hsl(38, 92%, 70%);
+    color: #ffffff;
     border-color: hsl(38, 92%, 30%);
   }
 
   .badge-status-error {
-    background: hsl(0, 100%, 92%);
-    color: hsl(0, 100%, 45%);
-    border-color: hsl(0, 100%, 80%);
+    background: hsl(0, 100%, 42%);
+    color: #ffffff;
+    border-color: hsl(0, 100%, 35%);
   }
 
   .dark .badge-status-error {
     background: hsl(0, 100%, 20%);
-    color: hsl(0, 100%, 70%);
+    color: #ffffff;
     border-color: hsl(0, 100%, 35%);
   }
 
   .badge-status-info {
-    background: hsl(210, 92%, 92%);
-    color: hsl(210, 92%, 35%);
-    border-color: hsl(210, 92%, 80%);
+    background: hsl(210, 92%, 42%);
+    color: #ffffff;
+    border-color: hsl(210, 92%, 35%);
   }
 
   .dark .badge-status-info {
     background: hsl(210, 92%, 20%);
-    color: hsl(210, 92%, 70%);
+    color: #ffffff;
     border-color: hsl(210, 92%, 30%);
   }
 
   .badge-status-neutral {
-    background: hsl(220, 14%, 96%);
-    color: hsl(220, 9%, 46%);
-    border-color: hsl(220, 13%, 90%);
+    background: hsl(220, 14%, 94%);
+    color: hsl(220, 14%, 32%);
+    border-color: hsl(220, 13%, 85%);
   }
 
   .dark .badge-status-neutral {
     background: hsl(215, 28%, 17%);
-    color: hsl(218, 11%, 65%);
+    color: #ffffff;
     border-color: hsl(215, 28%, 25%);
   }
 
   /* Status Badge with Opacity (for proposals, etc.) */
   .badge-emerald {
-    background: hsl(152, 76%, 92%);
-    color: hsl(152, 76%, 30%);
-    border-color: hsl(152, 76%, 80%);
+    background: hsl(152, 76%, 38%);
+    color: #ffffff;
+    border-color: hsl(152, 76%, 30%);
   }
 
   .dark .badge-emerald {
     background: hsl(152, 76%, 20%);
-    color: hsl(152, 76%, 70%);
+    color: #ffffff;
     border-color: hsl(152, 76%, 30%);
   }
 
   .badge-red {
-    background: hsl(0, 100%, 92%);
-    color: hsl(0, 100%, 45%);
-    border-color: hsl(0, 100%, 80%);
+    background: hsl(0, 100%, 42%);
+    color: #ffffff;
+    border-color: hsl(0, 100%, 35%);
   }
 
   .dark .badge-red {
     background: hsl(0, 100%, 20%);
-    color: hsl(0, 100%, 70%);
+    color: #ffffff;
     border-color: hsl(0, 100%, 35%);
   }
 
   .badge-blue {
-    background: hsl(210, 92%, 92%);
-    color: hsl(210, 92%, 35%);
-    border-color: hsl(210, 92%, 80%);
+    background: hsl(210, 92%, 42%);
+    color: #ffffff;
+    border-color: hsl(210, 92%, 35%);
   }
 
   .dark .badge-blue {
     background: hsl(210, 92%, 20%);
-    color: hsl(210, 92%, 70%);
+    color: #ffffff;
     border-color: hsl(210, 92%, 30%);
   }
 
   .badge-amber {
-    background: hsl(38, 92%, 92%);
-    color: hsl(38, 92%, 35%);
-    border-color: hsl(38, 92%, 80%);
+    background: hsl(38, 92%, 42%);
+    color: #ffffff;
+    border-color: hsl(38, 92%, 35%);
   }
 
   .dark .badge-amber {
     background: hsl(38, 92%, 20%);
-    color: hsl(38, 92%, 70%);
+    color: #ffffff;
     border-color: hsl(38, 92%, 30%);
   }
 
   .badge-purple {
-    background: color-mix(in srgb, var(--primary) 12%, white);
-    color: var(--primary);
-    border-color: color-mix(in srgb, var(--primary) 25%, transparent);
+    background: color-mix(in srgb, var(--primary) 85%, black);
+    color: #ffffff;
+    border-color: color-mix(in srgb, var(--primary) 60%, transparent);
   }
 
   .dark .badge-purple {
-    background: color-mix(in srgb, var(--primary) 22%, transparent);
-    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 50%, transparent);
+    color: #ffffff;
     border-color: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   .badge-gray {
-    background: hsl(220, 14%, 96%);
-    color: hsl(220, 9%, 46%);
-    border-color: hsl(220, 13%, 90%);
+    background: hsl(220, 14%, 42%);
+    color: #ffffff;
+    border-color: hsl(220, 13%, 35%);
   }
 
   .dark .badge-gray {
     background: hsl(215, 28%, 17%);
-    color: hsl(218, 11%, 65%);
+    color: #ffffff;
     border-color: hsl(215, 28%, 25%);
   }
 
@@ -915,142 +915,142 @@ body {
 
   /* AI Score Badge Classes */
   .ai-score-high {
-    background: hsl(152, 76%, 92%);
-    color: hsl(152, 76%, 30%);
+    background: hsl(152, 76%, 38%);
+    color: #ffffff;
   }
 
   .dark .ai-score-high {
     background: hsl(152, 76%, 20%);
-    color: hsl(152, 76%, 70%);
+    color: #ffffff;
   }
 
   .ai-score-medium {
-    background: hsl(38, 92%, 92%);
-    color: hsl(38, 92%, 35%);
+    background: hsl(38, 92%, 42%);
+    color: #ffffff;
   }
 
   .dark .ai-score-medium {
     background: hsl(38, 92%, 20%);
-    color: hsl(38, 92%, 70%);
+    color: #ffffff;
   }
 
   .ai-score-low {
-    background: hsl(0, 100%, 92%);
-    color: hsl(0, 100%, 45%);
+    background: hsl(0, 100%, 42%);
+    color: #ffffff;
   }
 
   .dark .ai-score-low {
     background: hsl(0, 100%, 20%);
-    color: hsl(0, 100%, 70%);
+    color: #ffffff;
   }
 
   /* Status Badge with Opacity Variants (for proposals) */
   .badge-status-won {
-    background: hsl(152, 76%, 92%);
-    color: hsl(152, 76%, 30%);
-    border-color: hsl(152, 76%, 80%);
+    background: hsl(152, 76%, 38%);
+    color: #ffffff;
+    border-color: hsl(152, 76%, 30%);
   }
 
   .dark .badge-status-won {
     background: hsl(152, 76%, 20%);
-    color: hsl(152, 76%, 70%);
+    color: #ffffff;
     border-color: hsl(152, 76%, 30%);
   }
 
   .badge-status-lost {
-    background: hsl(0, 100%, 92%);
-    color: hsl(0, 100%, 45%);
-    border-color: hsl(0, 100%, 80%);
+    background: hsl(0, 100%, 42%);
+    color: #ffffff;
+    border-color: hsl(0, 100%, 35%);
   }
 
   .dark .badge-status-lost {
     background: hsl(0, 100%, 20%);
-    color: hsl(0, 100%, 70%);
+    color: #ffffff;
     border-color: hsl(0, 100%, 35%);
   }
 
   .badge-status-in-progress {
-    background: hsl(210, 92%, 92%);
-    color: hsl(210, 92%, 35%);
-    border-color: hsl(210, 92%, 80%);
+    background: hsl(210, 92%, 42%);
+    color: #ffffff;
+    border-color: hsl(210, 92%, 35%);
   }
 
   .dark .badge-status-in-progress {
     background: hsl(210, 92%, 20%);
-    color: hsl(210, 92%, 70%);
+    color: #ffffff;
     border-color: hsl(210, 92%, 30%);
   }
 
   .badge-status-review {
-    background: hsl(38, 92%, 92%);
-    color: hsl(38, 92%, 35%);
-    border-color: hsl(38, 92%, 80%);
+    background: hsl(38, 92%, 42%);
+    color: #ffffff;
+    border-color: hsl(38, 92%, 35%);
   }
 
   .dark .badge-status-review {
     background: hsl(38, 92%, 20%);
-    color: hsl(38, 92%, 70%);
+    color: #ffffff;
     border-color: hsl(38, 92%, 30%);
   }
 
   .badge-status-draft {
-    background: hsl(220, 14%, 96%);
-    color: hsl(220, 9%, 46%);
-    border-color: hsl(220, 13%, 90%);
+    background: hsl(220, 14%, 94%);
+    color: hsl(220, 14%, 32%);
+    border-color: hsl(220, 13%, 85%);
   }
 
   .dark .badge-status-draft {
     background: hsl(215, 28%, 17%);
-    color: hsl(218, 11%, 65%);
+    color: #ffffff;
     border-color: hsl(215, 28%, 25%);
   }
 
-  /* Role Badge Classes (light mode: tinted bg + dark text; dark mode: dark bg + light text) */
+  /* Role Badge Classes - white text in both modes */
   .badge-role-super-admin {
-    background: hsl(262, 83%, 92%);
-    color: hsl(262, 83%, 35%) !important;
-    border-color: hsl(262, 83%, 80%);
+    background: hsl(262, 83%, 42%);
+    color: #ffffff !important;
+    border-color: hsl(262, 83%, 35%);
   }
 
   .dark .badge-role-super-admin {
     background: hsl(262, 83%, 20%);
-    color: hsl(262, 83%, 75%) !important;
+    color: #ffffff !important;
     border-color: hsl(262, 83%, 30%);
   }
 
   .badge-role-admin {
-    background: hsl(38, 92%, 92%);
-    color: hsl(38, 92%, 35%) !important;
-    border-color: hsl(38, 92%, 80%);
+    background: hsl(38, 92%, 42%);
+    color: #ffffff !important;
+    border-color: hsl(38, 92%, 35%);
   }
 
   .dark .badge-role-admin {
     background: hsl(38, 92%, 20%);
-    color: hsl(38, 92%, 70%) !important;
+    color: #ffffff !important;
     border-color: hsl(38, 92%, 30%);
   }
 
   .badge-role-user {
-    background: hsl(210, 92%, 92%);
-    color: hsl(210, 92%, 35%) !important;
-    border-color: hsl(210, 92%, 80%);
+    background: hsl(210, 92%, 42%);
+    color: #ffffff !important;
+    border-color: hsl(210, 92%, 35%);
   }
 
   .dark .badge-role-user {
     background: hsl(210, 92%, 20%);
-    color: hsl(210, 92%, 70%) !important;
+    color: #ffffff !important;
     border-color: hsl(210, 92%, 30%);
   }
 
   .badge-role-collaborator {
-    background: color-mix(in srgb, var(--primary) 12%, white);
-    color: var(--primary) !important;
-    border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+    background: color-mix(in srgb, var(--primary) 85%, black);
+    color: #ffffff !important;
+    border-color: color-mix(in srgb, var(--primary) 60%, transparent);
   }
 
   .dark .badge-role-collaborator {
-    background: color-mix(in srgb, var(--primary) 22%, transparent);
-    color: color-mix(in srgb, var(--primary) 85%, white) !important;
+    background: color-mix(in srgb, var(--primary) 50%, transparent);
+    color: #ffffff !important;
     border-color: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 

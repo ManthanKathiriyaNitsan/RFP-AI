@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -46,7 +47,7 @@ function isValidIpOrCidr(s: string): boolean {
 
 export default function AdminSecurity() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "security"],
     queryFn: fetchAdminSecurity,
   });
@@ -80,6 +81,44 @@ export default function AdminSecurity() {
   const [newDenyIp, setNewDenyIp] = useState("");
   const [savingSession, setSavingSession] = useState(false);
   const [savingIp, setSavingIp] = useState(false);
+  const [requireTwoFactor, setRequireTwoFactor] = useState(data?.requireTwoFactorForAllUsers ?? false);
+  const [saving2FA, setSaving2FA] = useState(false);
+  const [savingSettingId, setSavingSettingId] = useState<number | null>(null);
+
+  const settingEnabled = (id: number) => {
+    const s = securitySettings.find((x) => x.id === id);
+    return s?.enabled ?? false;
+  };
+  const setSettingEnabled = (id: number, enabled: boolean) => {
+    qc.setQueryData(["admin", "security"], (prev: typeof data) => {
+      if (!prev?.securitySettings) return prev;
+      return {
+        ...prev,
+        securitySettings: prev.securitySettings.map((s) =>
+          s.id === id ? { ...s, enabled } : s
+        ),
+      };
+    });
+  };
+  const handleToggleSetting = async (id: number, enabled: boolean) => {
+    setSettingEnabled(id, enabled);
+    setSavingSettingId(id);
+    const updated = await updateAdminSecurityConfig({
+      securitySettings: [{ id, enabled }],
+    });
+    setSavingSettingId(null);
+    if (updated) {
+      qc.setQueryData(["admin", "security"], (prev: typeof data) => (prev ? { ...prev, securitySettings: updated.securitySettings ?? prev.securitySettings } : updated));
+      toast({ title: "Setting updated", description: "Security setting saved." });
+    } else {
+      setSettingEnabled(id, !enabled);
+      toast({ title: "Failed to save setting", variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    if (data?.requireTwoFactorForAllUsers != null) setRequireTwoFactor(data.requireTwoFactorForAllUsers);
+  }, [data?.requireTwoFactorForAllUsers]);
 
   useEffect(() => {
     if (data?.sessionIdleMinutes != null) setSessionIdleMinutes(data.sessionIdleMinutes);
@@ -122,6 +161,18 @@ export default function AdminSecurity() {
     }
   };
 
+  const handleSave2FA = async () => {
+    setSaving2FA(true);
+    const updated = await updateAdminSecurityConfig({ requireTwoFactorForAllUsers: requireTwoFactor });
+    setSaving2FA(false);
+    if (updated) {
+      qc.setQueryData(["admin", "security"], (prev: typeof data) => (prev ? { ...prev, requireTwoFactorForAllUsers: requireTwoFactor } : { ...updated }));
+      toast({ title: "2FA policy saved", description: requireTwoFactor ? "All users will be required to enable 2FA." : "2FA is now optional." });
+    } else {
+      toast({ title: "Failed to save 2FA setting", variant: "destructive" });
+    }
+  };
+
   const addAllowIp = () => {
     if (!isValidIpOrCidr(newAllowIp)) {
       toast({ title: "Invalid IP or CIDR", description: "Use IPv4 (e.g. 192.168.1.1) or CIDR (e.g. 10.0.0.0/24).", variant: "destructive" });
@@ -149,6 +200,14 @@ export default function AdminSecurity() {
     setIpDenylist((prev) => [...prev, v]);
     setNewDenyIp("");
   };
+
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -181,7 +240,7 @@ export default function AdminSecurity() {
                 <Shield className="w-5 h-5 icon-emerald" />
               </div>
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold text-emerald">A+</p>
+                <p className="text-base sm:text-lg font-bold text-emerald">{data?.securityScore ?? "A+"}</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">Security Score</p>
               </div>
             </div>
@@ -194,7 +253,7 @@ export default function AdminSecurity() {
                 <Users className="w-5 h-5 icon-blue" />
               </div>
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold">83%</p>
+                <p className="text-base sm:text-lg font-bold">{typeof data?.twoFaAdoption === "number" ? `${data.twoFaAdoption}%` : "—"}</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">2FA Adoption</p>
               </div>
             </div>
@@ -207,7 +266,7 @@ export default function AdminSecurity() {
                 <AlertTriangle className="w-5 h-5 icon-amber" />
               </div>
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold">1</p>
+                <p className="text-base sm:text-lg font-bold">{data?.securityAlertsCount ?? securityAlerts.length ?? 0}</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">Security Alerts</p>
               </div>
             </div>
@@ -220,7 +279,7 @@ export default function AdminSecurity() {
                 <Lock className="w-5 h-5 text-primary" />
               </div>
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold">SOC 2</p>
+                <p className="text-base sm:text-lg font-bold">{data?.soc2Status ?? "SOC 2"}</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">Compliant</p>
               </div>
             </div>
@@ -235,7 +294,9 @@ export default function AdminSecurity() {
               <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-amber dark:text-amber shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs sm:text-sm font-medium text-amber dark:text-amber">Security Alert</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">3 users haven't enabled two-factor authentication</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  {securityAlerts.find(a => a.type === "warning")?.message ?? "Security attention required."}
+                </p>
               </div>
             </div>
             <Button 
@@ -282,9 +343,35 @@ export default function AdminSecurity() {
                       <p className="text-xs sm:text-sm font-medium">{setting.name}</p>
                       <p className="text-[10px] sm:text-xs text-muted-foreground">{setting.description}</p>
                     </div>
-                    <Switch defaultChecked={setting.enabled} className="shrink-0" />
+                    <Switch
+                      checked={settingEnabled(setting.id)}
+                      disabled={savingSettingId === setting.id}
+                      onCheckedChange={(checked) => handleToggleSetting(setting.id, checked)}
+                      className="shrink-0"
+                    />
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border shadow-sm">
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-sm sm:text-base">Two-factor authentication</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Require 2FA for all users. When enabled, users must set up 2FA to access the platform.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium">Require 2FA for all users</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">When on, every user must enable two-factor authentication.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={requireTwoFactor} onCheckedChange={setRequireTwoFactor} className="shrink-0" />
+                  <Button size="sm" onClick={handleSave2FA} disabled={saving2FA}>
+                    {saving2FA ? "Saving…" : "Save"}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

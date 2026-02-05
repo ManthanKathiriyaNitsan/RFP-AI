@@ -93,6 +93,8 @@ export interface BillingPlanConfig {
   statusBadge: string;
   creditsLabel: string;
   nextBillingLabel: string;
+  /** From backend when subscription/billing data exists; otherwise "—" shown */
+  nextBillingDate?: string | null;
 }
 
 export interface PaymentMethodConfig {

@@ -1,0 +1,92 @@
+{
+  "version": "1.0",
+  "description": "Request/response shapes for backend implementation. Frontend uses these structures.",
+  "customer": {
+    "generateAnswers": {
+      "method": "POST",
+      "path": "/api/v1/proposals/:proposalId/answers/generate",
+      "request": {
+        "questionIds": "number[]",
+        "options": {
+          "tone": "string (e.g. professional, concise)",
+          "detailLevel": "string (e.g. brief, detailed)"
+        }
+      },
+      "response": {
+        "answers": [
+          { "questionId": "number", "answer": "string", "generatedAt": "string ISO date" }
+        ]
+      }
+    },
+    "notifications": {
+      "method": "GET",
+      "path": "/api/v1/customer/notifications",
+      "response": {
+        "notifications": [
+          {
+            "id": "string",
+            "type": "mention | deadline_reminder | status_change | success | warning | error",
+            "title": "string",
+            "body": "string",
+            "read": "boolean",
+            "createdAt": "string ISO",
+            "meta": { "proposalId": "number?", "answerId": "number?", "authorId": "number?", "dueDate": "string?" }
+          }
+        ]
+      }
+    }
+  },
+  "collaborator": {
+    "comments": {
+      "create": {
+        "method": "POST",
+        "path": "/api/v1/proposals/:proposalId/answers/:answerId/comments",
+        "request": { "text": "string", "mentions": "number[]", "parentId": "number | null" },
+        "response": { "id": "number", "answerId": "number", "authorId": "number", "authorName": "string", "text": "string", "mentions": "number[]", "parentId": "number | null", "createdAt": "string" }
+      },
+      "list": {
+        "method": "GET",
+        "path": "/api/v1/proposals/:proposalId/answers/:answerId/comments",
+        "response": {
+          "comments": [
+            { "id": "number", "answerId": "number", "authorId": "number", "authorName": "string", "text": "string", "mentions": "number[]", "parentId": "number | null", "createdAt": "string", "replies": "Comment[]" }
+          ]
+        }
+      }
+    },
+    "suggestions": {
+      "create": {
+        "method": "POST",
+        "path": "/api/v1/proposals/:proposalId/answers/:answerId/suggestions",
+        "request": { "suggestedText": "string", "message": "string?" },
+        "response": { "id": "number", "answerId": "number", "suggestedBy": "number", "suggestedByName": "string", "suggestedText": "string", "message": "string", "status": "pending", "createdAt": "string" }
+      },
+      "list": {
+        "method": "GET",
+        "path": "/api/v1/proposals/:proposalId/suggestions",
+        "response": {
+          "suggestions": [
+            { "id": "number", "answerId": "number", "suggestedBy": "number", "suggestedByName": "string", "suggestedText": "string", "message": "string", "status": "pending | accepted | rejected", "createdAt": "string" }
+          ]
+        }
+      },
+      "updateStatus": {
+        "method": "PATCH",
+        "path": "/api/v1/proposals/:proposalId/suggestions/:suggestionId",
+        "request": { "status": "accepted | rejected" }
+      }
+    }
+  },
+  "admin": {
+    "organizationArchiveDelete": {
+      "patch": { "method": "PATCH", "path": "/api/admin/organizations/:id", "request": { "status": "active | archived" } },
+      "delete": { "method": "DELETE", "path": "/api/admin/organizations/:id" }
+    },
+    "security": {
+      "patch": { "requestAdd": { "requireTwoFactorForAllUsers": "boolean" } }
+    },
+    "aiConfig": {
+      "patch": { "requestAdd": { "features": { "autoSuggest": "boolean", "contentFiltering": "boolean", "allowBulkGenerate": "boolean", "allowToneSelection": "boolean" } } }
+    }
+  }
+}

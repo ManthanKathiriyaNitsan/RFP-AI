@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";
 import { fetchAdminContent } from "@/api/admin-data";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import { 
   Search, 
   Plus, 
@@ -54,7 +55,7 @@ export default function AdminContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [activeTab, setActiveTab] = useState("all");
-  const { data } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "content"],
     queryFn: fetchAdminContent,
   });
@@ -131,10 +132,18 @@ export default function AdminContent() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetch} error={error} />
+      </div>
+    );
+  }
+
   return (
     <>
       <ConfirmDialog />
-      <PromptDialog />
+      {PromptDialog}
       <div className="space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="min-w-0 flex-1">

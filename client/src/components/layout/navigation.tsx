@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { Brain, User, LogOut, Bell, Settings, Menu } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Brain, User, LogOut, Bell, Settings, Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -12,10 +13,15 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/contexts/BrandingContext";
 import { getAvatarUrl } from "@/lib/api";
+import { fetchAdminOrganizations } from "@/api/admin-data";
 import { ThemeToggle } from "../shared/theme-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { NotificationSidebar } from "./notification-sidebar";
-import { useState } from "react";
+import { GlobalSearch } from "./global-search";
+import { useState, useMemo, useEffect } from "react";
+
+const ADMIN_SELECTED_ORG_ID_KEY = "admin_selected_org_id";
+const ADMIN_ORG_CHANGED_EVENT = "admin_selected_org_changed";
 
 interface NavigationProps {
   sidebarOpen?: boolean;
@@ -31,6 +37,22 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
   const isCustomerRoute = !isAdminRoute && location !== "/auth" && location !== "/account-settings" && location !== "/ai-chat";
   const isAccountSettingsRoute = location === "/account-settings";
   const [notificationSidebarOpen, setNotificationSidebarOpen] = useState(false);
+  const [adminSelectedOrgId, setAdminSelectedOrgId] = useState<number | null>(() => {
+    try {
+      const s = localStorage.getItem(ADMIN_SELECTED_ORG_ID_KEY);
+      return s ? parseInt(s, 10) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ orgId: number }>) => {
+      setAdminSelectedOrgId(e.detail?.orgId ?? null);
+    };
+    window.addEventListener(ADMIN_ORG_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(ADMIN_ORG_CHANGED_EVENT, handler as EventListener);
+  }, []);
 
   if (!user) return null;
 
@@ -49,6 +71,20 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
   const handleNotifications = () => {
     setNotificationSidebarOpen(!notificationSidebarOpen);
   };
+
+  const { data: orgsList = [] } = useQuery({
+    queryKey: ["admin", "organizations"],
+    queryFn: fetchAdminOrganizations,
+    enabled: isAdminRoute,
+  });
+  const organizations = Array.isArray(orgsList) ? orgsList : [];
+  const adminOrgDisplayName = useMemo(() => {
+    if (!isAdminRoute || organizations.length === 0) return null;
+    const id = adminSelectedOrgId;
+    const org = id ? organizations.find((o: { id: number }) => o.id === id) : null;
+    const current = org ?? organizations[0];
+    return current?.name ?? null;
+  }, [isAdminRoute, organizations, adminSelectedOrgId]);
 
   return (
     <nav className="glass-card border-b border-border px-3 sm:px-6 py-3 fixed top-0 left-0 right-0 z-50 backdrop-blur-md w-full max-w-full overflow-x-hidden">
@@ -77,7 +113,9 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
                 </div>
               )}
               <div className="flex flex-col">
-                <span className="text-lg font-bold theme-gradient-text">RFP AI</span>
+                <span className="text-lg font-bold theme-gradient-text">
+                  {currentRole === "admin" && adminOrgDisplayName ? adminOrgDisplayName : "RFP AI"}
+                </span>
                 <span className="text-[10px] text-muted-foreground font-medium -mt-1">
                   {currentRole === 'admin' ? 'Admin Console' : currentRole === 'collaborator' ? 'Collaborator Portal' : 'Customer Portal'}
                 </span>
@@ -87,6 +125,17 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden sm:flex items-center gap-2 text-muted-foreground border-border h-9"
+            onClick={() => window.dispatchEvent(new CustomEvent("open-global-search"))}
+          >
+            <Search className="w-4 h-4" />
+            <span className="text-xs">Search</span>
+            <kbd className="pointer-events-none hidden md:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">⌘K</kbd>
+          </Button>
+          <GlobalSearch />
           <Button 
             variant="ghost" 
             size="icon" 

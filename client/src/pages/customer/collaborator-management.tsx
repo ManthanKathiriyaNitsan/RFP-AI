@@ -31,6 +31,7 @@ import {
   fetchCollaborations,
 } from "@/api/proposals";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { QueryErrorState } from "@/components/shared/query-error-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +56,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import type { Collaboration as ApiCollaboration, CollaboratorUserInfo } from "@/api/proposals";
-import { COLLABORATOR_ROLE_OPTIONS, getPermissionsForRole, DEFAULT_COLLABORATOR_PERMISSIONS } from "@/lib/collaborator-roles";
+import { useCollaboratorRoleOptions } from "@/hooks/use-collaborator-role-options";
 
 type CollaboratorAggregate = {
   user: CollaboratorUserInfo;
@@ -81,9 +82,10 @@ export default function CollaboratorManagement() {
   const [isTasksDialogOpen, setIsTasksDialogOpen] = useState(false);
   const [tasksCollaborator, setTasksCollaborator] = useState<CollaboratorAggregate | null>(null);
   const [activeTab, setActiveTab] = useState("collaborators");
+  const { roleOptions, getPermissionsForRole, defaultPermissions } = useCollaboratorRoleOptions();
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
-  const [invitePermissions, setInvitePermissions] = useState(DEFAULT_COLLABORATOR_PERMISSIONS);
+  const [invitePermissions, setInvitePermissions] = useState(defaultPermissions);
   const [inviteProjects, setInviteProjects] = useState<number[]>([]);
   const [selectedSearchUser, setSelectedSearchUser] = useState<{ id: number; email: string; firstName: string; lastName: string } | null>(null);
   const [pendingRemoveFromProposal, setPendingRemoveFromProposal] = useState<{
@@ -94,7 +96,7 @@ export default function CollaboratorManagement() {
   } | null>(null);
   const [removeFromProposalDialogAgg, setRemoveFromProposalDialogAgg] = useState<CollaboratorAggregate | null>(null);
 
-  const { data: proposalsData } = useProposalsList();
+  const { data: proposalsData, isError: proposalsError, error: proposalsErrorObj, refetch: refetchProposals } = useProposalsList();
   const myProposals = proposalsData ?? [];
   const myProposalIds = myProposals.map((p) => p.id);
 
@@ -144,7 +146,7 @@ export default function CollaboratorManagement() {
     role: "collaborator",
   });
 
-  const getRoleConfig = (role: string) => COLLABORATOR_ROLE_OPTIONS.find((r) => r.value === role) || COLLABORATOR_ROLE_OPTIONS[0];
+  const getRoleConfig = (role: string) => roleOptions.find((r) => r.value === role) ?? roleOptions[0] ?? { value: role, label: role, icon: Eye };
 
   const handleInvite = async () => {
     if (!selectedSearchUser) {
@@ -186,7 +188,7 @@ export default function CollaboratorManagement() {
       setSelectedSearchUser(null);
       setInviteProjects([]);
       setInviteRole("viewer");
-      setInvitePermissions(DEFAULT_COLLABORATOR_PERMISSIONS);
+      setInvitePermissions(defaultPermissions);
     } catch (e) {
       toast({ title: "Error", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
     }
@@ -361,6 +363,14 @@ export default function CollaboratorManagement() {
     ]);
   };
 
+  if (proposalsError) {
+    return (
+      <div className="p-4">
+        <QueryErrorState refetch={refetchProposals} error={proposalsErrorObj} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -494,7 +504,7 @@ export default function CollaboratorManagement() {
                                   Change role
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
-                                  {COLLABORATOR_ROLE_OPTIONS.map((r) => (
+                                  {roleOptions.map((r) => (
                                     <DropdownMenuItem key={r.value} onClick={() => handleChangeRole(agg, r.value)}>
                                       <r.icon className="w-4 h-4 mr-2" />
                                       {r.label}
@@ -534,7 +544,7 @@ export default function CollaboratorManagement() {
 
         <TabsContent value="roles" className="space-y-4 sm:space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-            {COLLABORATOR_ROLE_OPTIONS.map((role) => {
+            {roleOptions.map((role) => {
               const RoleIcon = role.icon;
               return (
                 <Card key={role.value}>
@@ -617,7 +627,7 @@ export default function CollaboratorManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {COLLABORATOR_ROLE_OPTIONS.map((r) => (
+                  {roleOptions.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
                       <div className="flex items-center gap-2">
                         <r.icon className="w-4 h-4" />
@@ -743,7 +753,7 @@ export default function CollaboratorManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {COLLABORATOR_ROLE_OPTIONS.map((r) => (
+                  {roleOptions.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
                       <div className="flex items-center gap-2">
                         <r.icon className="w-4 h-4" />
