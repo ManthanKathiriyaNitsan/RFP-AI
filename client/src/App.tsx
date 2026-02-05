@@ -19,6 +19,8 @@ import { CollaboratorSidebar } from "@/components/collaborator/collaborator-side
 
 // Pages
 import Auth from "@/pages/auth";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import AccountSettings from "@/pages/account-settings";
 import AIChat from "@/pages/ai-chat";
 import NotFound from "@/pages/not-found";
@@ -191,7 +193,9 @@ function Router() {
     <Switch>
       {/* Public routes */}
       <Route path="/auth" component={() => <PublicRoute component={Auth} />} />
-      
+      <Route path="/forgot-password" component={() => <PublicRoute component={ForgotPassword} />} />
+      <Route path="/reset-password" component={() => <PublicRoute component={ResetPassword} />} />
+
       {/* Admin routes */}
       <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
       <Route path="/admin/analytics" component={() => <AdminRoute component={AdminAnalytics} />} />

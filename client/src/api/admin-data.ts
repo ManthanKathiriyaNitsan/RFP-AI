@@ -867,7 +867,7 @@ export async function updateAdminOrganization(
   }
 }
 
-export async function deleteAdminOrganization(id: number): Promise<void> {
+export async function deleteAdminOrganization(id: number): Promise<boolean> {
   const token = authStorage.getAccessToken();
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -877,6 +877,7 @@ export async function deleteAdminOrganization(id: number): Promise<void> {
     credentials: "include",
   });
   if (!res.ok) throw new Error(`deleteAdminOrganization: ${res.status}`);
+  return true;
 }
 
 export type AuditLogType = AuditLogEntry["type"];

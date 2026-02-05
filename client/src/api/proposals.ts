@@ -83,10 +83,13 @@ export interface QuestionCreateInput {
   order?: number;
 }
 
+export type AnswerStatus = "draft" | "submitted" | "approved" | "rejected" | "locked";
+
 export interface Answer {
   id: number;
   questionId: number;
   answer: string;
+  status?: AnswerStatus;
   respondentToken?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -264,6 +267,18 @@ export async function setAnswer(proposalId: number, questionId: number, answer: 
   const res = await apiRequest("POST", `${PROPOSALS}/${proposalId}/answers`, {
     questionId,
     answer,
+  });
+  return res.json();
+}
+
+/** Set answer status: draft | submitted | approved | rejected | locked. Owner or collaborator with review permission. */
+export async function patchAnswerStatus(
+  proposalId: number,
+  answerId: number,
+  status: AnswerStatus
+): Promise<Answer> {
+  const res = await apiRequest("PATCH", `${PROPOSALS}/${proposalId}/answers/${answerId}/status`, {
+    status,
   });
   return res.json();
 }
@@ -576,9 +591,13 @@ export async function updateSuggestionStatus(
   return res.json();
 }
 
-/** Chat messages for a proposal (enforces canView on server when caller params sent). */
+/** Chat messages for a proposal (GET /api/v1/chat?proposalId=...). */
 export async function fetchChatMessages(proposalId: number): Promise<unknown[]> {
-  const res = await apiRequest("GET", `/api/chat/${proposalId}${callerQuery()}`);
+  const q = new URLSearchParams({ proposalId: String(proposalId) });
+  const auth = authStorage.getAuth();
+  if (auth.user?.id != null) q.set("userId", String(auth.user.id));
+  if (auth.currentRole) q.set("userRole", auth.currentRole);
+  const res = await apiRequest("GET", `/api/chat?${q.toString()}`);
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }

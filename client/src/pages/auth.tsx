@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Brain, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,6 +152,11 @@ export default function Auth() {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </Button>
                 </div>
+                <Link href="/forgot-password" className="inline-block">
+                  <Button type="button" variant="link" className="h-auto p-0 text-sm text-primary hover:underline">
+                    Forgot password?
+                  </Button>
+                </Link>
               </div>
 
               <Button type="submit" className="w-full" disabled={loading}>

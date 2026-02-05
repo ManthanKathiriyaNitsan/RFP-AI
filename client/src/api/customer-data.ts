@@ -109,3 +109,32 @@ export async function fetchCollaboratorRoleOptions(): Promise<CollaboratorRoleOp
   if (!res.ok) throw new Error(`Collaborator role options: ${res.status}`);
   return res.json() as Promise<CollaboratorRoleOptionsData>;
 }
+
+// --- Credit purchase (plans from backend, purchase via customer API) ---
+export interface CreditPlanItem {
+  id: string;
+  name: string;
+  price: number;
+  credits: number;
+  popular?: boolean;
+  features?: string[];
+}
+
+export async function fetchCreditPlans(): Promise<CreditPlanItem[]> {
+  const url = getApiUrl("/api/v1/customer/credits/plans");
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Credit plans: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function purchaseCredits(body: { plan: string; amount: number; couponCode?: string | null }): Promise<{ credits: number }> {
+  const url = getApiUrl("/api/v1/customer/credits/purchase");
+  const res = await fetchWithAuth(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Credit purchase: ${res.status}`);
+  return res.json() as Promise<{ credits: number }>;
+}

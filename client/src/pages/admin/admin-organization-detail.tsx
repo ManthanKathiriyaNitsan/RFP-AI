@@ -184,15 +184,16 @@ export default function AdminOrganizationDetail() {
     });
     if (!ok) return;
     setDeleting(true);
-    const success = await deleteAdminOrganization(orgId);
-    setDeleting(false);
-    if (success) {
+    try {
+      await deleteAdminOrganization(orgId);
       qc.removeQueries({ queryKey: ["admin", "organization", orgId] });
       qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
       toast({ title: "Organization deleted" });
       window.location.href = "/admin/organizations";
-    } else {
+    } catch {
       toast({ title: "Failed to delete organization", variant: "destructive" });
+    } finally {
+      setDeleting(false);
     }
   };
 

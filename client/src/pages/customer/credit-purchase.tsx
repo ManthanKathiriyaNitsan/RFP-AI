@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Coins, Check, CreditCard, ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,48 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { fetchCreditPlans, purchaseCredits, type CreditPlanItem } from "@/api/customer-data";
 
-const pricingPlans = [
-  {
-    id: "starter",
-    name: "Starter",
-    price: 29,
-    credits: 100,
-    features: [
-      "100 AI Processing Credits",
-      "Basic Templates",
-      "Email Support",
-    ],
-  },
-  {
-    id: "professional",
-    name: "Professional",
-    price: 79,
-    credits: 300,
-    popular: true,
-    features: [
-      "300 AI Processing Credits",
-      "Premium Templates",
-      "Priority Support",
-      "Advanced Analytics",
-    ],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: 199,
-    credits: 1000,
-    features: [
-      "1000 AI Processing Credits",
-      "All Templates",
-      "24/7 Support",
-      "Custom Branding",
-      "API Access",
-    ],
-  },
+const DEFAULT_PLANS: CreditPlanItem[] = [
+  { id: "starter", name: "Starter", price: 29, credits: 100, features: ["100 AI Processing Credits", "Basic Templates", "Email Support"] },
+  { id: "professional", name: "Professional", price: 79, credits: 300, popular: true, features: ["300 AI Processing Credits", "Premium Templates", "Priority Support", "Advanced Analytics"] },
+  { id: "enterprise", name: "Enterprise", price: 199, credits: 1000, features: ["1000 AI Processing Credits", "All Templates", "24/7 Support", "Custom Branding", "API Access"] },
 ];
 
 export default function CreditPurchase() {
@@ -61,6 +27,13 @@ export default function CreditPurchase() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
 
+  const { data: plansData = [] } = useQuery({
+    queryKey: ["customer", "credits", "plans"],
+    queryFn: fetchCreditPlans,
+    staleTime: 5 * 60 * 1000,
+  });
+  const pricingPlans = useMemo(() => (Array.isArray(plansData) && plansData.length > 0 ? plansData : DEFAULT_PLANS), [plansData]);
+
   const [paymentData, setPaymentData] = useState({
     cardNumber: "",
     expiryDate: "",
@@ -69,13 +42,8 @@ export default function CreditPurchase() {
   });
 
   const purchaseMutation = useMutation({
-    mutationFn: async ({ plan, credits, amount }: { plan: string; credits: number; amount: number }) => {
-      const response = await apiRequest("POST", "/api/credits/purchase", {
-        userId: user?.id,
-        plan,
-        amount: credits,
-      });
-      return response.json();
+    mutationFn: async ({ plan, amount }: { plan: string; amount: number }) => {
+      return purchaseCredits({ plan, amount });
     },
     onSuccess: (data) => {
       updateUser({ credits: data.credits });
@@ -111,11 +79,7 @@ export default function CreditPurchase() {
     const plan = pricingPlans.find(p => p.id === selectedPlan);
     if (!plan) return;
 
-    purchaseMutation.mutate({
-      plan: plan.name,
-      credits: plan.credits,
-      amount: plan.price,
-    });
+    purchaseMutation.mutate({ plan: plan.name, amount: plan.credits });
   };
 
   const updatePaymentData = (field: string, value: string) => {

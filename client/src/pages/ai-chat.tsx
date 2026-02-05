@@ -124,25 +124,40 @@ export default function AIChat() {
       });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: { id?: number; message?: string; aiMessage?: { id: number; isAi: boolean; message: string; createdAt?: string } }) => {
       const newMessage = {
-        id: data.id || messages.length + 1,
+        id: data.id ?? messages.length + 1,
         isAi: false,
-        message: data.message || inputMessage,
+        message: data.message ?? inputMessage,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, newMessage]);
       setInputMessage("");
-      setTimeout(() => {
-        setIsAiThinking(false);
-        const aiResponse = {
-          id: messages.length + 2,
-          isAi: true,
-          message: "That's a great question! Based on your project requirements, I'd recommend focusing on scalability and security. Would you like me to elaborate on specific technical requirements?",
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, aiResponse]);
-      }, 1500);
+      setIsAiThinking(false);
+      const aiMessage = data.aiMessage;
+      if (aiMessage) {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: aiMessage.id,
+            isAi: true,
+            message: aiMessage.message,
+            timestamp: aiMessage.createdAt ? new Date(aiMessage.createdAt) : new Date(),
+          },
+        ]);
+      } else {
+        setTimeout(() => {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: messages.length + 2,
+              isAi: true,
+              message: "That's a great question! Based on your project requirements, I'd recommend focusing on scalability and security. Would you like me to elaborate on specific technical requirements?",
+              timestamp: new Date(),
+            },
+          ]);
+        }, 1500);
+      }
     },
     onError: () => {
       setIsAiThinking(false);

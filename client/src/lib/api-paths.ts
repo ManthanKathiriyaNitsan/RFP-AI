@@ -10,6 +10,7 @@ export const API_PATHS = {
     refresh: `${V1}/auth/refresh`,
     logout: `${V1}/auth/logout`,
     forgotPassword: `${V1}/auth/forgot-password`,
+    resetPassword: `${V1}/auth/reset-password`,
   },
   me: `${V1}/me`,
   users: {

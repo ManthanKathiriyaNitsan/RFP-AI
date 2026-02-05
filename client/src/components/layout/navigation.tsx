@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/contexts/BrandingContext";
 import { getAvatarUrl } from "@/lib/api";
 import { fetchAdminOrganizations } from "@/api/admin-data";
+import { fetchCustomerNotifications } from "@/api/customer-data";
 import { ThemeToggle } from "../shared/theme-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { NotificationSidebar } from "./notification-sidebar";
@@ -71,6 +72,17 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
   const handleNotifications = () => {
     setNotificationSidebarOpen(!notificationSidebarOpen);
   };
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ["customer", "notifications"],
+    queryFn: fetchCustomerNotifications,
+    retry: false,
+    staleTime: 60 * 1000,
+  });
+  const notificationUnreadCount = useMemo(
+    () => (Array.isArray(notifications) ? notifications.filter((n: { read?: boolean }) => !n.read).length : 0),
+    [notifications]
+  );
 
   const { data: orgsList = [] } = useQuery({
     queryKey: ["admin", "organizations"],
@@ -144,7 +156,11 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
             onClick={handleNotifications}
           >
             <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="absolute top-0 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-red-500 rounded-full text-[8px] sm:text-[10px] text-white flex items-center justify-center font-bold">3</span>
+            {notificationUnreadCount > 0 && (
+              <span className="absolute top-0 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-red-500 rounded-full text-[8px] sm:text-[10px] text-white flex items-center justify-center font-bold min-w-[10px]">
+                {notificationUnreadCount > 99 ? "99+" : notificationUnreadCount}
+              </span>
+            )}
           </Button>
           
           <ThemeToggle />

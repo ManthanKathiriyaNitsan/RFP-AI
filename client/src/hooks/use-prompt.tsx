@@ -78,9 +78,7 @@ export function usePrompt() {
     }
   }, [handleConfirm, handleCancel]);
 
-  // Return a stable element (not a new component each render) so typing in the input
-  // doesn't remount the dialog and cause flicker.
-  const PromptDialog = (
+  const PromptDialog = () => (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent>
         <DialogHeader>

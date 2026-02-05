@@ -7,9 +7,10 @@ import {
 } from "lucide-react";
 import { useProposal, useMyCollaboration, useProposalQuestions, useProposalAnswers, useAddAnswerComment, useProposalSuggestions, useUpdateSuggestionStatus, proposalKeys } from "@/hooks/use-proposals-api";
 import { QueryErrorState } from "@/components/shared/query-error-state";
-import { fetchAnswerComments } from "@/api/proposals";
+import { fetchAnswerComments, patchAnswerStatus, type AnswerStatus } from "@/api/proposals";
 import type { AnswerComment } from "@/api/proposals";
 import type { AnswerSuggestion } from "@/api/proposals";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,11 @@ import { Label } from "@/components/ui/label";
 
 type ReviewAnswerItem = {
   id: number;
+  answerId: number | null; // API answer id (null when no answer saved yet)
   questionId: number;
   question: string;
   answer: string;
-  status: "approved" | "pending" | "draft" | "rejected";
+  status: "approved" | "pending" | "draft" | "rejected" | "locked";
   submittedAt: Date | null;
   locked: boolean;
   comments: { id: number; author: string; text: string; createdAt: Date }[];
@@ -50,13 +52,21 @@ export default function RFPReview() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [localOverrides, setLocalOverrides] = useState<{
-    status: Record<number, "approved" | "rejected">;
-    locked: Set<number>;
     comments: Record<number, { id: number; author: string; text: string; createdAt: Date }[]>;
-  }>({ status: {}, locked: new Set(), comments: {} });
+  }>({ comments: {} });
   const [newComment, setNewComment] = useState<{ [key: number]: string }>({});
   const [replyTo, setReplyTo] = useState<{ answerId: number; commentId: number } | null>(null);
   const [replyText, setReplyText] = useState<{ [key: number]: string }>({});
+  const queryClient = useQueryClient();
+  const statusMutation = useMutation({
+    mutationFn: ({ answerId, status }: { answerId: number; status: AnswerStatus }) =>
+      patchAnswerStatus(proposalId!, answerId, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.answers(proposalId!) });
+      toast({ title: "Status updated" });
+    },
+    onError: () => toast({ title: "Failed to update status", variant: "destructive" }),
+  });
 
   const answerIds = useMemo(() => questions.map((q) => {
     const ans = answersFromApi.find((a) => a.questionId === q.id);
@@ -90,16 +100,22 @@ export default function RFPReview() {
     return questions.map((q) => {
       const ans = answersFromApi.find((a) => a.questionId === q.id);
       const key = ans?.id ?? q.id;
-      const localStatus = localOverrides.status[key];
-      const status = localStatus ?? (ans ? "pending" : "draft");
+      const apiStatus = (ans?.status ?? "draft") as AnswerStatus;
+      const displayStatus =
+        apiStatus === "locked"
+          ? "locked"
+          : apiStatus === "submitted"
+            ? "pending"
+            : (apiStatus as "approved" | "draft" | "rejected");
       return {
         id: key,
+        answerId: ans?.id ?? null,
         questionId: q.id,
         question: q.question,
         answer: ans?.answer ?? "",
-        status: status as "approved" | "pending" | "draft" | "rejected",
+        status: displayStatus,
         submittedAt: ans?.updatedAt ? new Date(ans.updatedAt) : null,
-        locked: localOverrides.locked.has(key),
+        locked: apiStatus === "locked",
         comments: (apiCommentsByAnswerId[key] ?? []).map((c) => ({
           id: c.id,
           author: c.authorName,
@@ -108,7 +124,7 @@ export default function RFPReview() {
         })).concat(localOverrides.comments[key] ?? []),
       };
     });
-  }, [questions, answersFromApi, localOverrides, apiCommentsByAnswerId]);
+  }, [questions, answersFromApi, localOverrides.comments, apiCommentsByAnswerId]);
 
   const filteredAnswers = answers.filter((answer) => {
     const matchesSearch = !searchTerm || 
@@ -128,6 +144,8 @@ export default function RFPReview() {
         return "badge-status-info";
       case "rejected":
         return "badge-status-error";
+      case "locked":
+        return "badge-status-neutral";
       default:
         return "badge-status-neutral";
     }
@@ -143,6 +161,8 @@ export default function RFPReview() {
         return "Draft";
       case "rejected":
         return "Rejected";
+      case "locked":
+        return "Locked";
       default:
         return status;
     }
@@ -158,27 +178,21 @@ export default function RFPReview() {
     return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
   };
 
-  const handleApprove = (answerId: number) => {
-    setLocalOverrides((prev) => ({ ...prev, status: { ...prev.status, [answerId]: "approved" } }));
-    toast({ title: "Answer approved", description: "The answer has been approved." });
+  const handleApprove = (answer: ReviewAnswerItem) => {
+    if (answer.answerId == null || proposalId == null) return;
+    statusMutation.mutate({ answerId: answer.answerId, status: "approved" });
   };
 
-  const handleReject = (answerId: number) => {
-    setLocalOverrides((prev) => ({ ...prev, status: { ...prev.status, [answerId]: "rejected" } }));
-    toast({ title: "Answer rejected", description: "The answer has been rejected.", variant: "destructive" });
+  const handleReject = (answer: ReviewAnswerItem) => {
+    if (answer.answerId == null || proposalId == null) return;
+    statusMutation.mutate({ answerId: answer.answerId, status: "rejected" });
   };
 
-  const handleLock = (answerId: number) => {
-    setLocalOverrides((prev) => {
-      const next = new Set(prev.locked);
-      if (next.has(answerId)) next.delete(answerId);
-      else next.add(answerId);
-      return { ...prev, locked: next };
-    });
-    const item = answers.find((a) => a.id === answerId);
-    toast({
-      title: item?.locked ? "Unlocked" : "Locked",
-      description: `Answer has been ${item?.locked ? "unlocked" : "locked"}.`,
+  const handleLock = (answer: ReviewAnswerItem) => {
+    if (answer.answerId == null || proposalId == null) return;
+    statusMutation.mutate({
+      answerId: answer.answerId,
+      status: answer.locked ? "submitted" : "locked",
     });
   };
 
@@ -398,6 +412,7 @@ export default function RFPReview() {
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="locked">Locked</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -453,7 +468,9 @@ export default function RFPReview() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={() => handleLock(answer.id)}
+                      onClick={() => handleLock(answer)}
+                      disabled={answer.answerId == null || statusMutation.isPending}
+                      title={answer.answerId == null ? "Save answer first to lock" : answer.locked ? "Unlock" : "Lock"}
                     >
                       {answer.locked ? (
                         <Unlock className="w-4 h-4" />
@@ -550,14 +567,16 @@ export default function RFPReview() {
                 )}
               </div>
 
-              {/* Actions: Approve / Reject — only when canReview */}
+              {/* Actions: Approve / Reject — only when canReview and answer is saved */}
               {canReview && answer.status !== "approved" && !answer.locked && (
                 <div className="flex flex-wrap gap-2 pt-2 border-t">
                   <Button
                     variant="outline"
                     size="sm"
                     className="text-xs sm:text-sm text-green-600 border-green-600"
-                    onClick={() => handleApprove(answer.id)}
+                    onClick={() => handleApprove(answer)}
+                    disabled={answer.answerId == null || statusMutation.isPending}
+                    title={answer.answerId == null ? "Save answer first to approve" : "Approve"}
                   >
                     <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
                     Approve
@@ -566,7 +585,9 @@ export default function RFPReview() {
                     variant="outline"
                     size="sm"
                     className="text-xs sm:text-sm text-red-600 border-red-600"
-                    onClick={() => handleReject(answer.id)}
+                    onClick={() => handleReject(answer)}
+                    disabled={answer.answerId == null || statusMutation.isPending}
+                    title={answer.answerId == null ? "Save answer first to reject" : "Reject"}
                   >
                     <X className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
                     Reject

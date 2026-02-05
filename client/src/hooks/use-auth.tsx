@@ -1,7 +1,40 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { authStorage, type AuthState } from "@/lib/auth";
 import { apiRequest, queryClient, tryRefreshToken } from "@/lib/queryClient";
+import { fetchMyOrganizationId } from "@/api/me";
+import { fetchCustomerSidebar } from "@/api/customer-data";
+import { fetchCollaboratorSidebar } from "@/api/collaborator-data";
+import { fetchBranding } from "@/api/admin-data";
 import type { User } from "@shared/schema";
+
+/** Wait for session API (full response). */
+async function waitForSessionApi(): Promise<void> {
+  const hasRefresh = !!authStorage.getRefreshToken();
+  if (hasRefresh) {
+    await tryRefreshToken();
+    return;
+  }
+  const hasAccess = !!authStorage.getAccessToken();
+  if (hasAccess) {
+    await fetchMyOrganizationId();
+  }
+}
+
+/** Wait for the main layout API for the user's role so first paint has data. */
+async function waitForLayoutApi(role: string): Promise<void> {
+  const r = (role || "customer").toLowerCase();
+  try {
+    if (r === "customer") {
+      await fetchCustomerSidebar();
+    } else if (r === "collaborator") {
+      await fetchCollaboratorSidebar();
+    } else if (r === "admin") {
+      await fetchBranding();
+    }
+  } catch {
+    // Still hide loader when API errors (e.g. 403, network) so user can see the app.
+  }
+}
 
 /** Refresh access token this many ms before it expires. */
 const REFRESH_BEFORE_EXPIRY_MS = 2 * 60 * 1000;
@@ -51,6 +84,8 @@ function apiUserToUser(u: TokenResponse["user"]): User {
 }
 
 interface AuthContextType extends AuthState {
+  /** True while app is validating session (API not yet responded). Show global loader when true. */
+  isInitializing: boolean;
   login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   switchRole: (role: string) => void;
@@ -60,7 +95,10 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>(() => authStorage.getAuth());
+  const initialAuth = authStorage.getAuth();
+  const [auth, setAuth] = useState<AuthState>(() => initialAuth);
+  const [isInitializing, setIsInitializing] = useState<boolean>(() => !!initialAuth.access_token);
+  const initRan = useRef(false);
 
   useEffect(() => {
     authStorage.setAuth(auth);
@@ -71,6 +109,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener("auth-refreshed", onRefreshed);
     return () => window.removeEventListener("auth-refreshed", onRefreshed);
   }, []);
+
+  // Keep full-page loader until session API and role layout API have completed (full response), then show app.
+  useEffect(() => {
+    if (!isInitializing || initRan.current) return;
+    initRan.current = true;
+    (async () => {
+      await waitForSessionApi();
+      const authAfterSession = authStorage.getAuth();
+      setAuth(authAfterSession);
+      const role = (authAfterSession.user?.role ?? authAfterSession.currentRole ?? "customer").toLowerCase();
+      await waitForLayoutApi(role);
+      setAuth(authStorage.getAuth());
+      setIsInitializing(false);
+    })();
+  }, [isInitializing]);
 
   // Proactive refresh: refresh access token shortly before it expires (e.g. 15 min TTL).
   useEffect(() => {
@@ -144,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       ...auth,
+      isInitializing,
       login,
       logout,
       switchRole,
