@@ -867,6 +867,18 @@ export async function updateAdminOrganization(
   }
 }
 
+export async function deleteAdminOrganization(id: number): Promise<void> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${id}`), {
+    method: "DELETE",
+    headers,
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`deleteAdminOrganization: ${res.status}`);
+}
+
 export type AuditLogType = AuditLogEntry["type"];
 
 export async function fetchAdminAuditLogs(params?: {

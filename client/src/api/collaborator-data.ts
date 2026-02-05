@@ -61,3 +61,23 @@ export function fetchCollaboratorSidebar(): Promise<CollaboratorSidebarData> {
     .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Not ok"))))
     .catch(() => collaboratorSidebarFallback);
 }
+
+export interface CollaboratorAnalyticsResponse {
+  pageTitle?: string;
+  pageDescription?: string;
+  dateRanges?: { value: string; label: string }[];
+  kpiMetrics?: { label: string; value: number; change: string; icon: string }[];
+  activityByWeek?: { week: string; comments: number; edits: number; reviews: number }[];
+  proposalsByStatus?: { status: string; count: number }[];
+}
+
+export async function fetchCollaboratorAnalytics(
+  dateRange: string
+): Promise<CollaboratorAnalyticsResponse> {
+  const url = getApiUrl(
+    `/api/v1/collaborator/analytics?dateRange=${encodeURIComponent(dateRange)}`
+  );
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Collaborator analytics: ${res.status}`);
+  return res.json();
+}

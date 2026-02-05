@@ -109,6 +109,12 @@ export interface AnswerSet {
   answer: string;
 }
 
+export interface GenerateAnswersRequest {
+  questionIds: number[];
+  tone?: string;
+  length?: string;
+}
+
 export interface PublicAnswerSubmitInput {
   token: string;
   answers: AnswerSet[];
@@ -313,6 +319,14 @@ export async function generateProposalQuestions(proposalId: number): Promise<Que
   return res.json();
 }
 
+export async function generateAnswers(
+  proposalId: number,
+  body: GenerateAnswersRequest
+): Promise<{ answers: Answer[] }> {
+  const res = await apiRequest("POST", `/api/v1/proposals/${proposalId}/answers/generate`, body);
+  return res.json();
+}
+
 // --- Collaborations (camelCase from backend) ---
 
 export interface CollaboratorUserInfo {
@@ -445,6 +459,121 @@ export async function deleteCollaboration(
   collaborationId: number
 ): Promise<void> {
   await apiRequest("DELETE", `${PROPOSALS}/${proposalId}/collaborations/${collaborationId}${callerQuery()}`);
+}
+
+// --- Answer comments ---
+export interface AnswerComment {
+  id: number;
+  answerId: number;
+  authorId: number;
+  message: string;
+  mentions?: number[];
+  createdAt?: string;
+}
+
+export interface AddCommentRequest {
+  message: string;
+  mentions?: number[];
+}
+
+export async function fetchAnswerComments(
+  proposalId: number,
+  answerId: number
+): Promise<{ comments: AnswerComment[] }> {
+  const res = await apiRequest(
+    "GET",
+    `${PROPOSALS}/${proposalId}/answers/${answerId}/comments${callerQuery()}`
+  );
+  return res.json();
+}
+
+export async function addAnswerComment(
+  proposalId: number,
+  answerId: number,
+  body: AddCommentRequest
+): Promise<AnswerComment> {
+  const res = await apiRequest(
+    "POST",
+    `${PROPOSALS}/${proposalId}/answers/${answerId}/comments${callerQuery()}`,
+    body
+  );
+  return res.json();
+}
+
+// --- Proposal comments (grouped by answer) ---
+export interface ProposalCommentsGroup {
+  answerId: number;
+  comments: AnswerComment[];
+}
+
+export async function fetchProposalComments(proposalId: number): Promise<ProposalCommentsGroup[]> {
+  const res = await apiRequest("GET", `${PROPOSALS}/${proposalId}/comments${callerQuery()}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+// --- Proposal chat ---
+export interface ProposalChatMessage {
+  id: number;
+  text: string;
+  authorId?: number;
+  createdAt?: string;
+}
+
+export async function fetchProposalChat(proposalId: number): Promise<ProposalChatMessage[]> {
+  const res = await apiRequest("GET", `/api/v1/proposals/${proposalId}/chat${callerQuery()}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function addProposalChatMessage(
+  proposalId: number,
+  body: { text: string }
+): Promise<ProposalChatMessage> {
+  const res = await apiRequest("POST", `/api/v1/proposals/${proposalId}/chat${callerQuery()}`, body);
+  return res.json();
+}
+
+// --- Suggestions ---
+export interface AnswerSuggestion {
+  id: number;
+  answerId: number;
+  suggestedText: string;
+  status: string;
+  [key: string]: unknown;
+}
+
+export async function fetchProposalSuggestions(
+  proposalId: number
+): Promise<{ suggestions: AnswerSuggestion[] }> {
+  return apiRequest(
+    "GET",
+    `${PROPOSALS}/${proposalId}/suggestions${callerQuery()}`
+  ).then((res) => res.json());
+}
+
+export async function createSuggestion(
+  proposalId: number,
+  answerId: number,
+  body: { suggestedText: string }
+): Promise<AnswerSuggestion> {
+  const res = await apiRequest(
+    "POST",
+    `${PROPOSALS}/${proposalId}/answers/${answerId}/suggestions${callerQuery()}`,
+    body
+  );
+  return res.json();
+}
+
+export async function updateSuggestionStatus(
+  proposalId: number,
+  suggestionId: number,
+  status: string
+): Promise<AnswerSuggestion> {
+  const res = await apiRequest("PATCH", `${PROPOSALS}/${proposalId}/suggestions/${suggestionId}${callerQuery()}`, {
+    status,
+  });
+  return res.json();
 }
 
 /** Chat messages for a proposal (enforces canView on server when caller params sent). */
