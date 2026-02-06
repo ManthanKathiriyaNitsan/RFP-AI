@@ -287,7 +287,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const canEdit = access.isAdmin || access.isOwner || (access.permissions?.canEdit === true);
       if (!canEdit) return res.status(403).json({ message: "You do not have permission to edit this proposal" });
       const { userId: _u, userRole: _r, ...updates } = req.body;
+      const previousStatus = access.proposal.status;
       const proposal = await storage.updateProposal(id, updates);
+      const newStatus = (updates as { status?: string }).status;
+      if (newStatus != null && newStatus !== previousStatus) {
+        const link = `/rfp/${id}/questions`;
+        const recipientIds = await getProposalNotificationRecipientIds(id, callerUserId);
+        recipientIds.forEach((uid) =>
+          addNotification(
+            uid,
+            "Proposal status updated",
+            `Status changed to ${newStatus}.`,
+            "status_change",
+            link
+          )
+        );
+      }
       res.json(proposal);
     } catch (error) {
       res.status(500).json({ message: "Failed to update proposal" });
@@ -517,6 +532,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: Number(userId),
         role: role || "viewer",
       });
+      const proposal = await storage.getProposal(proposalId);
+      const inviterUserId = (req as any).user?.id ?? undefined;
+      const link = `/rfp/${proposalId}/questions`;
+      await addNotificationToProposalParticipants(
+        proposalId,
+        inviterUserId,
+        "New collaborator assigned",
+        "A collaborator was added to this proposal.",
+        "collaboration_invite",
+        link
+      );
+      addNotification(
+        Number(userId),
+        "You were assigned to a proposal",
+        proposal ? `${proposal.title}` : "You were added as a collaborator.",
+        "collaboration_invite",
+        link
+      );
       const result = await collaborationJson(created);
       res.status(201).json(result);
     } catch (error) {
@@ -594,6 +627,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }
 
+  /** Collect owner + collaborators + admins/super_admins for a proposal (for broadcasting notifications). */
+  async function getProposalNotificationRecipientIds(proposalId: number, excludeUserId?: number): Promise<number[]> {
+    const proposal = await storage.getProposal(proposalId);
+    if (!proposal) return [];
+    const ids = new Set<number>();
+    if (proposal.ownerId) ids.add(proposal.ownerId);
+    const collabs = await storage.getCollaborationsByProposalId(proposalId);
+    collabs.forEach((c) => { if (c.userId != null) ids.add(c.userId); });
+    const allUsers = await storage.getAllUsers();
+    allUsers.forEach((u) => {
+      const r = (u.role || "").toLowerCase();
+      if (r === "admin" || r === "super_admin") ids.add(u.id);
+    });
+    if (excludeUserId != null) ids.delete(excludeUserId);
+    return Array.from(ids);
+  }
+
+  /** Notify all proposal participants (owner, collaborators, admins) except excludeUserId. */
+  async function addNotificationToProposalParticipants(
+    proposalId: number,
+    excludeUserId: number | undefined,
+    title: string,
+    message: string,
+    type: string,
+    link?: string
+  ) {
+    const recipientIds = await getProposalNotificationRecipientIds(proposalId, excludeUserId);
+    recipientIds.forEach((userId) => addNotification(userId, title, message, type, link));
+  }
+
   async function ensureProposalExists(proposalId: number): Promise<boolean> {
     const p = await storage.getProposal(proposalId);
     return !!p;
@@ -624,6 +687,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: isoNow(),
       };
       proposalQuestionsStore.push(question);
+      const userId = (req as any).user?.id ?? undefined;
+      await addNotificationToProposalParticipants(
+        proposalId,
+        userId,
+        "New question added",
+        "A new question was added to this proposal.",
+        "info",
+        `/rfp/${proposalId}/questions`
+      );
       res.status(201).json(question);
     } catch (error) {
       res.status(400).json({ message: "Failed to create question" });
@@ -684,13 +756,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const now = isoNow();
       const existing = proposalAnswersStore.find((a) => a.questionId === qid);
+      const userId = (req as any).user?.id ?? undefined;
       if (existing) {
         existing.answer = typeof answer === "string" ? answer : "";
         existing.updatedAt = now;
+        await addNotificationToProposalParticipants(
+          proposalId,
+          userId,
+          "Answer updated",
+          "An answer was updated on this proposal.",
+          "info",
+          `/rfp/${proposalId}/questions`
+        );
         return res.json(existing);
       }
       const ans: AnswerRecord = { id: answerNextId++, questionId: qid, answer: typeof answer === "string" ? answer : "", createdAt: now, updatedAt: now };
       proposalAnswersStore.push(ans);
+      await addNotificationToProposalParticipants(
+        proposalId,
+        userId,
+        "New answer submitted",
+        "An answer was submitted on this proposal.",
+        "info",
+        `/rfp/${proposalId}/questions`
+      );
       res.status(201).json(ans);
     } catch (error) {
       res.status(400).json({ message: "Failed to save answer" });
@@ -719,6 +808,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           proposalAnswersStore.push(ans);
           result.push(ans);
         }
+      }
+      if (result.length > 0) {
+        const userId = (req as any).user?.id ?? undefined;
+        await addNotificationToProposalParticipants(
+          proposalId,
+          userId,
+          "Answers updated",
+          "Answers were updated on this proposal.",
+          "info",
+          `/rfp/${proposalId}/questions`
+        );
       }
       res.json(result);
     } catch (error) {
@@ -794,18 +894,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: now,
       };
       answerCommentsStore.push(rec);
-      const proposal = await storage.getProposal(proposalId);
-      const ownerId = proposal?.ownerId;
-      if (ownerId != null && ownerId !== userId) {
-        const isReply = parentId != null;
-        addNotification(
-          ownerId,
-          isReply ? "New reply on proposal" : "New comment on proposal",
-          `${userName} ${isReply ? "replied to a comment" : "commented"} on a question.`,
-          "comment",
-          `/rfp/${proposalId}/questions`
-        );
-      }
+      const isReply = parentId != null;
+      await addNotificationToProposalParticipants(
+        proposalId,
+        userId,
+        isReply ? "New reply on proposal" : "New comment on proposal",
+        `${userName} ${isReply ? "replied to a comment" : "commented"} on a question.`,
+        "comment",
+        `/rfp/${proposalId}/questions`
+      );
       res.status(201).json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to add comment" });
@@ -840,6 +937,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: now,
       };
       proposalChatStore.push(rec);
+      const textPreview = typeof text === "string" ? text.slice(0, 80) : "";
+      await addNotificationToProposalParticipants(
+        proposalId,
+        userId,
+        "New message in proposal chat",
+        `${userName}: ${textPreview}${(typeof text === "string" && text.length > 80) ? "…" : ""}`,
+        "chat",
+        `/rfp/${proposalId}/questions`
+      );
       res.status(201).json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to send message" });
@@ -918,17 +1024,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: now,
       };
       suggestionStore.push(rec);
-      const proposal = await storage.getProposal(proposalId);
-      const ownerId = proposal?.ownerId;
-      if (ownerId != null && ownerId !== userId) {
-        addNotification(
-          ownerId,
-          "New suggestion on proposal",
-          `${userName} suggested an edit to an answer.`,
-          "info",
-          `/rfp/${proposalId}/questions`
-        );
-      }
+      await addNotificationToProposalParticipants(
+        proposalId,
+        userId,
+        "New suggestion on proposal",
+        `${userName} suggested an edit to an answer.`,
+        "info",
+        `/rfp/${proposalId}/questions`
+      );
       res.status(201).json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to create suggestion" });
@@ -955,6 +1058,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `/rfp/${proposalId}/questions`
         );
       }
+      await addNotificationToProposalParticipants(
+        proposalId,
+        userId,
+        status === "accepted" ? "Suggestion accepted" : "Suggestion rejected",
+        `A suggestion was ${status} on this proposal.`,
+        status === "accepted" ? "success" : "info",
+        `/rfp/${proposalId}/questions`
+      );
       res.json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to update suggestion" });
