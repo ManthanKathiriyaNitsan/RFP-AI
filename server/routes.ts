@@ -37,7 +37,7 @@ async function getProposalAccess(
   if (proposal.ownerId === callerUserId) return { proposal, isAdmin: false, isOwner: true, permissions: ROLE_TO_PERMISSIONS.contributor };
   const collabs = await storage.getCollaborationsByProposalId(proposalId);
   const collab = collabs.find((c) => c.userId === callerUserId);
-  if (!collab) return { proposal, isAdmin: false, isOwner: false, permissions: null };
+  if (!collab) return { proposal, isAdmin: false, isOwner: false, permissions: { canView: false, canEdit: false, canComment: false, canReview: false, canGenerateAi: false } };
   const permissions = getPermissionsForRole(collab.role);
   return { proposal, isAdmin: false, isOwner: false, permissions };
 }
@@ -131,8 +131,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userRole = req.query.userRole as string | undefined;
       
       let proposals;
-      if (userRole === "admin") {
-        // Admin users can see all proposals
+      if (userRole === "admin" || userRole === "super_admin") {
+        // Admin and super_admin see all proposals (same list)
         proposals = await storage.getAllProposals();
       } else if (userId) {
         // Regular users see only their proposals
@@ -219,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
       const userRole = req.query.userRole as string | undefined;
       let proposals;
-      if (userRole === "admin") {
+      if (userRole === "admin" || userRole === "super_admin") {
         proposals = await storage.getAllProposals();
       } else if (userId) {
         proposals = await storage.getProposalsByUserId(userId);
@@ -569,6 +569,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   type ProposalChatRecord = { id: number; proposalId: number; authorId: number; authorName: string; text: string; createdAt: string };
   const suggestionStore: SuggestionRecord[] = [];
   const proposalChatStore: ProposalChatRecord[] = [];
+  type NotificationRecord = { id: string; userId: number; title: string; message: string; type: string; read: boolean; link?: string; createdAt: string };
+  const notificationStore: NotificationRecord[] = [];
+  let notificationNextId = 1;
   let questionNextId = 1;
   let answerNextId = 1;
   let shareTokenNextId = 1;
@@ -576,6 +579,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   let suggestionNextId = 1;
   let proposalChatNextId = 1;
   const isoNow = () => new Date().toISOString();
+
+  function addNotification(forUserId: number, title: string, message: string, type: string, link?: string) {
+    if (!forUserId) return;
+    notificationStore.push({
+      id: `notif_${notificationNextId++}`,
+      userId: forUserId,
+      title,
+      message,
+      type,
+      read: false,
+      link,
+      createdAt: isoNow(),
+    });
+  }
 
   async function ensureProposalExists(proposalId: number): Promise<boolean> {
     const p = await storage.getProposal(proposalId);
@@ -759,7 +776,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const proposalId = parseInt(req.params.id);
       const answerId = parseInt(req.params.answerId);
       if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
-      const { text, mentions = [], parentId = null } = req.body ?? {};
+      const text = (req.body?.text ?? req.body?.message ?? "") as string;
+      const mentions = (req.body?.mentions ?? []) as number[];
+      const parentId = req.body?.parentId != null ? Number(req.body.parentId) : null;
       const userId = (req as any).user?.id ?? 1;
       const userName = (req as any).user ? `${(req as any).user.firstName ?? ""} ${(req as any).user.lastName ?? ""}`.trim() || "User" : "User";
       const now = isoNow();
@@ -775,6 +794,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: now,
       };
       answerCommentsStore.push(rec);
+      const proposal = await storage.getProposal(proposalId);
+      const ownerId = proposal?.ownerId;
+      if (ownerId != null && ownerId !== userId) {
+        const isReply = parentId != null;
+        addNotification(
+          ownerId,
+          isReply ? "New reply on proposal" : "New comment on proposal",
+          `${userName} ${isReply ? "replied to a comment" : "commented"} on a question.`,
+          "comment",
+          `/rfp/${proposalId}/questions`
+        );
+      }
       res.status(201).json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to add comment" });
@@ -887,6 +918,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: now,
       };
       suggestionStore.push(rec);
+      const proposal = await storage.getProposal(proposalId);
+      const ownerId = proposal?.ownerId;
+      if (ownerId != null && ownerId !== userId) {
+        addNotification(
+          ownerId,
+          "New suggestion on proposal",
+          `${userName} suggested an edit to an answer.`,
+          "info",
+          `/rfp/${proposalId}/questions`
+        );
+      }
       res.status(201).json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to create suggestion" });
@@ -901,7 +943,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (status !== "accepted" && status !== "rejected") return res.status(400).json({ message: "status must be accepted or rejected" });
       const rec = suggestionStore.find((s) => s.proposalId === proposalId && s.id === suggestionId);
       if (!rec) return res.status(404).json({ message: "Suggestion not found" });
+      const previousStatus = rec.status;
       rec.status = status;
+      const userId = (req as any).user?.id ?? 1;
+      if (rec.suggestedBy !== userId && previousStatus === "pending") {
+        addNotification(
+          rec.suggestedBy,
+          status === "accepted" ? "Suggestion accepted" : "Suggestion rejected",
+          `Your suggested edit was ${status}.`,
+          status === "accepted" ? "success" : "info",
+          `/rfp/${proposalId}/questions`
+        );
+      }
       res.json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to update suggestion" });
@@ -939,6 +992,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(rec);
     } catch (error) {
       res.status(400).json({ message: "Failed to create share token" });
+    }
+  });
+
+  app.get("/api/v1/notifications", async (req, res) => {
+    try {
+      const userId = (req as any).user?.id ?? null;
+      if (userId == null) return res.json([]);
+      const list = notificationStore.filter((n) => n.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      res.json(list.map((n) => ({ id: n.id, title: n.title, message: n.message, type: n.type, time: n.createdAt, read: n.read, link: n.link ?? null, createdAt: n.createdAt })));
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch("/api/v1/notifications/:notificationId/read", async (req, res) => {
+    try {
+      const id = req.params.notificationId;
+      const n = notificationStore.find((x) => x.id === id);
+      if (n) n.read = true;
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to mark read" });
+    }
+  });
+
+  app.delete("/api/v1/notifications/:notificationId", async (req, res) => {
+    try {
+      const id = req.params.notificationId;
+      const idx = notificationStore.findIndex((x) => x.id === id);
+      if (idx !== -1) notificationStore.splice(idx, 1);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to dismiss" });
+    }
+  });
+
+  app.patch("/api/v1/notifications/read-all", async (req, res) => {
+    try {
+      const userId = (req as any).user?.id ?? null;
+      if (userId != null) notificationStore.filter((n) => n.userId === userId).forEach((n) => { n.read = true; });
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to mark all read" });
+    }
+  });
+
+  app.delete("/api/v1/notifications", async (req, res) => {
+    try {
+      const userId = (req as any).user?.id ?? null;
+      if (userId != null) {
+        for (let i = notificationStore.length - 1; i >= 0; i--) {
+          if (notificationStore[i].userId === userId) notificationStore.splice(i, 1);
+        }
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to dismiss all" });
     }
   });
 

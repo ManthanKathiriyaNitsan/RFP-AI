@@ -394,6 +394,7 @@ export function useCreateSuggestion(proposalId: number) {
       apiCreateSuggestion(proposalId, answerId, { suggestedText, message }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: proposalKeys.suggestions(proposalId) });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }
@@ -406,6 +407,7 @@ export function useUpdateSuggestionStatus(proposalId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: proposalKeys.suggestions(proposalId) });
       qc.invalidateQueries({ queryKey: proposalKeys.answers(proposalId) });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

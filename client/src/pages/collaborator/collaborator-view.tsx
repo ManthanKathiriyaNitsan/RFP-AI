@@ -14,6 +14,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useMyCollaborations } from "@/hooks/use-proposals-api";
 import { useAuth } from "@/hooks/use-auth";
 import { fetchCollaboratorOptions, collaboratorOptionsFallback } from "@/api/collaborator-data";
+import { toSoftBadgeClass, softBadgeClasses } from "@/lib/badge-classes";
 import type { MyCollaborationItem } from "@/api/proposals";
 
 type LayoutMode = "card" | "list" | "grid";
@@ -54,7 +55,7 @@ export default function CollaboratorView() {
 
   const getStatusColor = (status: string) => {
     const config = statusDisplay[status as keyof typeof statusDisplay] ?? statusDisplay.default;
-    return config?.className ?? "badge-status-neutral";
+    return toSoftBadgeClass(config?.className) ?? softBadgeClasses.archived;
   };
 
   const getStatusLabel = (status: string) => {
@@ -214,10 +215,10 @@ export default function CollaboratorView() {
                             <div
                               className={`flex ${isMobile ? "flex-col" : "items-center flex-wrap"} gap-2 sm:gap-4`}
                             >
-                              <Badge className={`${getStatusColor(proposal?.status || "draft")} text-[10px] sm:text-xs shrink-0`}>
+                              <Badge variant="outline" className={`${getStatusColor(proposal?.status || "draft")} text-[10px] sm:text-xs shrink-0`}>
                                 {getStatusLabel(proposal?.status || "draft")}
                               </Badge>
-                              <Badge variant="outline" className="text-[10px] sm:text-xs shrink-0 capitalize">
+                              <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs shrink-0 capitalize`}>
                                 {roleLabel(collaboration.role)}
                               </Badge>
                               <span className="text-xs sm:text-sm text-muted-foreground">
@@ -285,7 +286,7 @@ export default function CollaboratorView() {
                       </div>
                     </div>
                     <div className="sm:col-span-2">
-                      <Badge className={`${getStatusColor(proposal?.status || "draft")} text-[10px]`}>
+                      <Badge variant="outline" className={`${getStatusColor(proposal?.status || "draft")} text-[10px]`}>
                         {getStatusLabel(proposal?.status || "draft")}
                       </Badge>
                     </div>
@@ -325,10 +326,10 @@ export default function CollaboratorView() {
                             {proposal?.title || "Untitled Proposal"}
                           </h3>
                           <div className="flex flex-wrap gap-1.5">
-                            <Badge className={`${getStatusColor(proposal?.status || "draft")} text-[10px]`}>
+                            <Badge variant="outline" className={`${getStatusColor(proposal?.status || "draft")} text-[10px]`}>
                               {getStatusLabel(proposal?.status || "draft")}
                             </Badge>
-                            <Badge variant="outline" className="text-[10px] capitalize">
+                            <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] capitalize`}>
                               {roleLabel(collaboration.role)}
                             </Badge>
                           </div>

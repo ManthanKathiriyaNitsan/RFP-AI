@@ -267,11 +267,11 @@ export class MemStorage implements IStorage {
     if (!this.users.has(id)) throw new Error("User not found");
     this.users.delete(id);
     // Unlink proposals owned by this user so they remain but show no owner
-    for (const [proposalId, proposal] of this.proposals.entries()) {
+    Array.from(this.proposals.entries()).forEach(([proposalId, proposal]) => {
       if (proposal.ownerId === id) {
         this.proposals.set(proposalId, { ...proposal, ownerId: null, updatedAt: new Date() });
       }
-    }
+    });
   }
 
   async getAllUsers(): Promise<User[]> {

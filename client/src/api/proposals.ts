@@ -482,13 +482,22 @@ export interface AnswerComment {
   answerId: number;
   authorId: number;
   message: string;
+  /** Optional alias for message (backend may return either) */
+  text?: string;
+  /** Optional display name (backend may return) */
+  authorName?: string;
   mentions?: number[];
+  parentId?: number | null;
+  replies?: AnswerComment[];
   createdAt?: string;
 }
 
 export interface AddCommentRequest {
-  message: string;
+  /** Comment/reply text; API sends as "text" */
+  message?: string;
+  text?: string;
   mentions?: number[];
+  parentId?: number | null;
 }
 
 export async function fetchAnswerComments(
@@ -507,10 +516,16 @@ export async function addAnswerComment(
   answerId: number,
   body: AddCommentRequest
 ): Promise<AnswerComment> {
+  const text = body.text ?? body.message ?? "";
+  const payload = {
+    text,
+    mentions: body.mentions,
+    parentId: body.parentId ?? null,
+  };
   const res = await apiRequest(
     "POST",
     `${PROPOSALS}/${proposalId}/answers/${answerId}/comments${callerQuery()}`,
-    body
+    payload
   );
   return res.json();
 }
@@ -518,6 +533,7 @@ export async function addAnswerComment(
 // --- Proposal comments (grouped by answer) ---
 export interface ProposalCommentsGroup {
   answerId: number;
+  questionText?: string;
   comments: AnswerComment[];
 }
 
@@ -532,6 +548,7 @@ export interface ProposalChatMessage {
   id: number;
   text: string;
   authorId?: number;
+  authorName?: string;
   createdAt?: string;
 }
 
@@ -570,7 +587,7 @@ export async function fetchProposalSuggestions(
 export async function createSuggestion(
   proposalId: number,
   answerId: number,
-  body: { suggestedText: string }
+  body: { suggestedText: string; message?: string }
 ): Promise<AnswerSuggestion> {
   const res = await apiRequest(
     "POST",

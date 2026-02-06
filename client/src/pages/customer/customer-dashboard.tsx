@@ -13,6 +13,7 @@ import { Link, useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { QueryErrorState } from "@/components/shared/query-error-state";
 import type { Proposal } from "@/api/proposals";
+import { getProposalStatusBadgeClass } from "@/lib/badge-classes";
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
@@ -75,23 +76,7 @@ export default function CustomerDashboard() {
     ? Math.round(proposals.reduce((sum: number, p: Proposal) => sum + calculateCompletion(p), 0) / proposals.length)
     : 0;
 
-  /* Same badge classes as rfp-detail / rfp-projects for consistent colors (won=green, lost=red, in_progress=blue, etc.) */
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case "won":
-      case "completed":
-        return "badge-status-won";
-      case "lost":
-        return "badge-status-lost";
-      case "in_progress":
-        return "badge-status-in-progress";
-      case "review":
-        return "badge-status-review";
-      case "draft":
-      default:
-        return "badge-status-draft";
-    }
-  };
+  const getStatusBadgeClass = (status: string) => getProposalStatusBadgeClass(status);
   const getStatusLabel = (status: string) => {
     if (status === "in_progress") return "In Progress";
     return status.replace("_", " ");

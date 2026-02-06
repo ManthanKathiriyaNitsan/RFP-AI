@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { getProposalStatusBadgeClass, softBadgeClasses } from "@/lib/badge-classes";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -122,23 +123,7 @@ export default function RFPProjects() {
     return matchesSearch && matchesStatus;
   });
 
-  /* Same badge classes as rfp-detail (rfp/28) for consistent colors in light and dark mode */
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case "won":
-      case "completed":
-        return "badge-status-won";
-      case "lost":
-        return "badge-status-lost";
-      case "in_progress":
-        return "badge-status-in-progress";
-      case "review":
-        return "badge-status-review";
-      case "draft":
-      default:
-        return "badge-status-draft";
-    }
-  };
+  const getStatusBadgeClass = (status: string) => getProposalStatusBadgeClass(status);
   const getStatusLabel = (status: string) => {
     if (status === "in_progress") return "In Progress";
     return status.replace("_", " ");
@@ -445,7 +430,7 @@ export default function RFPProjects() {
                               {getStatusLabel(project.status)}
                             </Badge>
                             {isUrgent && (
-                              <Badge variant="outline" className="badge-status-warning text-[10px] sm:text-xs shrink-0 border">
+                              <Badge variant="outline" className={`${softBadgeClasses.warning} text-[10px] sm:text-xs shrink-0 border`}>
                                 <AlertCircle className="w-3 h-3 mr-1" />
                                 Urgent
                               </Badge>

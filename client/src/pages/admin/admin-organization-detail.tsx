@@ -17,6 +17,7 @@ import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { softBadgeClasses } from "@/lib/badge-classes";
 import {
   Dialog,
   DialogContent,
@@ -262,7 +263,7 @@ export default function AdminOrganizationDetail() {
               </Button>
             )}
           </div>
-          {org.archived && <Badge variant="secondary">Archived</Badge>}
+          {org.archived && <Badge variant="outline" className={softBadgeClasses.archived}>Archived</Badge>}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleArchiveToggle} disabled={archiving}>

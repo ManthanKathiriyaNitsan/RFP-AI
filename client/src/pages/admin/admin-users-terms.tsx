@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { softBadgeClasses } from "@/lib/badge-classes";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -88,23 +89,11 @@ export default function AdminUsersTerms() {
   const getStatusConfig = (status: Term["status"]) => {
     switch (status) {
       case "active":
-        return { 
-          label: "Active", 
-          icon: CheckCircle, 
-          className: "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald dark:text-emerald border-emerald-500/20 dark:border-emerald-500/30" 
-        };
+        return { label: "Active", icon: CheckCircle, className: softBadgeClasses.success };
       case "draft":
-        return { 
-          label: "Draft", 
-          icon: Clock, 
-          className: "bg-amber-500/10 dark:bg-amber-500/20 text-amber dark:text-amber border-amber-500/20 dark:border-amber-500/30" 
-        };
+        return { label: "Draft", icon: Clock, className: softBadgeClasses.warning };
       case "archived":
-        return { 
-          label: "Archived", 
-          icon: XCircle, 
-          className: "bg-gray-500/10 dark:bg-gray-500/20 text-muted-foreground border-gray-500/20 dark:border-gray-500/30" 
-        };
+        return { label: "Archived", icon: XCircle, className: softBadgeClasses.archived };
     }
   };
 

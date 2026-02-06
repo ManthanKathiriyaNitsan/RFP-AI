@@ -1,6 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { fetchBranding, type BrandingData, type BrandingColorPreset } from "@/api/admin-data";
 import { useOrganizationId } from "@/hooks/use-organization-id";
+import { useAuth } from "@/hooks/use-auth";
+
+const BRANDING_CSS_VARS = [
+  "--primary",
+  "--primary-shade",
+  "--ring",
+  "--sidebar-accent",
+  "--secondary",
+  "--primary-foreground",
+  "--theme-gradient",
+  "--theme-gradient-r",
+] as const;
+
+const DEFAULT_BRANDING: BrandingData = {
+  primaryLogoUrl: null,
+  faviconUrl: null,
+  colorTheme: "Default",
+  colorPresets: [],
+};
 
 /** Convert hex color to HSL string (e.g. "252, 87%, 58%") for use in hsl(var). Exported for theme preview in Settings. */
 export function hexToHsl(hex: string): string {
@@ -61,15 +80,11 @@ export function BrandingProvider({
   /** When set (e.g. in admin), fetch branding for this org. Otherwise use current user's org (customer/collaborator) or first org. */
   organizationId?: number;
 }) {
+  const { user } = useAuth();
   const { organizationId: userOrgId } = useOrganizationId();
   const effectiveOrgId = organizationIdProp ?? userOrgId ?? undefined;
 
-  const [data, setData] = useState<BrandingData>({
-    primaryLogoUrl: null,
-    faviconUrl: null,
-    colorTheme: "Default",
-    colorPresets: [],
-  });
+  const [data, setData] = useState<BrandingData>(DEFAULT_BRANDING);
   const [isLoading, setIsLoading] = useState(true);
   const faviconEl = useRef<HTMLLinkElement | null>(null);
 
@@ -80,26 +95,36 @@ export function BrandingProvider({
       const next = await fetchBranding(orgId);
       setData(next);
     } catch {
-      // Keep default branding when API is unreachable (e.g. backend not running, offline).
-      // Global API status banner can still show connection issues; avoid crashing the app.
-      setData({
-        primaryLogoUrl: null,
-        faviconUrl: null,
-        colorTheme: "Default",
-        colorPresets: [],
-      });
+      setData(DEFAULT_BRANDING);
     } finally {
       setIsLoading(false);
     }
   }, [effectiveOrgId]);
 
+  // When logged out: use default branding. When logged in: fetch org branding.
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    if (!user) {
+      setData(DEFAULT_BRANDING);
+      setIsLoading(false);
+    } else {
+      refetch();
+    }
+  }, [user, refetch]);
 
-  // Apply color theme (CSS variables) site-wide. Use "important" so branding overrides :root and .dark.
+  // Apply color theme (CSS variables) site-wide. When logged out, clear custom branding so default theme shows.
   useEffect(() => {
     const root = document.documentElement;
+
+    if (!user) {
+      BRANDING_CSS_VARS.forEach((name) => root.style.removeProperty(name));
+      const link = document.querySelector<HTMLLinkElement>('link[rel="icon"][data-branding]');
+      if (link) {
+        link.remove();
+        faviconEl.current = null;
+      }
+      return;
+    }
+
     const preset: BrandingColorPreset | undefined = data.colorPresets.find(
       (p) => p.name.toLowerCase() === (data.colorTheme || "").toLowerCase()
     ) ?? data.colorPresets[0];
@@ -118,6 +143,8 @@ export function BrandingProvider({
       setVar("--primary-foreground", "hsl(210, 20%, 98%)");
       setVar("--theme-gradient", `linear-gradient(135deg, hsl(${primaryHsl}) 0%, hsl(${secondaryHsl}) 100%)`);
       setVar("--theme-gradient-r", `linear-gradient(90deg, hsl(${primaryHsl}) 0%, hsl(${secondaryHsl}) 100%)`);
+    } else {
+      BRANDING_CSS_VARS.forEach((name) => root.style.removeProperty(name));
     }
 
     // Favicon
@@ -135,7 +162,7 @@ export function BrandingProvider({
       link.remove();
       faviconEl.current = null;
     }
-  }, [data.colorTheme, data.colorPresets, data.faviconUrl]);
+  }, [user, data.colorTheme, data.colorPresets, data.faviconUrl]);
 
   const value: BrandingContextValue = {
     ...data,

@@ -60,8 +60,11 @@ export default function AdminSecurity() {
   const securitySettings = data?.securitySettings ?? [];
   const complianceCertificationsRaw = data?.complianceCertifications ?? [];
   const COMPLIANCE_ICON_MAP: Record<string, typeof Shield> = { Shield, Lock, FileText, CheckCircle };
-  const complianceCertifications = complianceCertificationsRaw.map((c: { icon?: string; [k: string]: unknown }) => ({
-    ...c,
+  type ComplianceCert = { name: string; status: string; date: string; icon: typeof Shield };
+  const complianceCertifications: ComplianceCert[] = complianceCertificationsRaw.map((c: { icon?: string; name?: string; status?: string; date?: string; [k: string]: unknown }) => ({
+    name: (c.name as string) ?? "",
+    status: (c.status as string) ?? "",
+    date: (c.date as string) ?? "",
     icon: COMPLIANCE_ICON_MAP[c.icon as string] ?? Shield,
   }));
   const defaultPasswordLength = data?.defaultPasswordLength ?? "12";
@@ -624,7 +627,7 @@ export default function AdminSecurity() {
 
         <TabsContent value="compliance" className="mt-4 sm:mt-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {complianceCertifications.map((cert: { name: string; status: string; date: string; icon: typeof Shield }, index: number) => (
+            {complianceCertifications.map((cert, index) => (
               <Card key={index} className="border shadow-sm" data-testid={`card-compliance-${index}`}>
                 <CardContent className="p-4 sm:p-5">
                   <div className={`flex ${isMobile ? 'flex-col' : 'items-start'} gap-3 sm:gap-4`}>

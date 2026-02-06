@@ -12,6 +12,7 @@ import type { AnswerComment } from "@/api/proposals";
 import type { AnswerSuggestion } from "@/api/proposals";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { getAnswerStatusBadgeClass, answerStatusBadgeClasses } from "@/lib/badge-classes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,7 +46,7 @@ export default function RFPReview() {
   const { data: questions = [] } = useProposalQuestions(proposalId);
   const { data: answersFromApi = [], isLoading: answersLoading } = useProposalAnswers(proposalId);
   const canReview = !isCollaborator || myCollaboration?.canReview === true;
-  const canComment = !isCollaborator || myCollaboration?.canComment === true;
+  const canComment = true;
   const rfpBase = location.startsWith("/admin/proposals") ? "/admin/proposals" : isCollaborator ? "/collaborator/rfp" : "/rfp";
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -81,16 +82,24 @@ export default function RFPReview() {
   });
   const apiCommentsByAnswerId = useMemo(() => {
     const map: Record<number, AnswerComment[]> = {};
-    commentQueries.forEach((q: { data?: AnswerComment[] }, i: number) => {
+    commentQueries.forEach((q, i: number) => {
       const aid = answerIds[i];
       if (aid == null) return;
-      const list = q.data ?? [];
+      const raw = q.data;
+      const listRaw = Array.isArray(raw)
+        ? raw
+        : (raw && typeof raw === "object" && (raw as { comments?: unknown }).comments != null)
+          ? (raw as { comments: unknown }).comments
+          : [];
+      const list: AnswerComment[] = Array.isArray(listRaw) ? listRaw : [];
       const flat: AnswerComment[] = [];
       list.forEach((c: AnswerComment) => {
         flat.push(c);
-        (c.replies ?? []).forEach((r: AnswerComment) => flat.push(r));
+        const repliesRaw = (c as AnswerComment & { replies?: unknown }).replies;
+        const replies: AnswerComment[] = Array.isArray(repliesRaw) ? repliesRaw : [];
+        replies.forEach((r: AnswerComment) => flat.push(r));
       });
-      flat.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      flat.sort((a, b) => new Date((a as AnswerComment & { createdAt?: string }).createdAt ?? 0).getTime() - new Date((b as AnswerComment & { createdAt?: string }).createdAt ?? 0).getTime());
       map[aid] = flat;
     });
     return map;
@@ -114,13 +123,13 @@ export default function RFPReview() {
         question: q.question,
         answer: ans?.answer ?? "",
         status: displayStatus,
-        submittedAt: ans?.updatedAt ? new Date(ans.updatedAt) : null,
+        submittedAt: ans?.updatedAt != null ? new Date(ans.updatedAt) : null,
         locked: apiStatus === "locked",
         comments: (apiCommentsByAnswerId[key] ?? []).map((c) => ({
           id: c.id,
-          author: c.authorName,
-          text: c.text,
-          createdAt: new Date(c.createdAt),
+          author: c.authorName ?? "Unknown",
+          text: c.text ?? c.message ?? "",
+          createdAt: new Date(c.createdAt ?? ""),
         })).concat(localOverrides.comments[key] ?? []),
       };
     });
@@ -134,22 +143,7 @@ export default function RFPReview() {
     return matchesSearch && matchesStatus;
   });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "approved":
-        return "badge-status-success";
-      case "pending":
-        return "badge-status-warning";
-      case "draft":
-        return "badge-status-info";
-      case "rejected":
-        return "badge-status-error";
-      case "locked":
-        return "badge-status-neutral";
-      default:
-        return "badge-status-neutral";
-    }
-  };
+  const getStatusColor = (status: string) => getAnswerStatusBadgeClass(status);
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -251,9 +245,17 @@ export default function RFPReview() {
   const approvedCount = answers.filter(a => a.status === "approved").length;
   const pendingCount = answers.filter(a => a.status === "pending").length;
 
-  const { data: suggestionsList = [] } = useProposalSuggestions(proposalId);
+  const { data: suggestionsData } = useProposalSuggestions(proposalId);
+  const suggestionsList = useMemo(() => {
+    const raw = suggestionsData ?? null;
+    if (Array.isArray(raw)) return raw as AnswerSuggestion[];
+    if (raw && typeof raw === "object" && Array.isArray((raw as { suggestions?: AnswerSuggestion[] }).suggestions)) {
+      return (raw as { suggestions: AnswerSuggestion[] }).suggestions;
+    }
+    return [];
+  }, [suggestionsData]);
   const updateSuggestionMutation = useUpdateSuggestionStatus(proposalId ?? 0);
-  const pendingSuggestions = useMemo(() => (suggestionsList as AnswerSuggestion[]).filter((s) => s.status === "pending"), [suggestionsList]);
+  const pendingSuggestions = useMemo(() => suggestionsList.filter((s) => s.status === "pending"), [suggestionsList]);
   const isOwner = !isCollaborator;
 
   const handleAcceptSuggestion = (suggestionId: number) => {
@@ -278,7 +280,7 @@ export default function RFPReview() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-h-0 overflow-y-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -313,9 +315,9 @@ export default function RFPReview() {
               return (
                 <div key={s.id} className="p-3 rounded-lg border bg-muted/30 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">{questionLabel.slice(0, 80)}...</p>
-                  <p className="text-sm">{s.suggestedText.slice(0, 200)}{s.suggestedText.length > 200 ? "..." : ""}</p>
-                  {s.message && <p className="text-xs text-muted-foreground">Note: {s.message}</p>}
-                  <p className="text-xs text-muted-foreground">By {s.suggestedByName}</p>
+                  <p className="text-sm">{(s.suggestedText ?? "").slice(0, 200)}{(s.suggestedText?.length ?? 0) > 200 ? "..." : ""}</p>
+                  {(s as AnswerSuggestion & { message?: string }).message ? <p className="text-xs text-muted-foreground">Note: {(s as AnswerSuggestion & { message?: string }).message}</p> : null}
+                  <p className="text-xs text-muted-foreground">By {String((s as AnswerSuggestion & { suggestedByName?: string }).suggestedByName ?? "Unknown")}</p>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" className="text-green-600 border-green-600" onClick={() => handleAcceptSuggestion(s.id)} disabled={updateSuggestionMutation.isPending}>
                       Accept
@@ -427,11 +429,11 @@ export default function RFPReview() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 sm:gap-3 mb-2">
-                    <Badge className={`${getStatusColor(answer.status)} text-[10px] sm:text-xs`}>
+                    <Badge variant="outline" className={`${getStatusColor(answer.status)} text-[10px] sm:text-xs`}>
                       {getStatusLabel(answer.status)}
                     </Badge>
                     {answer.locked && (
-                      <Badge variant="outline" className="text-[10px] sm:text-xs">
+                      <Badge variant="outline" className={`${answerStatusBadgeClasses.locked} text-[10px] sm:text-xs`}>
                         <Lock className="w-3 h-3 mr-1" />
                         Locked
                       </Badge>
@@ -485,7 +487,7 @@ export default function RFPReview() {
             <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
               <div>
                 <Label className="text-xs sm:text-sm mb-2 block">Answer</Label>
-                <div className="p-3 sm:p-4 rounded-lg border bg-muted/30">
+                <div className="p-3 sm:p-4 rounded-lg border bg-muted/30 max-h-48 sm:max-h-64 overflow-y-auto">
                   <p className="text-sm whitespace-pre-wrap">{answer.answer}</p>
                 </div>
               </div>
@@ -493,9 +495,9 @@ export default function RFPReview() {
               {/* Comments (with reply threads) */}
               <div>
                 <Label className="text-xs sm:text-sm mb-2 block">Comments</Label>
-                <div className="space-y-2 mb-3">
+                <div className="space-y-2 mb-3 max-h-48 sm:max-h-64 overflow-y-auto">
                   {answer.comments.map((comment) => (
-                    <div key={comment.id} className={cn("p-3 rounded-lg border bg-muted/30", (apiCommentsByAnswerId[answer.id]?.some((c) => c.id === comment.id) || apiCommentsByAnswerId[answer.id]?.some((c) => (c.replies ?? []).some((r) => r.id === comment.id))) ? "" : "border-l-4 border-l-primary/50")}>
+                    <div key={comment.id} className={cn("p-3 rounded-lg border bg-muted/30", (apiCommentsByAnswerId[answer.id]?.some((c) => c.id === comment.id) || apiCommentsByAnswerId[answer.id]?.some((c) => (c.replies ?? []).some((r: import("@/api/proposals").AnswerComment) => r.id === comment.id))) ? "" : "border-l-4 border-l-primary/50")}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-medium">{comment.author}</span>
                         <span className="text-xs text-muted-foreground">

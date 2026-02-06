@@ -19,7 +19,6 @@ import {
   AlertCircle,
   FileText,
   ArrowUpDown,
-  Plus
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,12 +54,14 @@ import {
   downloadProposalJson,
 } from "@/lib/export-proposal";
 import { fetchAdminOptions } from "@/api/admin-data";
+import { getProposalStatusBadgeClass, getAiScoreBadgeClass } from "@/lib/badge-classes";
 
 export default function AdminProposals() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedProposals, setSelectedProposals] = useState<number[]>([]);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortBy, setSortBy] = useState<"title" | "date">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [exportDialogProposal, setExportDialogProposal] = useState<any>(null);
   const itemsPerPage = 10;
@@ -128,38 +129,14 @@ export default function AdminProposals() {
   };
 
   const getStatusConfig = (status: string) => {
-    switch (status) {
-      case "won":
-        return { 
-          label: "Won", 
-          icon: CheckCircle, 
-          className: "badge-status-won" 
-        };
-      case "lost":
-        return { 
-          label: "Lost", 
-          icon: XCircle, 
-          className: "badge-status-lost" 
-        };
-      case "in_progress":
-        return { 
-          label: "In Progress", 
-          icon: Clock, 
-          className: "badge-status-in-progress" 
-        };
-      case "review":
-        return { 
-          label: "Review", 
-          icon: AlertCircle, 
-          className: "badge-status-review" 
-        };
-      default:
-        return { 
-          label: "Draft", 
-          icon: FileText, 
-          className: "badge-status-draft" 
-        };
-    }
+    const labels: Record<string, { label: string; icon: typeof CheckCircle }> = {
+      won: { label: "Won", icon: CheckCircle },
+      lost: { label: "Lost", icon: XCircle },
+      in_progress: { label: "In Progress", icon: Clock },
+      review: { label: "Review", icon: AlertCircle },
+    };
+    const config = labels[status] ?? { label: "Draft", icon: FileText };
+    return { ...config, className: getProposalStatusBadgeClass(status) };
   };
 
   const deleteProposalMutation = useMutation({
@@ -192,16 +169,17 @@ export default function AdminProposals() {
     return matchesSearch && matchesStatus;
   });
 
-  // Sort proposals - by default sort by date (newest first), but allow title sorting
+  // Sort proposals: by title (when user clicks Proposal header) or by date (default, newest first)
   const sortedProposals = [...filteredProposals].sort((a, b) => {
-    // Default: sort by updatedAt/createdAt (newest first)
-    const dateA = a.updatedAt?.getTime() || a.createdAt?.getTime() || 0;
-    const dateB = b.updatedAt?.getTime() || b.createdAt?.getTime() || 0;
-    
-    // If user clicks sort button, sort by title instead
-    // For now, we'll always sort by date (newest first) since that's what user wants
-    // The sortOrder can be used for future title sorting if needed
-    return dateB - dateA; // Descending order (newest first)
+    if (sortBy === "title") {
+      const titleA = (a.title || "").toLowerCase();
+      const titleB = (b.title || "").toLowerCase();
+      const cmp = titleA.localeCompare(titleB, undefined, { sensitivity: "base" });
+      return sortOrder === "asc" ? cmp : -cmp;
+    }
+    const dateA = a.updatedAt?.getTime() ?? a.createdAt?.getTime() ?? 0;
+    const dateB = b.updatedAt?.getTime() ?? b.createdAt?.getTime() ?? 0;
+    return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
   });
 
   // Pagination
@@ -320,31 +298,33 @@ export default function AdminProposals() {
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-proposals-title">{proposalsTitle}</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage and track all RFP proposals in one place.</p>
         </div>
-        <Link href="/admin/proposals/new" className="w-full sm:w-auto shrink-0">
-          <Button className="w-full sm:w-auto theme-gradient-bg text-white border-0 hover:opacity-95">
-            <Plus className="w-4 h-4 mr-2" />
-            New Proposal
-          </Button>
-        </Link>
+        {/* Admin and super_admin cannot create proposals; only view, edit, delete */}
       </div>
 
-      <Tabs defaultValue="all" className="w-full">
+      <Tabs
+        value={statusFilter}
+        onValueChange={(v) => {
+          setStatusFilter(v);
+          setCurrentPage(1);
+        }}
+        className="w-full"
+      >
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-4">
           <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             <TabsList className="bg-muted/50 w-max sm:w-auto">
-              <TabsTrigger value="all" onClick={() => setStatusFilter("all")} className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <TabsTrigger value="all" className="data-[state=active]:bg-background text-xs sm:text-sm">
                 All <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.all}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="in_progress" onClick={() => setStatusFilter("in_progress")} className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <TabsTrigger value="in_progress" className="data-[state=active]:bg-background text-xs sm:text-sm">
                 In Progress <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.in_progress}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="review" onClick={() => setStatusFilter("review")} className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <TabsTrigger value="review" className="data-[state=active]:bg-background text-xs sm:text-sm">
                 Review <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.review}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="won" onClick={() => setStatusFilter("won")} className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <TabsTrigger value="won" className="data-[state=active]:bg-background text-xs sm:text-sm">
                 Won <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.won}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="lost" onClick={() => setStatusFilter("lost")} className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <TabsTrigger value="lost" className="data-[state=active]:bg-background text-xs sm:text-sm">
                 Lost <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.lost}</Badge>
               </TabsTrigger>
             </TabsList>
@@ -410,11 +390,8 @@ export default function AdminProposals() {
                           size="sm" 
                           className="text-xs font-semibold text-muted-foreground uppercase tracking-wider -ml-3 h-auto py-1"
                           onClick={() => {
-                            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-                            toast({
-                              title: "Sorting",
-                              description: `Sorted proposals ${sortOrder === "asc" ? "descending" : "ascending"}`,
-                            });
+                            setSortBy("title");
+                            setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
                           }}
                         >
                           Proposal <ArrowUpDown className="w-3 h-3 ml-1" />
@@ -477,13 +454,9 @@ export default function AdminProposals() {
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                              proposal.aiScore >= 85 ? 'ai-score-high' :
-                              proposal.aiScore >= 70 ? 'ai-score-medium' :
-                              'ai-score-low'
-                            }`}>
+                            <Badge variant="outline" className={`${getAiScoreBadgeClass(proposal.aiScore)} text-[10px] font-medium`}>
                               {proposal.aiScore}%
-                            </div>
+                            </Badge>
                           </td>
                           <td className="py-3 px-4 text-sm font-semibold">{proposal.value}</td>
                           <td className="py-3 px-4">
@@ -595,13 +568,9 @@ export default function AdminProposals() {
                           <StatusIcon className="w-3 h-3 mr-1" />
                           {statusConfig.label}
                         </Badge>
-                        <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium shrink-0 ${
-                          proposal.aiScore >= 85 ? 'ai-score-high' :
-                          proposal.aiScore >= 70 ? 'ai-score-medium' :
-                          'ai-score-low'
-                        }`}>
+                        <Badge variant="outline" className={`${getAiScoreBadgeClass(proposal.aiScore)} text-[10px] font-medium shrink-0`}>
                           AI: {proposal.aiScore}%
-                        </div>
+                        </Badge>
                       </div>
 
                       <div className="space-y-2">

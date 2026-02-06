@@ -65,6 +65,12 @@ import RFPDetail from "@/pages/customer/rfp-detail";
 import RFPReview from "@/pages/customer/rfp-review";
 import PublicProposalAnswer from "@/pages/customer/public-proposal-answer";
 
+/** True if user can access the admin panel (admin or super_admin). */
+function isAdminPanelRole(role: string) {
+  const r = (role || "").toLowerCase();
+  return r === "admin" || r === "super_admin";
+}
+
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, currentRole } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -73,7 +79,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   if (!user) {
     return <Redirect to="/auth" />;
   }
-  if (role !== "admin") {
+  if (!isAdminPanelRole(role)) {
     if (role === "collaborator") return <Redirect to="/collaborator" />;
     return <Redirect to="/dashboard" />;
   }
@@ -91,12 +97,25 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   );
 }
 
+/** Admin routes that only super_admin may access; admin is redirected to /admin. */
+function SuperAdminOnlyRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, currentRole } = useAuth();
+  const role = (currentRole || "").toLowerCase();
+  if (!user) return <Redirect to="/auth" />;
+  if (!isAdminPanelRole(role)) {
+    if (role === "collaborator") return <Redirect to="/collaborator" />;
+    return <Redirect to="/dashboard" />;
+  }
+  if (role !== "super_admin") return <Redirect to="/admin" />;
+  return <AdminRoute component={Component} />;
+}
+
 function PublicRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, currentRole } = useAuth();
   
   if (user) {
     const role = (currentRole || "").toLowerCase();
-    if (role === "admin") {
+    if (isAdminPanelRole(role)) {
       return <Redirect to="/admin" />;
     } else if (role === "collaborator") {
       return <Redirect to="/collaborator" />;
@@ -116,7 +135,7 @@ function CustomerRoute({ component: Component }: { component: React.ComponentTyp
   if (!user) {
     return <Redirect to="/auth" />;
   }
-  if (role === "admin") {
+  if (isAdminPanelRole(role)) {
     return <Redirect to="/admin" />;
   }
   if (role === "collaborator") {
@@ -145,7 +164,7 @@ function CollaboratorRoute({ component: Component }: { component: React.Componen
     return <Redirect to="/auth" />;
   }
   if (role !== "collaborator") {
-    if (role === "admin") return <Redirect to="/admin" />;
+    if (isAdminPanelRole(role)) return <Redirect to="/admin" />;
     return <Redirect to="/dashboard" />;
   }
 
@@ -211,11 +230,11 @@ function Router() {
       <Route path="/admin/roles" component={() => <AdminRoute component={AdminRoles} />} />
       <Route path="/admin/rfp-templates" component={() => <AdminRoute component={AdminRfpTemplates} />} />
       <Route path="/admin/knowledge-base" component={() => <AdminRoute component={AdminKnowledgeBase} />} />
-      <Route path="/admin/subscription-billing" component={() => <AdminRoute component={AdminSubscriptionBilling} />} />
+      <Route path="/admin/subscription-billing" component={() => <SuperAdminOnlyRoute component={AdminSubscriptionBilling} />} />
       <Route path="/admin/users-terms" component={() => <AdminRoute component={AdminUsersTerms} />} />
       <Route path="/admin/content" component={() => <AdminRoute component={AdminContent} />} />
       <Route path="/admin/content/editor" component={() => <AdminRoute component={AdminContentEditor} />} />
-      <Route path="/admin/ai-config" component={() => <AdminRoute component={AdminAIConfig} />} />
+      <Route path="/admin/ai-config" component={() => <SuperAdminOnlyRoute component={AdminAIConfig} />} />
       <Route path="/admin/credits" component={() => <AdminRoute component={AdminCredits} />} />
       <Route path="/admin/usage" component={() => <AdminRoute component={AdminUsage} />} />
       <Route path="/admin/integrations" component={() => <AdminRoute component={AdminIntegrations} />} />

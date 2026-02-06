@@ -73,10 +73,13 @@ interface AdminSidebarProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+const SUPER_ADMIN_ONLY_HREFS = new Set(["/admin/ai-config", "/admin/subscription-billing"]);
+
 export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) {
   const [location] = useLocation();
   const isMobile = useIsMobile();
-  const { user } = useAuth();
+  const { user, currentRole } = useAuth();
+  const isSuperAdmin = (currentRole || "").toLowerCase() === "super_admin";
   const { primaryLogoUrl } = useBranding();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navItemRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
@@ -131,9 +134,9 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
 
   // Always show full nav: use default groups as base so every page is linked (Organizations, Audit Logs, etc.).
   // When API returns data, only override label/icon for hrefs that exist in API; never drop links.
+  // For admin (non–super_admin), hide AI Config and Subscription & Billing.
   const navGroups: NavGroup[] = useMemo(() => {
     const raw = sidebarData?.navGroups ?? [];
-    if (raw.length === 0) return defaultNavGroups;
     const apiItemsByHref = new Map<string, { label: string; icon: string; badge?: string | number; badgeVariant?: string }>();
     raw.forEach((group: { title: string; items: { href: string; label: string; icon: string; badge?: string | number; badgeVariant?: string }[] }) => {
       (group.items || []).forEach((item: { href: string; label: string; icon: string; badge?: string | number; badgeVariant?: string }) => {
@@ -145,7 +148,7 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
         });
       });
     });
-    return defaultNavGroups.map((group) => ({
+    const base = raw.length === 0 ? defaultNavGroups : defaultNavGroups.map((group) => ({
       title: group.title,
       items: group.items.map((item) => {
         const api = apiItemsByHref.get(item.href);
@@ -161,12 +164,17 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
         return item;
       }),
     }));
-  }, [sidebarData?.navGroups, defaultNavGroups]);
+    if (isSuperAdmin) return base;
+    return base.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !SUPER_ADMIN_ONLY_HREFS.has(item.href)),
+    }));
+  }, [sidebarData?.navGroups, defaultNavGroups, isSuperAdmin]);
   const sidebarWidget = sidebarData?.sidebarWidget ?? { title: "AI Credits", usedLabel: "Used this month", usedValue: "45,789", percentage: 75, percentageLabel: "75% of monthly allocation" };
 
   const { data: apiProposals = [] } = useQuery<unknown[]>({
     queryKey: ["/api/proposals", { userId: user?.id, userRole: user?.role }],
-    enabled: !!user?.id && (user?.role === "admin"),
+    enabled: !!user?.id && (user?.role === "admin" || user?.role === "super_admin"),
   });
   const proposalCount = Array.isArray(apiProposals) ? apiProposals.length : 0;
 

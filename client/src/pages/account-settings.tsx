@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { softBadgeClasses } from "@/lib/badge-classes";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -889,7 +890,7 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
                             {securitySection.activeSessions.sessionDescription}
                           </p>
                         </div>
-                        <Badge className="badge-status-success text-[10px] sm:text-xs shrink-0">
+                        <Badge variant="outline" className={`${softBadgeClasses.success} text-[10px] sm:text-xs shrink-0`}>
                           {securitySection.activeSessions.currentBadge}
                         </Badge>
                       </div>
@@ -966,7 +967,7 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
                           {billingSection.plan.planName}
                         </p>
                       </div>
-                      <Badge className="bg-primary/10 text-primary text-[10px] sm:text-xs shrink-0">
+                      <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs shrink-0`}>
                         {billingSection.plan.statusBadge}
                       </Badge>
                     </div>

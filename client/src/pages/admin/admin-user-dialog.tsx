@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { fetchAdminOptions } from "@/api/admin-data";
 import { getApiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -24,19 +25,27 @@ interface UserDialogProps {
   user?: any;
 }
 
+const DEFAULT_ROLES = [
+  { value: "super_admin", label: "Super Admin" },
+  { value: "admin", label: "Admin" },
+  { value: "customer", label: "Customer" },
+  { value: "collaborator", label: "Collaborator" },
+];
+
 export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentRole } = useAuth();
   const { data: optionsData } = useQuery({
     queryKey: ["admin", "options"],
     queryFn: fetchAdminOptions,
   });
-  const roles = optionsData?.roles ?? [
-    { value: "super_admin", label: "Super Admin" },
-    { value: "admin", label: "Admin" },
-    { value: "customer", label: "Customer" },
-    { value: "collaborator", label: "Collaborator" },
-  ];
+  const roles = useMemo(() => {
+    const list = optionsData?.roles ?? DEFAULT_ROLES;
+    const r = (currentRole || "").toLowerCase();
+    if (r === "super_admin") return list;
+    return list.filter((x: { value: string }) => (x.value || "").toLowerCase() !== "super_admin");
+  }, [optionsData?.roles, currentRole]);
   const [formData, setFormData] = useState({
     firstName: user?.firstName || "",
     lastName: user?.lastName || "",

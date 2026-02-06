@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { softBadgeClasses } from "@/lib/badge-classes";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -390,7 +391,7 @@ export default function AdminSettings() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold text-base sm:text-lg">{billing.planName ?? "Professional Plan"}</h3>
-                    <Badge className="bg-primary text-white text-[10px] sm:text-xs">Current</Badge>
+                    <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs`}>Current</Badge>
                   </div>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-1">{billing.planPrice ?? "$199/month"} • {billing.billingInterval ?? "Billed annually"}</p>
                 </div>

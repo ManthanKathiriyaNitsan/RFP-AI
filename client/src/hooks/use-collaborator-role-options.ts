@@ -21,7 +21,7 @@ const DEFAULT_PERMISSIONS: CollaboratorPermissions = {
   canGenerateAi: false,
 };
 
-export type RoleOptionWithIcon = { value: string; label: string; icon: LucideIcon };
+export type RoleOptionWithIcon = { value: string; label: string; description?: string; icon: LucideIcon };
 
 export function useCollaboratorRoleOptions() {
   const { data, isLoading, isError, error } = useQuery({

@@ -72,9 +72,9 @@ export function ProposalDiscussionTab({ proposalId, canComment, questionsHref }:
       items.push({
         type: "team",
         id: `team-${m.id}`,
-        createdAt: m.createdAt,
-        authorId: m.authorId,
-        authorName: m.authorName,
+        createdAt: m.createdAt ?? "",
+        authorId: m.authorId ?? 0,
+        authorName: m.authorName ?? "Unknown",
         text: m.text,
       });
     });
@@ -83,12 +83,12 @@ export function ProposalDiscussionTab({ proposalId, canComment, questionsHref }:
         items.push({
           type: "reply",
           id: `reply-${c.id}`,
-          createdAt: c.createdAt,
+          createdAt: c.createdAt ?? "",
           authorId: c.authorId,
-          authorName: c.authorName,
-          text: c.text,
+          authorName: c.authorName ?? "Unknown",
+          text: c.text ?? c.message ?? "",
           answerId: g.answerId,
-          questionText: g.questionText,
+          questionText: g.questionText ?? "",
           parentId: c.parentId ?? null,
         });
         (c.replies ?? []).forEach(pushComment);
@@ -104,7 +104,7 @@ export function ProposalDiscussionTab({ proposalId, canComment, questionsHref }:
     if (!text) return;
     if (replyingTo) {
       addCommentMutation.mutate(
-        { answerId: replyingTo.answerId, text, parentId: replyingTo.parentId ?? undefined },
+        { answerId: replyingTo.answerId, message: text, text, parentId: replyingTo.parentId ?? undefined },
         {
           onSuccess: () => {
             setMessageText("");

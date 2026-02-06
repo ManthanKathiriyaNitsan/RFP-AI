@@ -28,6 +28,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   AreaChart,
   Area,
   XAxis,
@@ -51,6 +56,18 @@ const STATS_ICON_MAP: Record<string, LucideIcon> = {
   TrendingUp,
   DollarSign,
 };
+
+/** Format revenue/currency for stat cards so large numbers don't overflow (e.g. $2.13T, $1.5B). */
+function formatStatValue(stat: { title: string; value: string }): string {
+  if (stat.title !== "Revenue") return stat.value;
+  const raw = String(stat.value).replace(/[$,]/g, "").trim();
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return stat.value;
+  if (Math.abs(num) >= 1e3) {
+    return "$" + new Intl.NumberFormat("en-US", { notation: "compact", compactDisplay: "short", maximumFractionDigits: 2 }).format(num);
+  }
+  return "$" + num.toLocaleString();
+}
 
 // Custom Tooltip for Proposal Trends
 const ProposalTrendsTooltip = ({ active, payload, label }: TooltipProps<any, any>) => {
@@ -133,8 +150,15 @@ export default function AdminDashboard() {
   const revenueData = data?.revenueData ?? [];
   const categoryData = data?.categoryData ?? [];
   const statsDataRaw = data?.statsData ?? [];
-  const statsData = statsDataRaw.map((s: { icon?: string; [k: string]: unknown }) => ({
+  type StatWithIcon = { icon: LucideIcon; title: string; value: string; change: string; trend: string; bgColor?: string; color?: string };
+  const statsData: StatWithIcon[] = statsDataRaw.map((s: { icon?: string; title?: string; value?: string; change?: string; trend?: string; bgColor?: string; color?: string }) => ({
     ...s,
+    title: s.title ?? "",
+    value: s.value ?? "",
+    change: s.change ?? "",
+    trend: s.trend ?? "up",
+    bgColor: s.bgColor ?? "",
+    color: s.color ?? "",
     icon: STATS_ICON_MAP[s.icon as string] ?? FileText,
   }));
   const recentProposals = data?.recentProposals ?? [];
@@ -186,19 +210,28 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statsData.map((stat, index) => (
-          <div key={index} className="metric-card group" data-testid={`card-stat-${index}`}>
-            <div className="flex items-start justify-between">
-              <div className={`w-10 h-10 rounded-xl ${stat.bgColor} flex items-center justify-center`}>
+          <div key={index} className="metric-card group min-w-0" data-testid={`card-stat-${index}`}>
+            <div className="flex items-start justify-between min-w-0">
+              <div className={`w-10 h-10 rounded-xl ${stat.bgColor} flex items-center justify-center shrink-0`}>
                 <stat.icon className="w-5 h-5" style={{ color: stat.color }} />
               </div>
-              <div className={`flex items-center gap-1 text-xs font-medium ${stat.trend === 'up' ? 'text-emerald' : 'text-red'}`}>
+              <div className={`flex items-center gap-1 text-xs font-medium shrink-0 ${stat.trend === 'up' ? 'text-emerald' : 'text-red'}`}>
                 {stat.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                 {stat.change}
               </div>
             </div>
-            <div className="mt-3">
-              <p className="text-xl sm:text-2xl font-bold text-foreground">{stat.value}</p>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{stat.title}</p>
+            <div className="mt-3 min-w-0 overflow-hidden">
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xl sm:text-2xl font-bold text-foreground truncate cursor-default">
+                    {formatStatValue(stat)}
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[min(90vw,24rem)] break-all">
+                  {stat.value}
+                </TooltipContent>
+              </UITooltip>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">{stat.title}</p>
             </div>
           </div>
         ))}

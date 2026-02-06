@@ -54,6 +54,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { getProposalStatusBadgeClass, softBadgeClasses } from "@/lib/badge-classes";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -620,18 +621,13 @@ export default function RFPDetail() {
   };
 
   const getStatusConfig = (status: string) => {
-    switch (status) {
-      case "won":
-        return { label: "Won", icon: CheckCircle, className: "bg-emerald-500/10 text-emerald-600" };
-      case "lost":
-        return { label: "Lost", icon: XCircle, className: "bg-red-500/10 text-red-600" };
-      case "in_progress":
-        return { label: "In Progress", icon: Clock, className: "bg-primary/10 text-primary" };
-      case "review":
-        return { label: "Review", icon: AlertCircle, className: "bg-amber-500/10 text-amber-600" };
-      default:
-        return { label: "Draft", icon: FileText, className: "badge-status-draft" };
-    }
+    const labels: Record<string, string> = { won: "Won", lost: "Lost", in_progress: "In Progress", review: "Review", completed: "Completed", draft: "Draft" };
+    const icons: Record<string, typeof FileText> = { won: CheckCircle, lost: XCircle, in_progress: Clock, review: AlertCircle, completed: CheckCircle, draft: FileText };
+    return {
+      label: labels[status] ?? "Draft",
+      icon: icons[status] ?? FileText,
+      className: getProposalStatusBadgeClass(status),
+    };
   };
 
 
@@ -1296,12 +1292,12 @@ export default function RFPDetail() {
                   </CardDescription>
                 </div>
                 {isGenerating ? (
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 shrink-0">
+                  <Badge variant="outline" className={`${softBadgeClasses.primary} shrink-0`}>
                     <Clock className="w-3 h-3 mr-1 animate-spin" />
                     Generating {generationProgress}%
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 shrink-0">
+                  <Badge variant="outline" className={`${softBadgeClasses.primary} shrink-0`}>
                     <Sparkles className="w-3 h-3 mr-1" />
                     AI Generated
                   </Badge>
@@ -1321,7 +1317,7 @@ export default function RFPDetail() {
                         </h3>
                         <div></div>
                         <div className="flex justify-end">
-                          <Badge variant="outline" className="text-xs text-foreground/90 border-border bg-muted/50">Original</Badge>
+                          <Badge variant="outline" className={`text-xs ${softBadgeClasses.archived}`}>Original</Badge>
                         </div>
                       </div>
                       <div className="prose max-w-none space-y-6 px-4">
@@ -1351,7 +1347,7 @@ export default function RFPDetail() {
                           )}
                         </div>
                         <div className="flex justify-end">
-                          <Badge variant="outline" className={`text-xs ${isGenerating ? "bg-primary/10 text-primary border-primary/20" : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"}`}>
+                          <Badge variant="outline" className={`text-xs ${isGenerating ? softBadgeClasses.primary : softBadgeClasses.success}`}>
                             {isGenerating ? (
                               <>
                                 <Sparkles className="w-3 h-3 mr-1 animate-pulse" />

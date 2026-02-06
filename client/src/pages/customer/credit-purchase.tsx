@@ -1,22 +1,15 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Coins, Check, CreditCard, ArrowLeft } from "lucide-react";
+import { Coins, CreditCard, ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchCreditPlans, purchaseCredits, type CreditPlanItem } from "@/api/customer-data";
-
-const DEFAULT_PLANS: CreditPlanItem[] = [
-  { id: "starter", name: "Starter", price: 29, credits: 100, features: ["100 AI Processing Credits", "Basic Templates", "Email Support"] },
-  { id: "professional", name: "Professional", price: 79, credits: 300, popular: true, features: ["300 AI Processing Credits", "Premium Templates", "Priority Support", "Advanced Analytics"] },
-  { id: "enterprise", name: "Enterprise", price: 199, credits: 1000, features: ["1000 AI Processing Credits", "All Templates", "24/7 Support", "Custom Branding", "API Access"] },
-];
 
 export default function CreditPurchase() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
@@ -27,12 +20,15 @@ export default function CreditPurchase() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
 
-  const { data: plansData = [] } = useQuery({
+  const { data: plansData, isLoading: plansLoading } = useQuery({
     queryKey: ["customer", "credits", "plans"],
     queryFn: fetchCreditPlans,
     staleTime: 5 * 60 * 1000,
   });
-  const pricingPlans = useMemo(() => (Array.isArray(plansData) && plansData.length > 0 ? plansData : DEFAULT_PLANS), [plansData]);
+  const pricingPlans: CreditPlanItem[] = useMemo(
+    () => (Array.isArray(plansData) ? plansData : []),
+    [plansData]
+  );
 
   const [paymentData, setPaymentData] = useState({
     cardNumber: "",
@@ -115,42 +111,68 @@ export default function CreditPurchase() {
             </CardContent>
           </Card>
 
-          {/* Pricing Plans */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-            {pricingPlans.map((plan) => (
-              <Card key={plan.id} className={`relative ${plan.popular ? 'border-primary' : ''}`}>
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground text-[10px] sm:text-xs">Most Popular</Badge>
-                  </div>
-                )}
-                
-                <CardHeader className="text-center p-4 sm:p-6">
-                  <CardTitle className="text-lg sm:text-xl">{plan.name}</CardTitle>
-                  <div className="text-2xl sm:text-3xl font-bold">${plan.price}</div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">{plan.credits} Credits</p>
-                </CardHeader>
-                
-                <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
-                  <ul className="space-y-2 sm:space-y-3">
-                    {plan.features.map((feature, index) => (
-                      <li key={index} className="flex items-center space-x-2 sm:space-x-3">
-                        <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        <span className="text-xs sm:text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  
-                  <Button 
-                    className={`w-full text-xs sm:text-sm ${plan.popular ? '' : 'variant-outline'}`}
-                    onClick={() => handlePlanSelect(plan.id)}
+          {/* Pricing Plans (dynamic from super admin – no static fallback) */}
+          {plansLoading ? (
+            <Card>
+              <CardContent className="p-8 text-center text-muted-foreground">
+                Loading plans…
+              </CardContent>
+            </Card>
+          ) : pricingPlans.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Coins className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-sm font-medium text-foreground">No credit plans available</p>
+                <p className="text-xs text-muted-foreground mt-1">Plans are created by your administrator. Please check back later or contact support.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+              {pricingPlans.map((plan) => {
+                const perCredit = plan.credits > 0 ? plan.price / plan.credits : 0;
+                return (
+                  <Card
+                    key={plan.id}
+                    className={`border shadow-sm relative overflow-hidden ${plan.popular ? "ring-2 ring-primary" : ""}`}
                   >
-                    Purchase
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    {plan.popular && (
+                      <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-2 sm:px-3 py-1 rounded-bl-lg">
+                        POPULAR
+                      </div>
+                    )}
+                    <CardContent className="p-4 sm:p-5">
+                      <h3 className="font-semibold text-base sm:text-lg">{plan.name}</h3>
+                      <div className="mt-3 sm:mt-4 mb-4 sm:mb-6">
+                        <span className="text-2xl sm:text-3xl font-bold">${plan.price}</span>
+                        {plan.credits > 0 && (
+                          <span className="text-xs sm:text-sm text-muted-foreground">/mo</span>
+                        )}
+                      </div>
+                      <div className="space-y-2 mb-4 sm:mb-6">
+                        <p className="text-xs sm:text-sm">
+                          {plan.credits > 0
+                            ? `${plan.credits.toLocaleString()} credits`
+                            : "Unlimited credits"}
+                        </p>
+                        {perCredit > 0 && (
+                          <p className="text-[10px] sm:text-xs text-muted-foreground">
+                            ${perCredit.toFixed(4)} per credit
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        className={`w-full text-xs sm:text-sm ${plan.popular ? "theme-gradient-bg text-white border-0 hover:opacity-95" : ""}`}
+                        variant={plan.popular ? "default" : "outline"}
+                        onClick={() => handlePlanSelect(plan.id)}
+                      >
+                        Select Plan
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </>
       ) : (
         /* Payment Form */

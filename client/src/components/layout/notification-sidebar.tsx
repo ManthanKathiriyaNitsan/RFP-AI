@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Bell, Check, X, Clock, AlertCircle, Info, CheckCircle2, Trash2, AtSign, Calendar, RefreshCw } from "lucide-react";
+import { Bell, Check, X, Clock, AlertCircle, Info, CheckCircle2, Trash2, AtSign, Calendar, RefreshCw, MessageSquare, MessageCircle, Coins, Building2, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -9,13 +9,14 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useToast } from "@/hooks/use-toast";
 import {
-  fetchCustomerNotifications,
+  fetchNotifications,
   markNotificationRead,
   dismissNotification,
   markAllNotificationsRead,
   dismissAllNotifications,
-  type CustomerNotification,
-} from "@/api/customer-data";
+  type AppNotification,
+  type NotificationType,
+} from "@/api/notifications";
 import { QueryErrorState } from "@/components/shared/query-error-state";
 
 interface NotificationSidebarProps {
@@ -23,7 +24,7 @@ interface NotificationSidebarProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const getNotificationIcon = (type: CustomerNotification["type"]) => {
+const getNotificationIcon = (type: NotificationType) => {
   switch (type) {
     case "success":
       return CheckCircle2;
@@ -32,6 +33,16 @@ const getNotificationIcon = (type: CustomerNotification["type"]) => {
       return AlertCircle;
     case "mention":
       return AtSign;
+    case "comment":
+      return MessageSquare;
+    case "chat":
+      return MessageCircle;
+    case "credit_added":
+      return Coins;
+    case "organization_created":
+      return Building2;
+    case "collaboration_invite":
+      return UserPlus;
     case "deadline_reminder":
       return Calendar;
     case "status_change":
@@ -41,7 +52,7 @@ const getNotificationIcon = (type: CustomerNotification["type"]) => {
   }
 };
 
-const getNotificationColor = (type: CustomerNotification["type"]) => {
+const getNotificationColor = (type: NotificationType) => {
   switch (type) {
     case "success":
       return "text-green-500";
@@ -51,6 +62,15 @@ const getNotificationColor = (type: CustomerNotification["type"]) => {
       return "text-red-500";
     case "mention":
       return "text-primary";
+    case "comment":
+    case "chat":
+      return "text-blue-500";
+    case "credit_added":
+      return "text-emerald-500";
+    case "organization_created":
+      return "text-violet-500";
+    case "collaboration_invite":
+      return "text-cyan-500";
     case "deadline_reminder":
       return "text-amber-500";
     case "status_change":
@@ -64,12 +84,41 @@ export function NotificationSidebar({ open = false, onOpenChange }: Notification
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: apiNotifications = [], isError, error, refetch } = useQuery({
-    queryKey: ["customer", "notifications"],
-    queryFn: fetchCustomerNotifications,
+    queryKey: ["notifications"],
+    queryFn: fetchNotifications,
     refetchInterval: 4000,
   });
+  const prevIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (open && typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, [open]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    const unread = apiNotifications.filter((n: AppNotification) => !n.read);
+    const currentIds = new Set(unread.map((n: AppNotification) => n.id));
+    const previous = prevIdsRef.current;
+    // Only show browser notifications for persisted events (id starts with "n_"), not computed ones like "credits_low" or "deadline_*"
+    const persistedUnread = unread.filter((n: AppNotification) => n.id.startsWith("n_"));
+    const newPersistedIds = Array.from(persistedUnread.map((n: AppNotification) => n.id)).filter((id) => !previous.has(id));
+    // Only fire when we have a previous state (avoids re-showing on every navigation/remount)
+    if (previous.size > 0 && newPersistedIds.length > 0 && Notification.permission === "granted") {
+      persistedUnread
+        .filter((n: AppNotification) => newPersistedIds.includes(n.id))
+        .slice(0, 3)
+        .forEach((n: AppNotification) => {
+          try {
+            new Notification(n.title, { body: n.message || n.body || "" });
+          } catch {
+            // ignore
+          }
+        });
+    }
+    prevIdsRef.current = currentIds;
+  }, [apiNotifications]);
   const notifications = useMemo(() => {
-    return apiNotifications.map((n) => {
+    return apiNotifications.map((n: AppNotification) => {
       const link = n.link ?? (n.meta?.proposalId != null ? `/rfp/${n.meta.proposalId}` : undefined);
       return {
         ...n,
@@ -85,22 +134,22 @@ export function NotificationSidebar({ open = false, onOpenChange }: Notification
 
   const readMutation = useMutation({
     mutationFn: markNotificationRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
     onError: () => toast({ title: "Error", description: "Could not mark as read.", variant: "destructive" }),
   });
   const dismissMutation = useMutation({
     mutationFn: dismissNotification,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
     onError: () => toast({ title: "Error", description: "Could not dismiss notification.", variant: "destructive" }),
   });
   const readAllMutation = useMutation({
     mutationFn: markAllNotificationsRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
     onError: () => toast({ title: "Error", description: "Could not mark all as read.", variant: "destructive" }),
   });
   const dismissAllMutation = useMutation({
     mutationFn: dismissAllNotifications,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["customer", "notifications"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
     onError: () => toast({ title: "Error", description: "Could not dismiss all.", variant: "destructive" }),
   });
 

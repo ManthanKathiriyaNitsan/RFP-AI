@@ -60,8 +60,12 @@ export default function AdminContent() {
     queryFn: fetchAdminContent,
   });
   const contentCategoriesRaw = data?.contentCategories ?? [];
-  const contentCategories = contentCategoriesRaw.map((c: { icon?: string; [k: string]: unknown }) => ({
-    ...c,
+  type ContentCategory = { id: number; name: string; color: string; count: number; icon: import("lucide-react").LucideIcon };
+  const contentCategories: ContentCategory[] = contentCategoriesRaw.map((c: { id?: number; name?: string; color?: string; count?: number; icon?: string; [k: string]: unknown }) => ({
+    id: c.id ?? 0,
+    name: (c.name as string) ?? "",
+    color: (c.color as string) ?? "",
+    count: (c.count as number) ?? 0,
     icon: CONTENT_ICON_MAP[c.icon as string] ?? FileText,
   }));
   const [contentItemsState, setContentItemsState] = useState(data?.contentItems ?? []);

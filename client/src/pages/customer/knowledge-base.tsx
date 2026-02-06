@@ -242,13 +242,13 @@ export default function KnowledgeBase() {
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v ?? "documents")} className="w-full">
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="history">Version History</TabsTrigger>
+          <TabsTrigger value="documents" type="button">Documents</TabsTrigger>
+          <TabsTrigger value="history" type="button">Version History</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="documents" className="space-y-3 sm:space-y-4">
+        <TabsContent value="documents" forceMount className="space-y-3 sm:space-y-4 data-[state=inactive]:hidden">
           {/* Filters */}
           <Card>
             <CardContent className="p-3 sm:p-4">
@@ -392,7 +392,7 @@ export default function KnowledgeBase() {
           )}
         </TabsContent>
 
-        <TabsContent value="history" className="space-y-3 sm:space-y-4">
+        <TabsContent value="history" forceMount className="space-y-3 sm:space-y-4 data-[state=inactive]:hidden">
           <Card>
             <CardHeader className="p-3 sm:p-4">
               <CardTitle className="text-base sm:text-lg">Version History</CardTitle>
@@ -484,7 +484,7 @@ export default function KnowledgeBase() {
         </DialogContent>
       </Dialog>
 
-      {PromptDialog}
+      <PromptDialog />
     </div>
   );
 }

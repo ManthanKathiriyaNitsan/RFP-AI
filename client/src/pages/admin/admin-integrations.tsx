@@ -77,7 +77,7 @@ export default function AdminIntegrations() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {PromptDialog}
+      <PromptDialog />
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-integrations-title">Integrations</h1>
@@ -164,7 +164,7 @@ export default function AdminIntegrations() {
           <Card className="mt-4 border-destructive/50 bg-destructive/5">
             <CardContent className="p-4">
               <p className="text-sm font-medium">Failed to load integrations</p>
-              <p className="text-xs text-muted-foreground mt-1">{error instanceof Error ? error.message : "Check your connection and try again."}</p>
+              <p className="text-xs text-muted-foreground mt-1">{error != null && typeof (error as { message?: string }).message === "string" ? (error as Error).message : "Check your connection and try again."}</p>
             </CardContent>
           </Card>
         )}

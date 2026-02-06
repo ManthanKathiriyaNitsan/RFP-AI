@@ -60,7 +60,7 @@ export interface CreditsData {
   totalCredits?: number;
   usedCredits?: number;
   remainingCredits?: number;
-  creditPackages?: { id: number; name: string; credits: number; price: number; popular: boolean; perCredit: number }[];
+  creditPackages?: { id: string; name: string; credits: number; price: number; popular: boolean; perCredit: number }[];
   transactions?: { id: number; type: string; description: string; amount: number; date: string; user: string; status: string }[];
   userAllocations?: { id: number; name: string; avatar: string; allocated: number; used: number; remaining: number }[];
 }
@@ -74,6 +74,8 @@ export interface BillingPlanItem {
   creditsIncluded?: number;
   apiQuotaPerMonth?: number;
   features?: string[];
+  /** When true, shown as "Most popular" on admin credits and customer purchase. */
+  popular?: boolean;
 }
 
 export interface BillingPlansData {
@@ -177,6 +179,7 @@ export interface AIConfigData {
   systemPromptDefault?: string;
   aiModels?: { id: string; name: string; provider: string; speed: string; quality: string; cost: string }[];
   qualityMetrics?: { label: string; value: number; target: number }[];
+  features?: { autoSuggest?: boolean; contentFiltering?: boolean; allowBulkGenerate?: boolean; allowToneSelection?: boolean };
 }
 
 export interface SettingsData {
@@ -201,6 +204,7 @@ export interface SecurityData {
   defaultSessionDuration?: string;
   complianceCertifications?: { name: string; status: string; date: string; icon: string }[];
   securityAlerts?: { id: number; type: string; message: string; action: string; time: string }[];
+  securityAlertsCount?: number;
   recentActivity?: { id: number; action: string; user: string; ip: string; location: string; time: string; status: string }[];
   securitySettings?: { id: number; name: string; description: string; enabled: boolean }[];
   /** Session expiration */
@@ -211,6 +215,10 @@ export interface SecurityData {
   ipRestrictionEnabled?: boolean;
   ipAllowlist?: string[];
   ipDenylist?: string[];
+  requireTwoFactorForAllUsers?: boolean;
+  securityScore?: number;
+  twoFaAdoption?: number;
+  soc2Status?: string;
 }
 
 export interface ProposalsNewSupportData {
@@ -384,7 +392,7 @@ export function fetchAdminDashboard(): Promise<DashboardData> {
 }
 
 export function fetchAdminUsage(params?: { dateRange?: string }): Promise<UsageData> {
-  return getAdminJson<UsageData>("/api/v1/admin/usage", params ? { dateRange: params.dateRange } : undefined);
+  return getAdminJson<UsageData>("/api/v1/admin/usage", params?.dateRange != null ? { dateRange: params.dateRange } : undefined);
 }
 
 export function fetchAdminCredits(): Promise<CreditsData> {
@@ -530,7 +538,7 @@ export async function updateAdminApiQuota(body: { limitPerMonth?: number }): Pro
 }
 
 export function fetchAdminAnalytics(params?: { dateRange?: string }): Promise<AnalyticsData> {
-  return getAdminJson<AnalyticsData>("/api/v1/admin/analytics", params ? { dateRange: params.dateRange } : undefined);
+  return getAdminJson<AnalyticsData>("/api/v1/admin/analytics", params?.dateRange != null ? { dateRange: params.dateRange } : undefined);
 }
 
 export function fetchAdminOptions(): Promise<AdminOptionsData> {
@@ -664,6 +672,8 @@ export async function updateAdminSecurityConfig(body: Partial<{
   ipRestrictionEnabled: boolean;
   ipAllowlist: string[];
   ipDenylist: string[];
+  securitySettings?: unknown;
+  requireTwoFactorForAllUsers?: boolean;
 }>): Promise<SecurityData | null> {
   try {
     const token = authStorage.getAccessToken();

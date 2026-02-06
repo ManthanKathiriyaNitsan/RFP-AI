@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
 import { fetchAdminCredits, allocateAdminCredits, fetchAdminUsersList, assignPlanToCustomer } from "@/api/admin-data";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { 
@@ -23,6 +22,7 @@ import { QueryErrorState } from "@/components/shared/query-error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { softBadgeClasses } from "@/lib/badge-classes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePrompt } from "@/hooks/use-prompt";
@@ -43,7 +43,7 @@ export default function AdminCredits() {
   const [allocateUserId, setAllocateUserId] = useState<string>("");
   const [allocateAmount, setAllocateAmount] = useState("");
   const [assignPlanOpen, setAssignPlanOpen] = useState(false);
-  const [assignPlanPackage, setAssignPlanPackage] = useState<{ id: number; name: string; credits: number; price: number } | null>(null);
+  const [assignPlanPackage, setAssignPlanPackage] = useState<{ id: string; name: string; credits: number; price: number } | null>(null);
   const [assignPlanUserId, setAssignPlanUserId] = useState<string>("");
   const [assigning, setAssigning] = useState(false);
   const { toast } = useToast();
@@ -142,7 +142,7 @@ export default function AdminCredits() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {PromptDialog}
+      <PromptDialog />
       <Dialog open={allocateOpen} onOpenChange={setAllocateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -226,27 +226,23 @@ export default function AdminCredits() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-credits-title">Credit Management</h1>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1">Manage AI credits, allocations, and billing.</p>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1">Manage AI credits and allocations.</p>
         </div>
-        <Link href="/admin/subscription-billing" className="w-full sm:w-auto">
-          <Button className="theme-gradient-bg text-white w-full sm:w-auto" data-testid="button-buy-credits">
-            <Plus className="w-4 h-4 mr-2" />
-            Subscription & Billing
-          </Button>
-        </Link>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-        <Card className="border shadow-sm bg-primary/10">
+        <Card className="border shadow-sm">
           <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
-                <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+            <div className="rounded-xl bg-primary/10 p-3 sm:p-4 mb-3 sm:mb-4">
+              <div className="flex items-center justify-between">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                </div>
+                <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs shrink-0`}>Active</Badge>
               </div>
-              <Badge className="bg-primary text-white text-[10px] sm:text-xs shrink-0">Active</Badge>
+              <p className="text-2xl sm:text-3xl font-bold text-primary mt-3">{remainingCredits.toLocaleString()}</p>
             </div>
-            <p className="text-2xl sm:text-3xl font-bold">{remainingCredits.toLocaleString()}</p>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Available Credits</p>
+            <p className="text-xs sm:text-sm text-muted-foreground">Available Credits</p>
             <div className="mt-2 sm:mt-3">
               <Progress value={(usedCredits / totalCredits) * 100} className="h-2" />
               <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{usedCredits.toLocaleString()} of {totalCredits.toLocaleString()} used</p>

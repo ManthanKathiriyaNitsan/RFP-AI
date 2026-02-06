@@ -45,6 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function AdminSubscriptionBilling() {
   const qc = useQueryClient();
@@ -74,6 +75,7 @@ export default function AdminSubscriptionBilling() {
   const [planInterval, setPlanInterval] = useState<"month" | "year">("month");
   const [planCredits, setPlanCredits] = useState<number | "">("");
   const [planApiQuota, setPlanApiQuota] = useState<number | "">("");
+  const [planPopular, setPlanPopular] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
 
   const [assignUserId, setAssignUserId] = useState<string>("");
@@ -90,6 +92,7 @@ export default function AdminSubscriptionBilling() {
     setPlanInterval("month");
     setPlanCredits(10000);
     setPlanApiQuota(5000);
+    setPlanPopular(false);
     setPlanDialogOpen(true);
   };
 
@@ -100,6 +103,7 @@ export default function AdminSubscriptionBilling() {
     setPlanInterval(p.interval);
     setPlanCredits(p.creditsIncluded ?? "");
     setPlanApiQuota(p.apiQuotaPerMonth ?? "");
+    setPlanPopular(p.popular ?? false);
     setPlanDialogOpen(true);
   };
 
@@ -116,6 +120,7 @@ export default function AdminSubscriptionBilling() {
       interval: planInterval,
       creditsIncluded: planCredits === "" ? undefined : Number(planCredits),
       apiQuotaPerMonth: planApiQuota === "" ? undefined : Number(planApiQuota),
+      popular: planPopular,
     };
     if (editingPlan) {
       const updated = await updateAdminBillingPlan(editingPlan.id, payload);
@@ -182,8 +187,8 @@ export default function AdminSubscriptionBilling() {
     }
   };
 
-  const userName = (u: { firstName?: string; lastName?: string; email?: string }) =>
-    [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `User ${u.id}`;
+  const userName = (u: { id?: number; firstName?: string; lastName?: string; email?: string }) =>
+    [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `User ${u.id ?? ""}`;
 
   if (isError) {
     return (
@@ -226,7 +231,12 @@ export default function AdminSubscriptionBilling() {
               {plans.map((p) => (
                 <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border border-border">
                   <div>
-                    <p className="font-medium">{p.name}</p>
+                    <p className="font-medium flex items-center gap-2">
+                      {p.name}
+                      {p.popular && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-primary/15 text-primary">Most popular</span>
+                      )}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       ${p.price}/{p.interval}
                       {p.creditsIncluded != null && ` • ${p.creditsIncluded.toLocaleString()} credits`}
@@ -396,6 +406,10 @@ export default function AdminSubscriptionBilling() {
             <div>
               <Label>API quota per month (optional)</Label>
               <Input type="number" min={0} className="mt-1.5" value={planApiQuota === "" ? "" : planApiQuota} onChange={(e) => setPlanApiQuota(e.target.value === "" ? "" : Number(e.target.value))} placeholder="e.g. 5000" />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox id="plan-popular" checked={planPopular} onCheckedChange={(v) => setPlanPopular(v === true)} />
+              <Label htmlFor="plan-popular" className="text-sm font-normal cursor-pointer">Mark as most popular (shown to customers and in admin credits)</Label>
             </div>
           </div>
           <DialogFooter>

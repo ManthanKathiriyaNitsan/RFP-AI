@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -6,6 +6,7 @@ import { fetchAdminPermissions, fetchAdminOptions } from "@/api/admin-data";
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
+import { toSoftBadgeClass, softBadgeClasses } from "@/lib/badge-classes";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
 import { UserDialog } from "./admin-user-dialog";
@@ -119,11 +120,17 @@ export default function AdminUsers() {
     }
   }, [permissionsData]);
 
+  const { user: currentUser, currentRole } = useAuth();
   const { data: optionsData } = useQuery({
     queryKey: ["admin", "options"],
     queryFn: fetchAdminOptions,
   });
-  const rolesOptions = optionsData?.roles ?? [];
+  const rolesOptions = useMemo(() => {
+    const list = optionsData?.roles ?? [];
+    const r = (currentRole || "").toLowerCase();
+    if (r === "super_admin") return list;
+    return list.filter((x: { value: string }) => (x.value || "").toLowerCase() !== "super_admin");
+  }, [optionsData?.roles, currentRole]);
   const roleDisplay = (optionsData as { roleDisplay?: Record<string, { label: string; icon: string; className: string }> })?.roleDisplay ?? {};
   const statusDisplay = (optionsData as { statusDisplay?: Record<string, { label: string; className: string }> })?.statusDisplay ?? {};
   const pageTitles = (optionsData as { pageTitles?: Record<string, string> })?.pageTitles ?? {};
@@ -147,7 +154,6 @@ export default function AdminUsers() {
   const { confirm, ConfirmDialog } = useConfirm();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const { user: currentUser } = useAuth();
 
   const { data: apiUsers = [], isLoading: isLoadingUsers } = useQuery<any[]>({
     queryKey: ["/api/v1/users"],
@@ -172,8 +178,8 @@ export default function AdminUsers() {
   };
 
   const getStatusConfig = (status: string) => {
-    const config = statusDisplay[status] ?? statusDisplay.default ?? { label: "Pending", className: "badge-status-warning" };
-    return { label: config.label, className: config.className };
+    const config = statusDisplay[status] ?? statusDisplay.default ?? { label: "Pending", className: softBadgeClasses.warning };
+    return { label: config.label, className: toSoftBadgeClass(config.className) ?? softBadgeClasses.warning };
   };
 
   /** Format lastActiveAt as "Just now", "5 min ago", "2 hours ago", "Yesterday", or "Never". */

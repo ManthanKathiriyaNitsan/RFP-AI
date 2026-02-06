@@ -47,7 +47,8 @@ export default function AdminAnalytics() {
   const winLossData = data?.winLossData ?? [];
   const categoryPerformance = data?.categoryPerformance ?? [];
   const kpiMetricsRaw = data?.kpiMetrics ?? [];
-  const kpiMetrics = kpiMetricsRaw.map((k: { icon?: string; [x: string]: unknown }) => ({
+  type KpiMetric = { icon: LucideIcon; trend?: string; change?: string; value?: string; label?: string; description?: string };
+  const kpiMetrics: KpiMetric[] = kpiMetricsRaw.map((k: { icon?: string; [x: string]: unknown }) => ({
     ...k,
     icon: KPI_ICON_MAP[k.icon as string] ?? Target,
   }));
@@ -73,7 +74,7 @@ export default function AdminAnalytics() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {PromptDialog}
+      <PromptDialog />
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-analytics-title">{analyticsTitle}</h1>

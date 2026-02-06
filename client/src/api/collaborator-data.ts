@@ -15,10 +15,10 @@ const DEFAULT_OPTIONS = {
     { value: "completed", label: "Completed" },
   ],
   statusDisplay: {
-    draft: { label: "Draft", className: "badge-status-warning" },
-    in_progress: { label: "In progress", className: "badge-status-info" },
-    completed: { label: "Completed", className: "badge-status-success" },
-    default: { label: "Draft", className: "badge-status-neutral" },
+    draft: { label: "Draft", className: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber border-amber-500/20 dark:border-amber-500/30" },
+    in_progress: { label: "In progress", className: "bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/20 dark:border-blue-500/30" },
+    completed: { label: "Completed", className: "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald border-emerald-500/20 dark:border-emerald-500/30" },
+    default: { label: "Draft", className: "bg-gray-500/10 dark:bg-gray-500/20 text-gray-600 dark:text-muted-foreground border-gray-500/20 dark:border-gray-500/30" },
   },
   roleDisplay: { viewer: "Viewer", editor: "Editor", reviewer: "Reviewer" },
   permissionLabels: {

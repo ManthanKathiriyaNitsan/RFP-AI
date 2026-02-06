@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/contexts/BrandingContext";
 import { getAvatarUrl } from "@/lib/api";
 import { fetchAdminOrganizations } from "@/api/admin-data";
-import { fetchCustomerNotifications } from "@/api/customer-data";
+import { fetchNotifications } from "@/api/notifications";
 import { ThemeToggle } from "../shared/theme-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { NotificationSidebar } from "./notification-sidebar";
@@ -59,8 +59,9 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
 
   // Determine home route based on role
   const getHomeRoute = () => {
-    if (currentRole === 'admin') return "/admin";
-    if (currentRole === 'collaborator') return "/collaborator";
+    const r = (currentRole || "").toLowerCase();
+    if (r === "admin" || r === "super_admin") return "/admin";
+    if (r === "collaborator") return "/collaborator";
     return "/dashboard";
   };
 
@@ -74,8 +75,8 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
   };
 
   const { data: notifications = [] } = useQuery({
-    queryKey: ["customer", "notifications"],
-    queryFn: fetchCustomerNotifications,
+    queryKey: ["notifications"],
+    queryFn: fetchNotifications,
     retry: false,
     staleTime: 60 * 1000,
   });
@@ -126,10 +127,10 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
               )}
               <div className="flex flex-col">
                 <span className="text-lg font-bold theme-gradient-text">
-                  {currentRole === "admin" && adminOrgDisplayName ? adminOrgDisplayName : "RFP AI"}
+                  {((currentRole || "").toLowerCase() === "admin" || (currentRole || "").toLowerCase() === "super_admin") && adminOrgDisplayName ? adminOrgDisplayName : "RFP AI"}
                 </span>
                 <span className="text-[10px] text-muted-foreground font-medium -mt-1">
-                  {currentRole === 'admin' ? 'Admin Console' : currentRole === 'collaborator' ? 'Collaborator Portal' : 'Customer Portal'}
+                  {(currentRole || "").toLowerCase() === "super_admin" || currentRole === "admin" ? "Admin Console" : currentRole === "collaborator" ? "Collaborator Portal" : "Customer Portal"}
                 </span>
               </div>
             </Link>
@@ -180,7 +181,7 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
                   <div className="hidden sm:block text-left min-w-0">
                     <p className="text-sm font-semibold truncate">{user.firstName} {user.lastName}</p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {currentRole === 'admin' ? 'Administrator' : currentRole === 'collaborator' ? 'Collaborator' : 'Customer'}
+                      {(currentRole || "").toLowerCase() === "super_admin" ? "Super Administrator" : currentRole === "admin" ? "Administrator" : currentRole === "collaborator" ? "Collaborator" : "Customer"}
                     </p>
                   </div>
                 </button>
