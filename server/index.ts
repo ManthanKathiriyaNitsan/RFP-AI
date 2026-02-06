@@ -5,6 +5,9 @@ import os from "os";
 
 async function createApp(): Promise<{ app: express.Express; server: import("http").Server }> {
   const app = express();
+  app.set("env", "development");
+  console.log("ENV =", app.get("env"));
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
 

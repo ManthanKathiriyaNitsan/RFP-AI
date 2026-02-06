@@ -20,6 +20,7 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  console.log(">>> Vite middleware enabled");
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
