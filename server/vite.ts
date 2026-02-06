@@ -69,22 +69,26 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // On Vercel, static files live at project root public/; locally we use dist/public (via import.meta.dirname)
-  const distPath =
-    process.env.VERCEL === "1"
-      ? path.resolve(process.cwd(), "public")
-      : path.resolve(import.meta.dirname, "public");
+  // In production the server bundle lives in dist/, so static files are at dist/public.
+  // Using import.meta.dirname works for both local (node dist/index.js) and Vercel.
+  // On Vercel, express.static() is ignored and public/ at repo root is served by CDN;
+  // this path is still used when the function handles a request (e.g. SPA fallback).
+  const distPath = path.resolve(import.meta.dirname, "public");
+  const fallbackPath =
+    process.env.VERCEL === "1" ? path.resolve(process.cwd(), "public") : null;
+  const resolvedPath =
+    fs.existsSync(distPath) ? distPath : fallbackPath && fs.existsSync(fallbackPath) ? fallbackPath : distPath;
 
-  if (!fs.existsSync(distPath)) {
+  if (!fs.existsSync(resolvedPath)) {
     throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
+      `Could not find the build directory: ${resolvedPath}, make sure to build the client first`,
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(resolvedPath));
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.sendFile(path.resolve(resolvedPath, "index.html"));
   });
 }
