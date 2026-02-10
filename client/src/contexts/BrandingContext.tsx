@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { fetchBranding, type BrandingData, type BrandingColorPreset } from "@/api/admin-data";
+import { fetchBranding, DEFAULT_COLOR_PRESETS, type BrandingData, type BrandingColorPreset } from "@/api/admin-data";
 import { useOrganizationId } from "@/hooks/use-organization-id";
 import { useAuth } from "@/hooks/use-auth";
+import { useAdminSelectedOrgId } from "@/contexts/AdminSelectedOrgContext";
+
+function isAdminPanelRole(role: string): boolean {
+  const r = (role || "").toLowerCase();
+  return r === "admin" || r === "super_admin";
+}
 
 const BRANDING_CSS_VARS = [
   "--primary",
@@ -17,7 +23,7 @@ const BRANDING_CSS_VARS = [
 const DEFAULT_BRANDING: BrandingData = {
   primaryLogoUrl: null,
   faviconUrl: null,
-  colorTheme: "Default",
+  colorTheme: "Teal",
   colorPresets: [],
 };
 
@@ -67,7 +73,7 @@ export function hexToHsl(hex: string): string {
 interface BrandingContextValue extends BrandingData {
   isLoading: boolean;
   /** Refetch branding. Pass organizationId to apply that org's theme site-wide (e.g. after saving in Settings). */
-  refetch: (organizationId?: number) => Promise<void>;
+  refetch: (organizationId?: number | string) => Promise<void>;
 }
 
 const BrandingContext = createContext<BrandingContextValue | null>(null);
@@ -78,17 +84,21 @@ export function BrandingProvider({
 }: {
   children: React.ReactNode;
   /** When set (e.g. in admin), fetch branding for this org. Otherwise use current user's org (customer/collaborator) or first org. */
-  organizationId?: number;
+  organizationId?: number | string;
 }) {
-  const { user } = useAuth();
+  const { user, currentRole } = useAuth();
   const { organizationId: userOrgId } = useOrganizationId();
-  const effectiveOrgId = organizationIdProp ?? userOrgId ?? undefined;
+  const adminSelectedOrgId = useAdminSelectedOrgId();
+  const effectiveOrgId: number | string | undefined =
+    organizationIdProp ??
+    (isAdminPanelRole(currentRole ?? "") ? (adminSelectedOrgId ?? undefined) : undefined) ??
+    (userOrgId ?? undefined);
 
   const [data, setData] = useState<BrandingData>(DEFAULT_BRANDING);
   const [isLoading, setIsLoading] = useState(true);
   const faviconEl = useRef<HTMLLinkElement | null>(null);
 
-  const refetch = useCallback(async (overrideOrgId?: number) => {
+  const refetch = useCallback(async (overrideOrgId?: number | string) => {
     setIsLoading(true);
     try {
       const orgId = overrideOrgId ?? effectiveOrgId;
@@ -125,9 +135,12 @@ export function BrandingProvider({
       return;
     }
 
-    const preset: BrandingColorPreset | undefined = data.colorPresets.find(
-      (p) => p.name.toLowerCase() === (data.colorTheme || "").toLowerCase()
-    ) ?? data.colorPresets[0];
+    const themeName = (data.colorTheme || "").trim();
+    const preset: BrandingColorPreset | undefined =
+      data.colorPresets.find((p) => p.name.toLowerCase() === themeName.toLowerCase()) ??
+      DEFAULT_COLOR_PRESETS.find((p) => p.name.toLowerCase() === themeName.toLowerCase()) ??
+      data.colorPresets[0] ??
+      DEFAULT_COLOR_PRESETS[0];
 
     if (preset) {
       const primaryHsl = hexToHsl(preset.primary);
@@ -183,10 +196,10 @@ export function useBranding(): BrandingContextValue {
     return {
       primaryLogoUrl: null,
       faviconUrl: null,
-      colorTheme: "Default",
+      colorTheme: "Teal",
       colorPresets: [],
       isLoading: false,
-      refetch: async (_orgId?: number) => {},
+      refetch: async (_orgId?: number | string) => {},
     };
   }
   return ctx;

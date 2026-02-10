@@ -330,7 +330,7 @@ export default function AdminUsersTerms() {
                               <StatusIcon className="w-3 h-3 mr-1" />
                               {statusConfig.label}
                             </Badge>
-                            <Badge variant="secondary" className="text-[10px] sm:text-xs">{getTypeLabel(term.type)}</Badge>
+                            <Badge variant="default" className="text-[10px] sm:text-xs">{getTypeLabel(term.type)}</Badge>
                             <Badge variant="outline" className="text-[10px] sm:text-xs">v{term.version}</Badge>
                           </div>
                         </div>
@@ -487,7 +487,7 @@ export default function AdminUsersTerms() {
                       </Badge>
                     );
                   })()}
-                  <Badge variant="secondary" className="text-[10px] sm:text-xs">{getTypeLabel(viewingTerm.type)}</Badge>
+                  <Badge variant="default" className="text-[10px] sm:text-xs">{getTypeLabel(viewingTerm.type)}</Badge>
                   <Badge variant="outline" className="text-[10px] sm:text-xs">v{viewingTerm.version}</Badge>
                   {viewingTerm.requiresAcceptance && (
                     <Badge variant="outline" className="text-[10px]">

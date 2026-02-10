@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,6 +14,7 @@ import {
   Shield,
   Zap,
   ChevronRight,
+  ChevronDown,
   BarChart3,
   FileCheck,
   Brain,
@@ -21,7 +22,6 @@ import {
   Building2,
   ScrollText,
   ShieldCheck,
-  LayoutTemplate,
   Database,
   Receipt,
   type LucideIcon,
@@ -50,7 +50,6 @@ const SIDEBAR_ICON_MAP: Record<string, LucideIcon> = {
   Building2,
   ScrollText,
   ShieldCheck,
-  LayoutTemplate,
   Database,
   Receipt,
 };
@@ -105,7 +104,6 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
           { href: "/admin/roles", label: "Roles & Permissions", icon: ShieldCheck },
           { href: "/admin/organizations", label: "Organizations", icon: Building2 },
           { href: "/admin/proposals", label: "Proposals", icon: FileCheck },
-          { href: "/admin/rfp-templates", label: "RFP Templates", icon: LayoutTemplate },
           { href: "/admin/content", label: "Content Library", icon: Library },
         ],
       },
@@ -188,6 +186,34 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
     return location.startsWith(href);
   };
 
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set(["Overview"]));
+  const didInitExpand = useRef(false);
+
+  // Initial: only Overview expanded on first load
+  useEffect(() => {
+    if (navGroups.length > 0 && !didInitExpand.current) {
+      didInitExpand.current = true;
+      setExpandedGroups(new Set(["Overview"]));
+    }
+  }, [navGroups]);
+
+  // Keep the group containing the current route expanded when navigating
+  useEffect(() => {
+    const activeGroup = navGroups.find((g) => g.items.some((item) => isActive(item.href)));
+    if (activeGroup) {
+      setExpandedGroups((prev) => new Set(prev).add(activeGroup.title));
+    }
+  }, [location, navGroups]);
+
+  const toggleGroup = useCallback((title: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+  }, []);
+
   const handleLinkClick = () => {
     // Close sidebar on mobile when a link is clicked
     if (isMobile && onOpenChange) {
@@ -261,65 +287,81 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
         </Link>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="px-3 space-y-6 pb-4">
-          {navGroups.map((group) => (
-            <div key={group.title}>
-              <h3 className="px-3 text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--sidebar-muted)' }}>
-                {group.title}
-              </h3>
-              <nav className="space-y-0.5">
-                {group.items.map((item) => {
-                  const active = isActive(item.href);
-                  return (
-                    <Link key={item.href} href={item.href} onClick={handleLinkClick}>
-                      <span
-                        ref={(el) => {
-                          if (el) {
-                            navItemRefs.current.set(item.href, el);
-                          } else {
-                            navItemRefs.current.delete(item.href);
-                          }
-                        }}
-                        className={cn(
-                          "group flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
-                          active ? "sidebar-nav-active" : "sidebar-nav-inactive"
-                        )}
-                        data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-                      >
-                        <span className="flex items-center gap-3">
-                          <item.icon className={cn(
-                            "w-4 h-4 transition-colors",
-                            active ? "sidebar-icon-active" : "sidebar-icon-inactive"
-                          )} />
-                          {item.label}
-                        </span>
-                        <span className="flex items-center gap-2">
-                          {(item.href === "/admin/proposals" ? true : !!item.badge) && (
-                            <Badge 
-                              variant="outline" 
-                              className={cn(
-                                "text-[10px] font-semibold px-1.5 py-0 border-0",
-                                item.badgeVariant === "success" 
-                                  ? "sidebar-badge-success"
-                                  : item.badgeVariant === "warning"
-                                  ? "sidebar-badge-warning"
-                                  : "sidebar-badge-default"
+        <div className="px-3 space-y-1 pb-4">
+          {navGroups.map((group) => {
+            const isExpanded = expandedGroups.has(group.title);
+            return (
+              <div key={group.title} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.title)}
+                  className={cn(
+                    "flex w-full items-center justify-between px-3 py-2.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                    "text-sidebar-muted hover:text-sidebar-fg hover:bg-accent/50"
+                  )}
+                  style={{ color: "var(--sidebar-muted)" }}
+                  data-testid={`sidebar-group-${group.title.toLowerCase().replace(/\s+/g, "-")}`}
+                >
+                  <span>{group.title}</span>
+                  <ChevronDown
+                    className={cn("w-3.5 h-3.5 shrink-0 transition-transform", isExpanded && "rotate-180")}
+                  />
+                </button>
+                {isExpanded && (
+                  <nav className="space-y-0.5 pl-1">
+                    {group.items.map((item) => {
+                      const active = isActive(item.href);
+                      return (
+                        <Link key={item.href} href={item.href} onClick={handleLinkClick}>
+                          <span
+                            ref={(el) => {
+                              if (el) navItemRefs.current.set(item.href, el);
+                              else navItemRefs.current.delete(item.href);
+                            }}
+                            className={cn(
+                              "group flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer",
+                              active ? "sidebar-nav-active" : "sidebar-nav-inactive"
+                            )}
+                            data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                          >
+                            <span className="flex items-center gap-3">
+                              <item.icon
+                                className={cn(
+                                  "w-4 h-4 transition-colors",
+                                  active ? "sidebar-icon-active" : "sidebar-icon-inactive"
+                                )}
+                              />
+                              {item.label}
+                            </span>
+                            <span className="flex items-center gap-2">
+                              {(item.href === "/admin/proposals" ? true : !!item.badge) && (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] font-semibold px-1.5 py-0 border-0",
+                                    item.badgeVariant === "success"
+                                      ? "sidebar-badge-success"
+                                      : item.badgeVariant === "warning"
+                                        ? "sidebar-badge-warning"
+                                        : "sidebar-badge-default"
+                                  )}
+                                >
+                                  {item.href === "/admin/proposals" ? proposalCount : item.badge}
+                                </Badge>
                               )}
-                            >
-                              {item.href === "/admin/proposals" ? proposalCount : item.badge}
-                            </Badge>
-                          )}
-                          {active && (
-                            <ChevronRight className="w-4 h-4 sidebar-icon-active" />
-                          )}
-                        </span>
-                      </span>
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
-          ))}
+                              {active && (
+                                <ChevronRight className="w-4 h-4 sidebar-icon-active" />
+                              )}
+                            </span>
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </nav>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

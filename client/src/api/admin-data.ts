@@ -163,27 +163,6 @@ export interface KnowledgeBaseVersionsData {
   versions: KnowledgeBaseVersion[];
 }
 
-/** RFP template – global template with default question set and mandatory sections */
-export interface RfpTemplateQuestion {
-  question: string;
-  order: number;
-}
-
-export interface RfpTemplateItem {
-  id: string;
-  name: string;
-  description?: string;
-  mandatorySections: string[];
-  questionSet: RfpTemplateQuestion[];
-  locked: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface RfpTemplatesData {
-  templates: RfpTemplateItem[];
-}
-
 export interface AIConfigData {
   defaultModel?: string;
   creditsUsed?: string;
@@ -290,7 +269,8 @@ export interface IntegrationsSetupData {
 }
 
 export interface OrganizationItem {
-  id: number;
+  /** Backend may return number (stub) or string (e.g. UUID from Python). */
+  id: number | string;
   name: string;
   customerIds: number[];
   archived: boolean;
@@ -306,6 +286,17 @@ export interface BrandingColorPreset {
   secondary: string;
 }
 
+/** Curated color presets that work well in both light and dark mode. Teal is the default. */
+export const DEFAULT_COLOR_PRESETS: BrandingColorPreset[] = [
+  { name: "Teal", primary: "#00796b", secondary: "#4db6ac" },
+  { name: "Indigo", primary: "#4f46e5", secondary: "#818cf8" },
+  { name: "Emerald", primary: "#059669", secondary: "#34d399" },
+  { name: "Violet", primary: "#6d28d9", secondary: "#a78bfa" },
+  { name: "Sky", primary: "#0284c7", secondary: "#38bdf8" },
+  { name: "Slate", primary: "#475569", secondary: "#94a3b8" },
+  { name: "Rose", primary: "#be123c", secondary: "#fb7185" },
+];
+
 export interface BrandingData {
   primaryLogoUrl: string | null;
   faviconUrl: string | null;
@@ -313,26 +304,26 @@ export interface BrandingData {
   colorPresets: BrandingColorPreset[];
 }
 
-/** Fetch branding for app-wide use. Optional organizationId; otherwise first org. No auth required so auth page can use it. */
-export async function fetchBranding(organizationId?: number): Promise<BrandingData> {
+/** Fetch branding for app-wide use. Optional organizationId (number or string e.g. UUID); otherwise first org. No auth required so auth page can use it. */
+export async function fetchBranding(organizationId?: number | string): Promise<BrandingData> {
   const params: Record<string, string> = {};
-  if (organizationId != null && !Number.isNaN(organizationId)) params.organizationId = String(organizationId);
+  if (organizationId != null && organizationId !== "") params.organizationId = String(organizationId);
   const url = getApiUrl("/api/v1/branding");
   const fullUrl = Object.keys(params).length ? `${url}?${new URLSearchParams(params).toString()}` : url;
   const res = await fetch(fullUrl, { credentials: "include" });
-  if (!res.ok) return { primaryLogoUrl: null, faviconUrl: null, colorTheme: "Default", colorPresets: [] };
+  if (!res.ok) return { primaryLogoUrl: null, faviconUrl: null, colorTheme: "Teal", colorPresets: [] };
   const data = (await res.json()) as BrandingData;
   return {
     primaryLogoUrl: data.primaryLogoUrl ?? null,
     faviconUrl: data.faviconUrl ?? null,
-    colorTheme: data.colorTheme ?? "Default",
+    colorTheme: data.colorTheme ?? "Teal",
     colorPresets: Array.isArray(data.colorPresets) ? data.colorPresets : [],
   };
 }
 
 /** Upload logo or favicon for an org; returns the stored URL (data URL in stub). */
 export async function uploadOrgBrandingAsset(
-  organizationId: number,
+  organizationId: number | string,
   type: "logo" | "favicon",
   dataUrl: string
 ): Promise<string | null> {
@@ -340,7 +331,7 @@ export async function uploadOrgBrandingAsset(
     const token = authStorage.getAccessToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${organizationId}/branding/upload`), {
+    const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${encodeURIComponent(String(organizationId))}/branding/upload`), {
       method: "POST",
       headers,
       body: JSON.stringify({ type, data: dataUrl }),
@@ -883,74 +874,6 @@ export async function deleteAdminRole(id: string): Promise<boolean> {
   }
 }
 
-export async function fetchAdminRfpTemplates(): Promise<RfpTemplatesData> {
-  try {
-    return await getAdminJson<RfpTemplatesData>("/api/v1/admin/rfp-templates");
-  } catch {
-    return { templates: [] };
-  }
-}
-
-export async function createAdminRfpTemplate(body: {
-  name: string;
-  description?: string;
-  mandatorySections?: string[];
-  questionSet?: RfpTemplateQuestion[];
-}): Promise<RfpTemplateItem | null> {
-  try {
-    const token = authStorage.getAccessToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(getApiUrl("/api/v1/admin/rfp-templates"), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      credentials: "include",
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as RfpTemplateItem;
-  } catch {
-    return null;
-  }
-}
-
-export async function updateAdminRfpTemplate(
-  id: string,
-  body: { name?: string; description?: string; mandatorySections?: string[]; questionSet?: RfpTemplateQuestion[]; locked?: boolean }
-): Promise<RfpTemplateItem | null> {
-  try {
-    const token = authStorage.getAccessToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(getApiUrl(`/api/v1/admin/rfp-templates/${encodeURIComponent(id)}`), {
-      method: "PATCH",
-      headers,
-      body: JSON.stringify(body),
-      credentials: "include",
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as RfpTemplateItem;
-  } catch {
-    return null;
-  }
-}
-
-export async function deleteAdminRfpTemplate(id: string): Promise<boolean> {
-  try {
-    const token = authStorage.getAccessToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(getApiUrl(`/api/v1/admin/rfp-templates/${encodeURIComponent(id)}`), {
-      method: "DELETE",
-      headers,
-      credentials: "include",
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 export async function fetchAdminOrganizations(): Promise<OrganizationsData> {
   try {
     return await getAdminJson<OrganizationsData>("/api/v1/admin/organizations");
@@ -959,23 +882,23 @@ export async function fetchAdminOrganizations(): Promise<OrganizationsData> {
   }
 }
 
-export async function fetchAdminOrganization(id: number): Promise<OrganizationItem | null> {
+export async function fetchAdminOrganization(id: number | string): Promise<OrganizationItem | null> {
   try {
-    return await getAdminJson<OrganizationItem>(`/api/v1/admin/organizations/${id}`);
+    return await getAdminJson<OrganizationItem>(`/api/v1/admin/organizations/${encodeURIComponent(String(id))}`);
   } catch {
     return null;
   }
 }
 
 export async function updateAdminOrganization(
-  id: number,
+  id: number | string,
   body: { name?: string; customerIds?: number[]; archived?: boolean; settings?: Record<string, unknown> }
 ): Promise<OrganizationItem | null> {
   try {
     const token = authStorage.getAccessToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${id}`), {
+    const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${encodeURIComponent(String(id))}`), {
       method: "PATCH",
       headers,
       body: JSON.stringify(body),
@@ -988,11 +911,11 @@ export async function updateAdminOrganization(
   }
 }
 
-export async function deleteAdminOrganization(id: number): Promise<boolean> {
+export async function deleteAdminOrganization(id: number | string): Promise<boolean> {
   const token = authStorage.getAccessToken();
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${id}`), {
+  const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${encodeURIComponent(String(id))}`), {
     method: "DELETE",
     headers,
     credentials: "include",

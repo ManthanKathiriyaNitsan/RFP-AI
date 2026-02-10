@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { StoreProvider } from "@/contexts/StoreContext";
+import { AdminSelectedOrgProvider } from "@/contexts/AdminSelectedOrgContext";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 import { ApiStatusProvider } from "@/contexts/ApiStatusContext";
 import { ApiStatusBanner } from "@/components/shared/api-status-banner";
@@ -45,7 +46,6 @@ import AdminSettings from "@/pages/admin/admin-settings";
 import AdminOrganizations from "@/pages/admin/admin-organizations";
 import AdminOrganizationDetail from "@/pages/admin/admin-organization-detail";
 import AdminRoles from "@/pages/admin/admin-roles";
-import AdminRfpTemplates from "@/pages/admin/admin-rfp-templates";
 import AdminKnowledgeBase from "@/pages/admin/admin-knowledge-base";
 import AdminSubscriptionBilling from "@/pages/admin/admin-subscription-billing";
 import AdminAuditLogs from "@/pages/admin/admin-audit-logs";
@@ -228,7 +228,6 @@ function Router() {
       <Route path="/admin/organizations/:id" component={() => <AdminRoute component={AdminOrganizationDetail} />} />
       <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
       <Route path="/admin/roles" component={() => <AdminRoute component={AdminRoles} />} />
-      <Route path="/admin/rfp-templates" component={() => <AdminRoute component={AdminRfpTemplates} />} />
       <Route path="/admin/knowledge-base" component={() => <AdminRoute component={AdminKnowledgeBase} />} />
       <Route path="/admin/subscription-billing" component={() => <SuperAdminOnlyRoute component={AdminSubscriptionBilling} />} />
       <Route path="/admin/users-terms" component={() => <AdminRoute component={AdminUsersTerms} />} />
@@ -299,17 +298,19 @@ function AppContent() {
     return <AppLoader />;
   }
   return (
-    <BrandingProvider>
-      <StoreProvider>
-        <ApiStatusProvider>
-          <TooltipProvider>
-            <Toaster />
-            <ApiStatusBanner />
-            <Router />
-          </TooltipProvider>
-        </ApiStatusProvider>
-      </StoreProvider>
-    </BrandingProvider>
+    <AdminSelectedOrgProvider>
+      <BrandingProvider>
+        <StoreProvider>
+          <ApiStatusProvider>
+            <TooltipProvider>
+              <Toaster />
+              <ApiStatusBanner />
+              <Router />
+            </TooltipProvider>
+          </ApiStatusProvider>
+        </StoreProvider>
+      </BrandingProvider>
+    </AdminSelectedOrgProvider>
   );
 }
 

@@ -262,7 +262,7 @@ export default function AdminRoles() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{role.name}</span>
                     {role.isBuiltIn && (
-                      <Badge variant="secondary" className="text-[10px]">Built-in</Badge>
+                      <Badge variant="default" className="text-[10px]">Built-in</Badge>
                     )}
                     <span className="text-xs text-muted-foreground">
                       {formatPermissionSummary(role.permissions)}

@@ -194,13 +194,13 @@ export function GlobalSearch() {
         <DialogHeader className="px-4 pt-4 pb-2">
           <DialogTitle className="sr-only">Search</DialogTitle>
         </DialogHeader>
-        <div className="flex items-center gap-2 px-4 pb-3 border-b">
-          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="search-box mx-4 mb-3">
+          <Search className="search-box-icon" />
           <Input
             placeholder="Search pages and proposals..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-9"
+            className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-9 bg-transparent"
             autoFocus
           />
         </div>

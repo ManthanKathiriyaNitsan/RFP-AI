@@ -1814,7 +1814,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { href: "/admin/roles", label: "Roles & Permissions", icon: "ShieldCheck" },
               { href: "/admin/organizations", label: "Organizations", icon: "Building2" },
               { href: "/admin/proposals", label: "Proposals", icon: "FileCheck" },
-              { href: "/admin/rfp-templates", label: "RFP Templates", icon: "LayoutTemplate" },
               { href: "/admin/content", label: "Content Library", icon: "Library" },
             ],
           },
@@ -1964,14 +1963,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     billing: { planName: "Professional Plan", planPrice: "$199/month", billingInterval: "Billed annually" },
     localization: { locale: "en", timezone: "UTC", dateFormat: "MM/DD/YYYY", currency: "USD" },
     colorPresets: [
-      { name: "Default", primary: "#6366f1", secondary: "#8b5cf6" },
-      { name: "Purple", primary: "#7c3aed", secondary: "#a78bfa" },
-      { name: "Blue", primary: "#2563eb", secondary: "#60a5fa" },
-      { name: "Green", primary: "#16a34a", secondary: "#22c55e" },
-      { name: "Ocean", primary: "#0ea5e9", secondary: "#06b6d4" },
-      { name: "Forest", primary: "#22c55e", secondary: "#16a34a" },
-      { name: "Orange", primary: "#ea580c", secondary: "#f97316" },
-      { name: "Pink", primary: "#db2777", secondary: "#ec4899" },
+      { name: "Teal", primary: "#00796b", secondary: "#4db6ac" },
+      { name: "Indigo", primary: "#4f46e5", secondary: "#818cf8" },
+      { name: "Emerald", primary: "#059669", secondary: "#34d399" },
+      { name: "Violet", primary: "#6d28d9", secondary: "#a78bfa" },
+      { name: "Sky", primary: "#0284c7", secondary: "#38bdf8" },
+      { name: "Slate", primary: "#475569", secondary: "#94a3b8" },
+      { name: "Rose", primary: "#be123c", secondary: "#fb7185" },
     ],
     notificationSettings: [
       { id: 1, name: "Proposal updates", description: "When a proposal status changes", email: true, push: true },
@@ -1987,8 +1985,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/v1/admin/settings", async (_req, res) => {
     try {
+      const defaultTheme = settingsStore.colorPresets?.[0]?.name ?? "Teal";
       res.json({
-        defaultTheme: "Default",
+        defaultTheme,
         ...settingsStore,
       });
     } catch (error) {
@@ -2023,7 +2022,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           settingsStore.apiKeys = settingsStore.apiKeys.filter((k) => !body.apiKeys.revoke.includes(k.id));
         }
       }
-      res.json({ defaultTheme: "Default", ...settingsStore });
+      const defaultTheme = settingsStore.colorPresets?.[0]?.name ?? "Teal";
+      res.json({ defaultTheme, ...settingsStore });
     } catch (error) {
       res.status(500).json({ message: "Failed to update settings" });
     }
@@ -2051,7 +2051,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = (org?.settings || {}) as Record<string, string>;
       const primaryLogoUrl = settings.primaryLogoUrl ?? null;
       const faviconUrl = settings.faviconUrl ?? null;
-      const colorTheme = settings.colorTheme ?? (settingsStore.colorPresets?.[0]?.name ?? "Default");
+      const presetNames = (settingsStore.colorPresets ?? []).map((p: { name: string }) => p.name);
+      const rawTheme = settings.colorTheme ?? settingsStore.colorPresets?.[0]?.name ?? "Teal";
+      const colorTheme = presetNames.includes(rawTheme) ? rawTheme : "Teal";
       res.json({
         primaryLogoUrl,
         faviconUrl,
@@ -2144,82 +2146,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete role" });
-    }
-  });
-
-  // Admin: RFP templates (global templates, question sets, mandatory sections, lock)
-  type RfpTemplateRecord = {
-    id: string;
-    name: string;
-    description: string;
-    mandatorySections: string[];
-    questionSet: { question: string; order: number }[];
-    locked: boolean;
-    createdAt: string;
-    updatedAt: string;
-  };
-  const rfpTemplatesStore: RfpTemplateRecord[] = [];
-  let rfpTemplateNextId = 1;
-
-  app.get("/api/v1/admin/rfp-templates", async (_req, res) => {
-    try {
-      res.json({ templates: rfpTemplatesStore });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch RFP templates" });
-    }
-  });
-
-  app.post("/api/v1/admin/rfp-templates", async (req, res) => {
-    try {
-      const body = req.body || {};
-      const name = body.name && typeof body.name === "string" ? body.name.trim() : "";
-      if (!name) return res.status(400).json({ message: "name is required" });
-      const now = new Date().toISOString();
-      const template: RfpTemplateRecord = {
-        id: `tpl_${rfpTemplateNextId++}`,
-        name,
-        description: typeof body.description === "string" ? body.description : "",
-        mandatorySections: Array.isArray(body.mandatorySections) ? body.mandatorySections.filter((e: unknown) => typeof e === "string") : [],
-        questionSet: Array.isArray(body.questionSet) ? body.questionSet.map((q: { question?: string; order?: number }, i: number) => ({ question: typeof q.question === "string" ? q.question : "", order: typeof q.order === "number" ? q.order : i })) : [],
-        locked: false,
-        createdAt: now,
-        updatedAt: now,
-      };
-      rfpTemplatesStore.push(template);
-      res.status(201).json(template);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to create RFP template" });
-    }
-  });
-
-  app.patch("/api/v1/admin/rfp-templates/:id", async (req, res) => {
-    try {
-      const template = rfpTemplatesStore.find((t) => t.id === req.params.id);
-      if (!template) return res.status(404).json({ message: "RFP template not found" });
-      const body = req.body || {};
-      const now = new Date().toISOString();
-      if (body.locked !== undefined) template.locked = Boolean(body.locked);
-      if (body.name !== undefined && typeof body.name === "string" && !template.locked) template.name = body.name.trim();
-      if (body.description !== undefined && typeof body.description === "string" && !template.locked) template.description = body.description;
-      if (body.mandatorySections !== undefined && Array.isArray(body.mandatorySections) && !template.locked) template.mandatorySections = body.mandatorySections.filter((e: unknown) => typeof e === "string");
-      if (body.questionSet !== undefined && Array.isArray(body.questionSet) && !template.locked) template.questionSet = body.questionSet.map((q: { question?: string; order?: number }, i: number) => ({ question: typeof q.question === "string" ? q.question : "", order: typeof q.order === "number" ? q.order : i }));
-      template.updatedAt = now;
-      res.json(template);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to update RFP template" });
-    }
-  });
-
-  app.delete("/api/v1/admin/rfp-templates/:id", async (req, res) => {
-    try {
-      const idx = rfpTemplatesStore.findIndex((t) => t.id === req.params.id);
-      if (idx === -1) return res.status(404).json({ message: "RFP template not found" });
-      const t = rfpTemplatesStore[idx];
-      if (t.locked) return res.status(400).json({ message: "Unlock template before deleting" });
-      rfpTemplatesStore.splice(idx, 1);
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ message: "Failed to delete RFP template" });
     }
   });
 

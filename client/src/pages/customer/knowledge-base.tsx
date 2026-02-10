@@ -253,11 +253,11 @@ export default function KnowledgeBase() {
           <Card>
             <CardContent className="p-3 sm:p-4">
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <div className="search-box flex-1">
+                  <Search className="search-box-icon" />
                   <Input
                     placeholder="Search documents..."
-                    className="pl-10 text-sm sm:text-base"
+                    className="text-sm sm:text-base"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />

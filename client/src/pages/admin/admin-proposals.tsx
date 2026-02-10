@@ -331,13 +331,12 @@ export default function AdminProposals() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 min-w-0 sm:flex-initial">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="search-box flex-1 min-w-0 sm:flex-initial w-full sm:w-64">
+              <Search className="search-box-icon" />
               <Input
                 placeholder="Search proposals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-full sm:w-64"
                 data-testid="input-search"
               />
             </div>

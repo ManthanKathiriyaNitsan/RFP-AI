@@ -395,11 +395,11 @@ export default function RFPReview() {
       <Card>
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="search-box flex-1">
+              <Search className="search-box-icon" />
               <Input
                 placeholder="Search answers..."
-                className="pl-10 text-sm sm:text-base"
+                className="text-sm sm:text-base"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />

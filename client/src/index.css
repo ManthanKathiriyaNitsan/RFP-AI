@@ -7,87 +7,103 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Legacy styles - keeping for backward compatibility */
+/* Warm beige/off-white light theme; distinct dark theme */
 :root {
-  --background: hsl(220, 20%, 97%);
-  --foreground: hsl(224, 71.4%, 4.1%);
-  --muted: hsl(220, 14.3%, 92%);
-  --muted-foreground: hsl(220, 8.9%, 46.1%);
-  --popover: hsl(0, 0%, 100%);
-  --popover-foreground: hsl(224, 71.4%, 4.1%);
-  --card: hsl(0, 0%, 100%);
-  --card-foreground: hsl(224, 71.4%, 4.1%);
-  --border: hsl(220, 13%, 87%);
-  --input: hsl(220, 13%, 91%);
-  --primary: hsl(252, 87%, 58%);
-  --primary-shade: hsl(280, 100%, 70%);
-  --primary-foreground: hsl(210, 20%, 98%);
-  --theme-gradient: linear-gradient(135deg, hsl(252, 87%, 58%) 0%, hsl(280, 100%, 70%) 100%);
-  --theme-gradient-r: linear-gradient(90deg, hsl(252, 87%, 58%) 0%, hsl(280, 100%, 70%) 100%);
-  --secondary: hsl(220, 14.3%, 95.9%);
-  --secondary-foreground: hsl(220.9, 39.3%, 11%);
-  --accent: hsl(220, 14.3%, 95.9%);
-  --accent-foreground: hsl(220.9, 39.3%, 11%);
-  --destructive: hsl(0, 100%, 65%);
-  --destructive-foreground: hsl(210, 20%, 98%);
-  --ring: hsl(252, 87%, 58%);
+  --background: hsl(38, 22%, 96%);
+  --foreground: hsl(28, 18%, 16%);
+  --muted: hsl(38, 18%, 92%);
+  --muted-foreground: hsl(30, 10%, 44%);
+  --popover: hsl(40, 28%, 98%);
+  --popover-foreground: hsl(28, 18%, 16%);
+  --card: hsl(40, 28%, 98%);
+  --card-foreground: hsl(28, 18%, 16%);
+  --border: hsl(36, 14%, 88%);
+  --input: hsl(36, 16%, 90%);
+  --primary: hsl(174, 100%, 24%);
+  --primary-shade: hsl(166, 64%, 51%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --theme-gradient: linear-gradient(135deg, hsl(174, 100%, 24%) 0%, hsl(166, 64%, 51%) 100%);
+  --theme-gradient-r: linear-gradient(90deg, hsl(174, 100%, 24%) 0%, hsl(166, 64%, 51%) 100%);
+  --secondary: hsl(38, 16%, 94%);
+  --secondary-foreground: hsl(28, 18%, 16%);
+  --accent: hsl(38, 16%, 94%);
+  --accent-foreground: hsl(28, 18%, 16%);
+  --destructive: hsl(0, 67%, 68%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --ring: hsl(174, 100%, 24%);
   --radius: 0.75rem;
-  --success: hsl(152, 76%, 36%);
-  --success-foreground: hsl(210, 20%, 98%);
+  --success: hsl(145, 63%, 49%);
+  --success-foreground: hsl(0, 0%, 100%);
   --warning: hsl(38, 92%, 50%);
   --warning-foreground: hsl(48, 96%, 89%);
   
-  --sidebar-bg: hsl(0, 0%, 98%);
-  --sidebar-fg: hsl(224, 71.4%, 4.1%);
-  --sidebar-muted: hsl(220, 8.9%, 46.1%);
-  --sidebar-accent: hsl(252, 87%, 58%);
-  --sidebar-border: hsl(220, 13%, 87%);
+  --sidebar-bg: hsl(40, 25%, 98%);
+  --sidebar-fg: hsl(28, 18%, 16%);
+  --sidebar-muted: hsl(30, 10%, 44%);
+  --sidebar-accent: hsl(174, 100%, 24%);
+  --sidebar-border: hsl(36, 14%, 88%);
+  --sidebar-background: var(--sidebar-bg);
+  --sidebar-foreground: var(--sidebar-fg);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent-foreground: var(--primary-foreground);
+  --sidebar-ring: var(--ring);
   
-  --surface-elevated: hsl(0, 0%, 100%);
-  --surface-muted: hsl(220, 20%, 96%);
+  --surface-elevated: hsl(40, 28%, 98%);
+  --surface-muted: hsl(38, 22%, 96%);
   
-  /* Layout dimensions */
   --navbar-height: 73px;
-  --sidebar-width: 256px; /* w-64 = 16rem = 256px */
+  --sidebar-width: 256px;
   
-  /* Theme transition duration */
   --theme-transition-duration: 300ms;
   --theme-transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  
+  --card-shadow: 0 1px 3px rgba(28, 22, 18, 0.06);
+  --card-shadow-hover: 0 4px 12px rgba(28, 22, 18, 0.1);
 }
 
 .dark {
-  --background: hsl(224, 71.4%, 4.1%);
-  --foreground: hsl(210, 20%, 98%);
-  --muted: hsl(215, 27.9%, 16.9%);
-  --muted-foreground: hsl(217.9, 10.6%, 75%);
-  --popover: hsl(224, 71.4%, 4.1%);
-  --popover-foreground: hsl(210, 20%, 98%);
-  --card: hsl(224, 71.4%, 4.1%);
-  --card-foreground: hsl(210, 20%, 98%);
-  --border: hsl(215, 27.9%, 16.9%);
-  --input: hsl(215, 27.9%, 16.9%);
-  --primary: hsl(263.4, 70%, 50.4%);
-  --primary-shade: hsl(280, 100%, 60%);
-  --primary-foreground: hsl(210, 20%, 98%);
-  --theme-gradient: linear-gradient(135deg, hsl(263.4, 70%, 50.4%) 0%, hsl(280, 100%, 60%) 100%);
-  --theme-gradient-r: linear-gradient(90deg, hsl(263.4, 70%, 50.4%) 0%, hsl(280, 100%, 60%) 100%);
-  --secondary: hsl(215, 27.9%, 16.9%);
-  --secondary-foreground: hsl(210, 20%, 98%);
-  --accent: hsl(215, 27.9%, 16.9%);
-  --accent-foreground: hsl(210, 20%, 98%);
-  --destructive: hsl(0, 100%, 55%);
-  --destructive-foreground: hsl(210, 20%, 98%);
-  --ring: hsl(263.4, 70%, 50.4%);
-  --success: hsl(142, 76%, 36%);
-  --success-foreground: hsl(210, 20%, 98%);
+  --background: hsl(222, 18%, 11%);
+  --foreground: hsl(210, 20%, 96%);
+  --muted: hsl(220, 14%, 18%);
+  --muted-foreground: hsl(215, 12%, 72%);
+  --popover: hsl(222, 16%, 14%);
+  --popover-foreground: hsl(210, 20%, 96%);
+  --card: hsl(222, 16%, 14%);
+  --card-foreground: hsl(210, 20%, 96%);
+  --border: hsl(220, 12%, 22%);
+  --input: hsl(220, 14%, 16%);
+  --primary: hsl(174, 70%, 42%);
+  --primary-shade: hsl(166, 55%, 58%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --theme-gradient: linear-gradient(135deg, hsl(174, 70%, 42%) 0%, hsl(166, 55%, 58%) 100%);
+  --theme-gradient-r: linear-gradient(90deg, hsl(174, 70%, 42%) 0%, hsl(166, 55%, 58%) 100%);
+  --secondary: hsl(220, 14%, 18%);
+  --secondary-foreground: hsl(210, 20%, 96%);
+  --accent: hsl(220, 14%, 18%);
+  --accent-foreground: hsl(210, 20%, 96%);
+  --destructive: hsl(0, 60%, 55%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --ring: hsl(174, 70%, 42%);
+  --success: hsl(145, 55%, 52%);
+  --success-foreground: hsl(0, 0%, 100%);
   --warning: hsl(38, 92%, 50%);
-  --warning-foreground: hsl(224, 71.4%, 4.1%);
+  --warning-foreground: hsl(222, 18%, 11%);
   
-  --sidebar-bg: hsl(230, 25%, 8%);
-  --sidebar-fg: hsl(220, 20%, 90%);
-  --sidebar-muted: hsl(220, 15%, 70%);
-  --sidebar-accent: hsl(252, 87%, 65%);
-  --sidebar-border: hsl(230, 20%, 15%);
+  --sidebar-bg: hsl(222, 20%, 9%);
+  --sidebar-fg: hsl(210, 20%, 92%);
+  --sidebar-muted: hsl(215, 12%, 68%);
+  --sidebar-accent: hsl(174, 70%, 48%);
+  --sidebar-border: hsl(220, 12%, 18%);
+  --sidebar-background: var(--sidebar-bg);
+  --sidebar-foreground: var(--sidebar-fg);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent-foreground: var(--primary-foreground);
+  --sidebar-ring: var(--ring);
+  
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 /* Ensure smooth transitions for CSS variables */
@@ -173,7 +189,7 @@ body {
   }
   
   .dark .hero-gradient {
-    background: linear-gradient(135deg, hsl(224, 71.4%, 4.1%) 0%, hsl(230, 30%, 8%) 50%, hsl(240, 30%, 12%) 100%);
+    background: linear-gradient(135deg, hsl(222, 22%, 7%) 0%, hsl(222, 18%, 11%) 50%, hsl(220, 14%, 15%) 100%);
   }
   
   .card-hover {
@@ -195,15 +211,17 @@ body {
   }
   
   .glass-card {
-    @apply backdrop-blur-md border shadow-sm rounded-xl;
-    background: hsl(0, 0%, 100%);
-    border-color: hsl(220, 13%, 90%);
-    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    @apply backdrop-blur-md border rounded-xl;
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--card-shadow);
+    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   
   .dark .glass-card {
-    background: hsl(224, 71.4%, 4.1%);
-    border-color: hsl(215, 27.9%, 16.9%);
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--card-shadow);
   }
   
   .stat-card {
@@ -213,11 +231,11 @@ body {
   .stat-card::before {
     content: '';
     @apply absolute inset-0 pointer-events-none;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 3%, transparent) 0%, transparent 100%);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 4%, transparent) 0%, transparent 100%);
   }
   
   .dark .stat-card::before {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 100%);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, transparent) 0%, transparent 100%);
   }
   
   .proposal-card {
@@ -225,31 +243,33 @@ body {
   }
   
   .proposal-card:hover {
-    @apply shadow-md;
-    border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+    box-shadow: var(--card-shadow-hover);
+    border-color: color-mix(in srgb, var(--primary) 25%, transparent);
   }
   
   .dark .proposal-card:hover {
-    border-color: color-mix(in srgb, var(--primary) 50%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 40%, transparent);
   }
   
   .floating-button {
-    background: var(--theme-gradient);
-    color: white;
+    background: var(--primary);
+    color: var(--primary-foreground);
     border: 0;
-    @apply shadow-lg hover:shadow-xl transition-all duration-300;
+    box-shadow: var(--card-shadow);
+    @apply transition-all duration-300;
   }
   .floating-button:hover {
-    opacity: 0.95;
+    opacity: 0.92;
+    box-shadow: var(--card-shadow-hover);
   }
   
   .modern-input {
     @apply border-border transition-all duration-300;
-    background: hsl(0, 0%, 100%);
+    background: var(--card);
   }
 
   .dark .modern-input {
-    background: hsl(215, 27.9%, 16.9%);
+    background: var(--input);
   }
   
   .modern-input:focus {
@@ -296,55 +316,57 @@ body {
   }
 
   .admin-sidebar-item:hover {
-    background: hsl(220, 20%, 96%);
+    background: var(--accent);
     color: var(--sidebar-fg);
   }
 
   .dark .admin-sidebar-item:hover {
-    background: hsl(230, 25%, 18%);
+    background: var(--accent);
     color: var(--sidebar-fg);
   }
 
   .admin-sidebar-item.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 15%, transparent) 0%, color-mix(in srgb, var(--primary-shade) 8%, transparent) 100%);
-    color: var(--primary);
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 
   .dark .admin-sidebar-item.active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 20%, transparent) 0%, color-mix(in srgb, var(--primary-shade) 10%, transparent) 100%);
-    color: var(--primary-shade);
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 
-  /* Sidebar navigation item hover states */
-  .admin-sidebar nav a span:hover,
-  .admin-sidebar nav button:hover {
+  /* Sidebar navigation item hover states (inactive only; active keeps white text) */
+  .admin-sidebar nav a .sidebar-nav-inactive:hover,
+  .admin-sidebar nav button .sidebar-nav-inactive:hover {
     color: var(--sidebar-fg) !important;
   }
 
-  .admin-sidebar nav a span:hover svg,
-  .admin-sidebar nav button:hover svg {
+  .admin-sidebar nav a .sidebar-nav-inactive:hover svg,
+  .admin-sidebar nav button .sidebar-nav-inactive:hover svg {
     color: var(--sidebar-fg) !important;
   }
 
-  /* Custom theme-aware classes for sidebar */
+  /* Custom theme-aware classes for sidebar (Sequence: solid teal active) */
   .sidebar-button-primary {
-    background: var(--theme-gradient-r);
-    color: hsl(210, 20%, 98%);
-    box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--primary) 20%, transparent);
+    background: var(--primary);
+    color: var(--primary-foreground);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   .sidebar-button-primary:hover {
-    opacity: 0.95;
+    opacity: 0.92;
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 
   .sidebar-nav-active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 15%, transparent) 0%, color-mix(in srgb, var(--primary-shade) 8%, transparent) 100%);
-    color: var(--primary);
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 
   .dark .sidebar-nav-active {
-    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 20%, transparent) 0%, color-mix(in srgb, var(--primary-shade) 10%, transparent) 100%);
-    color: var(--primary);
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 
   .sidebar-nav-inactive {
@@ -352,12 +374,12 @@ body {
   }
 
   .sidebar-nav-inactive:hover {
-    background: hsl(220, 20%, 96%);
+    background: var(--accent);
     color: var(--sidebar-fg);
   }
 
   .dark .sidebar-nav-inactive:hover {
-    background: hsl(230, 25%, 18%);
+    background: var(--accent);
     color: var(--sidebar-fg);
   }
 
@@ -365,8 +387,16 @@ body {
     color: var(--primary);
   }
 
+  .sidebar-nav-active .sidebar-icon-active {
+    color: var(--primary-foreground);
+  }
+
   .dark .sidebar-icon-active {
     color: var(--primary);
+  }
+
+  .dark .sidebar-nav-active .sidebar-icon-active {
+    color: var(--primary-foreground);
   }
 
   .sidebar-icon-inactive {
@@ -521,9 +551,9 @@ body {
   }
 
   .badge-status-neutral {
-    background: hsl(220, 14%, 96%);
-    color: var(--muted-foreground);
-    border-color: hsl(220, 13%, 88%);
+    background: hsl(220, 14%, 90%);
+    color: hsl(220, 10%, 32%);
+    border-color: hsl(220, 13%, 82%);
   }
 
   .dark .badge-status-neutral {
@@ -581,15 +611,16 @@ body {
     border-color: hsl(38, 92%, 30%);
   }
 
+  /* Solid primary-themed badge (legacy name: badge-purple) */
   .badge-purple {
     background: color-mix(in srgb, var(--primary) 85%, black);
-    color: #ffffff;
+    color: var(--primary-foreground);
     border-color: color-mix(in srgb, var(--primary) 60%, transparent);
   }
 
   .dark .badge-purple {
     background: color-mix(in srgb, var(--primary) 50%, transparent);
-    color: #ffffff;
+    color: var(--primary-foreground);
     border-color: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
@@ -741,11 +772,11 @@ body {
   }
 
   .bg-gray-light {
-    background: hsl(220, 14%, 96%);
+    background: var(--surface-muted);
   }
 
   .dark .bg-gray-light {
-    background: hsl(215, 28%, 17%);
+    background: var(--muted);
   }
 
   /* Stat Card Background Classes */
@@ -1005,17 +1036,17 @@ body {
     border-color: hsl(215, 28%, 25%);
   }
 
-  /* Role Badge Classes - soft tint (Content Library / Terms style) */
+  /* Role Badge Classes - soft tint (Content Library / Terms style). Super-admin uses primary theme. */
   .badge-role-super-admin {
-    background: hsl(262, 83%, 94%);
-    color: hsl(262, 83%, 35%);
-    border-color: hsl(262, 83%, 85%);
+    background: color-mix(in srgb, var(--primary) 12%, white);
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 25%, transparent);
   }
 
   .dark .badge-role-super-admin {
-    background: hsl(262, 83%, 20%);
-    color: hsl(262, 83%, 75%);
-    border-color: hsl(262, 83%, 30%);
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    color: color-mix(in srgb, var(--primary) 85%, white);
+    border-color: color-mix(in srgb, var(--primary) 30%, transparent);
   }
 
   .badge-role-admin {
@@ -1097,34 +1128,39 @@ body {
 
   .metric-card {
     @apply rounded-xl p-5 border transition-all duration-300;
-    background: white;
-    border-color: hsl(220, 13%, 90%);
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--card-shadow);
   }
 
   .dark .metric-card {
-    background: hsl(224, 71.4%, 4.1%);
-    border-color: hsl(215, 27.9%, 16.9%);
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--card-shadow);
   }
 
   .metric-card:hover {
-    @apply shadow-md -translate-y-0.5;
+    box-shadow: var(--card-shadow-hover);
+    @apply -translate-y-0.5;
     border-color: color-mix(in srgb, var(--primary) 25%, transparent);
   }
 
   .dark .metric-card:hover {
-    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 40%, transparent);
   }
 
   .chart-container {
     @apply rounded-xl border p-5;
-    background: white;
-    border-color: hsl(220, 13%, 90%);
-    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--card-shadow);
+    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dark .chart-container {
-    background: hsl(224, 71.4%, 4.1%);
-    border-color: hsl(215, 27.9%, 16.9%);
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--card-shadow);
   }
 
   /* Ensure chart axis labels are visible in dark mode */
@@ -1148,7 +1184,7 @@ body {
   .recharts-tooltip-cursor,
   .recharts-active-dot,
   .recharts-cartesian-axis-tick-line {
-    stroke: hsl(var(--border)) !important;
+    stroke: var(--border) !important;
     stroke-width: 1px !important;
     opacity: 0.6 !important;
   }
@@ -1161,7 +1197,7 @@ body {
 
   /* Active dots on hover */
   .recharts-active-dot circle {
-    fill: hsl(var(--background)) !important;
+    fill: var(--background) !important;
     stroke-width: 2px !important;
   }
 
@@ -1172,8 +1208,8 @@ body {
 
   /* Ensure tooltip text is visible */
   .recharts-default-tooltip {
-    background-color: hsl(var(--card)) !important;
-    border: 1px solid hsl(var(--border)) !important;
+    background-color: var(--card) !important;
+    border: 1px solid var(--border) !important;
     border-radius: 8px !important;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
     padding: 8px 12px !important;
@@ -1184,19 +1220,19 @@ body {
   }
 
   .recharts-default-tooltip .recharts-tooltip-label {
-    color: hsl(var(--foreground)) !important;
+    color: var(--foreground) !important;
     font-weight: 600 !important;
     margin-bottom: 4px !important;
     font-size: 12px !important;
   }
 
   .recharts-default-tooltip .recharts-tooltip-item {
-    color: hsl(var(--foreground)) !important;
+    color: var(--foreground) !important;
     font-size: 12px !important;
   }
 
   .recharts-default-tooltip .recharts-tooltip-item-name {
-    color: hsl(var(--muted-foreground)) !important;
+    color: var(--muted-foreground) !important;
   }
 
   .dark .recharts-default-tooltip .recharts-tooltip-item-name {
@@ -1204,15 +1240,16 @@ body {
   }
 
   .recharts-default-tooltip .recharts-tooltip-item-value {
-    color: hsl(var(--foreground)) !important;
+    color: var(--foreground) !important;
     font-weight: 600 !important;
   }
 
   .data-table {
     @apply rounded-xl border overflow-hidden;
-    background: white;
-    border-color: hsl(220, 13%, 90%);
-    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: var(--card-shadow);
+    transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dark .data-table {
@@ -1348,9 +1385,9 @@ body {
 .animate-content-shimmer {
   background: linear-gradient(
     90deg,
-    hsl(var(--muted)) 0%,
-    hsl(var(--muted-foreground) / 0.15) 50%,
-    hsl(var(--muted)) 100%
+    var(--muted) 0%,
+    color-mix(in srgb, var(--muted-foreground) 15%, transparent) 50%,
+    var(--muted) 100%
   );
   background-size: 200% 100%;
   animation: contentShimmer 1.8s ease-in-out infinite;

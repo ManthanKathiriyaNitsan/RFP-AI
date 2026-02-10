@@ -9,7 +9,7 @@ export const proposalStatusBadgeClasses = {
   lost: "bg-red-500/10 dark:bg-red-500/20 text-red-500 dark:text-red-400 border-red-500/20 dark:border-red-500/30",
   in_progress: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber border-amber-500/20 dark:border-amber-500/30",
   review: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber border-amber-500/20 dark:border-amber-500/30",
-  draft: "bg-gray-400/15 dark:bg-gray-500/20 text-muted-foreground dark:text-muted-foreground border-gray-400/25 dark:border-gray-500/30",
+  draft: "bg-gray-300/50 dark:bg-gray-500/20 text-gray-700 dark:text-muted-foreground border-gray-400/40 dark:border-gray-500/30",
   completed: "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald border-emerald-500/20 dark:border-emerald-500/30",
 } as const;
 
@@ -19,8 +19,8 @@ export const answerStatusBadgeClasses = {
   pending: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber border-amber-500/20 dark:border-amber-500/30",
   draft: "bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/20 dark:border-blue-500/30",
   rejected: "bg-red-500/10 dark:bg-red-500/20 text-red-500 dark:text-red-400 border-red-500/20 dark:border-red-500/30",
-  locked: "bg-gray-400/15 dark:bg-gray-500/20 text-muted-foreground dark:text-muted-foreground border-gray-400/25 dark:border-gray-500/30",
-  default: "bg-gray-400/15 dark:bg-gray-500/20 text-muted-foreground dark:text-muted-foreground border-gray-400/25 dark:border-gray-500/30",
+  locked: "bg-gray-300/50 dark:bg-gray-500/20 text-gray-700 dark:text-muted-foreground border-gray-400/40 dark:border-gray-500/30",
+  default: "bg-gray-300/50 dark:bg-gray-500/20 text-gray-700 dark:text-muted-foreground border-gray-400/40 dark:border-gray-500/30",
 } as const;
 
 /** Collaborator assignment status */
@@ -28,7 +28,7 @@ export const collaboratorStatusBadgeClasses = {
   draft: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber border-amber-500/20 dark:border-amber-500/30",
   in_progress: "bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/20 dark:border-blue-500/30",
   completed: "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald border-emerald-500/20 dark:border-emerald-500/30",
-  default: "bg-gray-400/15 dark:bg-gray-500/20 text-muted-foreground dark:text-muted-foreground border-gray-400/25 dark:border-gray-500/30",
+  default: "bg-gray-300/50 dark:bg-gray-500/20 text-gray-700 dark:text-muted-foreground border-gray-400/40 dark:border-gray-500/30",
 } as const;
 
 /** AI Score tiers (high / medium / low) */
@@ -42,7 +42,7 @@ export const aiScoreBadgeClasses = {
 export const softBadgeClasses = {
   success: "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald border-emerald-500/20 dark:border-emerald-500/30",
   primary: "bg-primary/10 dark:bg-primary/20 text-primary border-primary/20 dark:border-primary/30",
-  archived: "bg-gray-400/15 dark:bg-gray-500/20 text-muted-foreground dark:text-muted-foreground border-gray-400/25 dark:border-gray-500/30",
+  archived: "bg-gray-300/50 dark:bg-gray-500/20 text-gray-700 dark:text-muted-foreground border-gray-400/40 dark:border-gray-500/30",
   warning: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber border-amber-500/20 dark:border-amber-500/30",
 } as const;
 

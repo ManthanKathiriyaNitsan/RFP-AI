@@ -57,10 +57,11 @@ export default function AdminCredits() {
     queryFn: fetchAdminCreditsActivity,
     enabled: isSuperAdmin,
   });
+  const hasSessionIdInUrl = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("session_id") != null;
   const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "credits"],
     queryFn: fetchAdminCredits,
-    enabled: !isSuperAdmin,
+    enabled: !isSuperAdmin || hasSessionIdInUrl,
   });
   const { data: usersList = [] } = useQuery({
     queryKey: ["/api/v1/users"],
@@ -92,14 +93,22 @@ export default function AdminCredits() {
   const usedCredits = data?.usedCredits ?? 18750;
   const remainingCredits = data?.remainingCredits ?? totalCredits - usedCredits;
 
-  // After redirect from Stripe Checkout, confirm payment and add credits
+  // After redirect from Stripe Checkout, confirm payment and add credits (all roles including super_admin)
   useEffect(() => {
-    if (isSuperAdmin) return;
     const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
     const sessionId = params.get("session_id");
     if (!sessionId) return;
     let cancelled = false;
-    (async () => {
+    const runConfirm = async () => {
+      const token = authStorage.getAccessToken();
+      if (!token) {
+        toast({
+          title: "Please log in again",
+          description: "Your session may have expired. Log in and return to this page to complete payment.",
+          variant: "destructive",
+        });
+        return;
+      }
       try {
         const result = await confirmStripePayment(sessionId);
         if (cancelled) return;
@@ -111,7 +120,7 @@ export default function AdminCredits() {
         if (result.alreadyProcessed) {
           toast({ title: "Payment already applied", description: "Credits were added previously." });
         } else {
-          toast({ title: "Payment successful", description: `${result.credits.toLocaleString()} credits in your account.` });
+          toast({ title: "Payment successful", description: `${result.credits.toLocaleString()} credits added to your account.` });
         }
       } catch (e) {
         if (!cancelled) {
@@ -121,9 +130,15 @@ export default function AdminCredits() {
           window.history.replaceState({}, "", url.pathname + url.search);
         }
       }
-    })();
-    return () => { cancelled = true; };
-  }, [isSuperAdmin, queryClient, toast]);
+    };
+    const t = setTimeout(() => {
+      runConfirm();
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [queryClient, toast]);
 
   const getTransactionIcon = (type: string) => {
     switch (type) {
@@ -151,15 +166,15 @@ export default function AdminCredits() {
   };
 
   const handleBuyPackage = async (pkg: { id: string; name: string; credits: number; price: number }) => {
-    const userId = authStorage.getAuth().user?.id;
-    if (userId == null) {
-      toast({ title: "Sign in required", description: "You must be signed in to buy credits.", variant: "destructive" });
+    const userId = authStorage.getAuth().user?.id ?? 0;
+    if (!pkg.id || (Number(pkg.price) || 0) <= 0) {
+      toast({ title: "Invalid package", description: "This plan has no price. Set a price in Admin → Billing.", variant: "destructive" });
       return;
     }
     setPurchasingPackageId(pkg.id);
     try {
       const { url } = await createCreditsOrder(pkg.id, {
-        amount: pkg.price,
+        amount: Number(pkg.price) || 0,
         currency: "USD",
         credits: pkg.credits > 0 ? pkg.credits : 0,
         userId,
@@ -539,9 +554,9 @@ export default function AdminCredits() {
                   <CardTitle className="text-base sm:text-lg">Transaction history</CardTitle>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:flex-initial">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search…" className="pl-9 w-full sm:w-48 rounded-lg" data-testid="input-search-transactions" />
+                  <div className="search-box flex-1 sm:flex-initial w-full sm:w-48">
+                    <Search className="search-box-icon" />
+                    <Input placeholder="Search…" data-testid="input-search-transactions" />
                   </div>
                   <Button
                     variant="outline"

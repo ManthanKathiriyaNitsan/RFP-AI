@@ -137,11 +137,11 @@ export default function CollaboratorView() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <CardTitle className="text-base sm:text-lg">Your Collaborations</CardTitle>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-initial min-w-[140px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <div className="search-box flex-1 sm:flex-initial min-w-[140px] w-full sm:w-64">
+                <Search className="search-box-icon" />
                 <Input
                   placeholder="Search proposals..."
-                  className="pl-10 w-full sm:w-64 text-sm sm:text-base"
+                  className="text-sm sm:text-base"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />

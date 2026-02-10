@@ -10,6 +10,7 @@ import {
   fetchAdminOrganization,
   updateAdminOrganization,
   uploadOrgBrandingAsset,
+  DEFAULT_COLOR_PRESETS,
   type OrganizationItem,
 } from "@/api/admin-data";
 import { useBranding, hexToHsl } from "@/contexts/BrandingContext";
@@ -45,10 +46,10 @@ export default function AdminSettings() {
     queryKey: ["admin", "options"],
     queryFn: fetchAdminOptions,
   });
-  const colorPresets = data?.colorPresets ?? [];
+  const colorPresets = DEFAULT_COLOR_PRESETS as { name: string; primary: string; secondary: string }[];
   const organization = data?.organization ?? { companyName: "", industry: "", description: "", website: "", supportEmail: "" };
   const billing = data?.billing ?? { planName: "", planPrice: "", billingInterval: "" };
-  const defaultTheme = (data as { defaultTheme?: string })?.defaultTheme ?? colorPresets[0]?.name ?? "";
+  const defaultTheme = (data as { defaultTheme?: string })?.defaultTheme ?? colorPresets[0]?.name ?? "Teal";
   const settingsIndustries = optionsData?.settingsIndustries ?? [];
   const [selectedColor, setSelectedColor] = useState("");
   const effectiveColor = selectedColor || defaultTheme;
@@ -62,15 +63,17 @@ export default function AdminSettings() {
     queryFn: fetchAdminOrganizations,
   });
   const organizations = (Array.isArray(orgsList) ? orgsList : []) as OrganizationItem[];
-  const [selectedOrgId, setSelectedOrgId] = useState<number | null>(() => {
+  const [selectedOrgId, setSelectedOrgId] = useState<number | string | null>(() => {
     try {
       const s = localStorage.getItem("admin_selected_org_id");
-      return s ? parseInt(s, 10) : null;
+      if (!s) return null;
+      const n = parseInt(s, 10);
+      return String(n) === s ? n : s;
     } catch {
       return null;
     }
   });
-  const effectiveOrgId = selectedOrgId ?? organizations[0]?.id ?? null;
+  const effectiveOrgId: number | string | null = selectedOrgId ?? organizations[0]?.id ?? null;
 
   useEffect(() => {
     if (effectiveOrgId != null) {
@@ -226,19 +229,35 @@ export default function AdminSettings() {
   };
 
   const handleSaveTheme = async () => {
-    if (effectiveOrgId == null || !selectedOrg) return;
+    if (effectiveOrgId == null || !selectedOrg) {
+      toast({ title: "Cannot save theme", description: "Select an organization first or wait for it to load.", variant: "destructive" });
+      return;
+    }
     setSavingTheme(true);
-    const updated = await updateAdminOrganization(effectiveOrgId, {
-      settings: { ...(selectedOrg.settings ?? {}), colorTheme: selectedColor || effectiveColor },
-    });
-    setSavingTheme(false);
-    if (updated) {
-      qc.invalidateQueries({ queryKey: ["admin", "organization", effectiveOrgId] });
-      qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
-      await refetchBranding(effectiveOrgId);
-      toast({ title: "Color theme saved", description: "Theme applied across the whole website." });
-    } else {
-      toast({ title: "Failed to save theme", variant: "destructive" });
+    try {
+      const updated = await updateAdminOrganization(effectiveOrgId, {
+        settings: { ...(selectedOrg.settings ?? {}), colorTheme: selectedColor || effectiveColor },
+      });
+      if (updated) {
+        qc.invalidateQueries({ queryKey: ["admin", "organization", effectiveOrgId] });
+        qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
+        await refetchBranding(effectiveOrgId);
+        toast({ title: "Color theme saved", description: "Theme applied across the whole website." });
+      } else {
+        toast({
+          title: "Failed to save theme",
+          description: "The server may have returned an error (e.g. 404). Check the Network tab and try again.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Failed to save theme",
+        description: "Network or other error. Check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingTheme(false);
     }
   };
 
@@ -263,20 +282,48 @@ export default function AdminSettings() {
           disabled={savingOrg}
           onClick={async () => {
             setSavingOrg(true);
-            const updated = await updateAdminSettings({
-              organization: {
-                companyName: orgCompanyName,
-                industry: orgIndustry,
-                description: orgDescription,
-                website: orgWebsite,
-                supportEmail: orgSupportEmail,
-              },
-            });
-            setSavingOrg(false);
-            if (updated) {
-              qc.setQueryData(["admin", "settings"], updated);
-              toast({ title: "Settings saved", description: "Your settings have been saved successfully." });
-            } else {
+            try {
+              // Save organization-level settings (company info, etc.)
+              const updatedSettings = await updateAdminSettings({
+                organization: {
+                  companyName: orgCompanyName,
+                  industry: orgIndustry,
+                  description: orgDescription,
+                  website: orgWebsite,
+                  supportEmail: orgSupportEmail,
+                },
+              });
+
+              // Also persist the currently selected color theme for this organization,
+              // so that after saving and navigating away the theme stays as the new default.
+              let themeSaveOk = true;
+              if (effectiveOrgId != null && selectedOrg) {
+                const updatedOrg = await updateAdminOrganization(effectiveOrgId, {
+                  settings: { ...(selectedOrg.settings ?? {}), colorTheme: selectedColor || effectiveColor },
+                });
+                themeSaveOk = !!updatedOrg;
+                if (updatedOrg) {
+                  qc.invalidateQueries({ queryKey: ["admin", "organization", effectiveOrgId] });
+                  qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
+                  await refetchBranding(effectiveOrgId);
+                }
+              }
+
+              setSavingOrg(false);
+
+              if (updatedSettings) {
+                qc.setQueryData(["admin", "settings"], updatedSettings);
+              }
+
+              if (updatedSettings && themeSaveOk) {
+                toast({ title: "Settings saved", description: "Your settings and theme have been saved successfully." });
+              } else if (updatedSettings) {
+                toast({ title: "Settings saved, but theme could not be updated", variant: "destructive" });
+              } else {
+                toast({ title: "Failed to save settings", variant: "destructive" });
+              }
+            } catch {
+              setSavingOrg(false);
               toast({ title: "Failed to save settings", variant: "destructive" });
             }
           }}
@@ -295,7 +342,13 @@ export default function AdminSettings() {
           </div>
           <Select
             value={effectiveOrgId != null ? String(effectiveOrgId) : ""}
-            onValueChange={(v) => setSelectedOrgId(v ? parseInt(v, 10) : null)}
+            onValueChange={(v) => {
+              if (!v) setSelectedOrgId(null);
+              else {
+                const n = parseInt(v, 10);
+                setSelectedOrgId(String(n) === v ? n : v);
+              }
+            }}
           >
             <SelectTrigger className="w-full sm:max-w-xs bg-background">
               <SelectValue placeholder="Select organization" />

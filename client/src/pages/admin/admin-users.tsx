@@ -667,13 +667,12 @@ export default function AdminUsers() {
             <TabsTrigger value="users" className="data-[state=active]:bg-background text-xs sm:text-sm">Users</TabsTrigger>
             <TabsTrigger value="roles" className="data-[state=active]:bg-background text-xs sm:text-sm">Roles & Permissions</TabsTrigger>
           </TabsList>
-          <div className="relative w-full sm:w-auto">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <div className="search-box w-full sm:w-64">
+            <Search className="search-box-icon" />
             <Input
               placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 w-full sm:w-64"
               data-testid="input-search-users"
             />
           </div>

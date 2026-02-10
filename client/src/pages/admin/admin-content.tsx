@@ -98,7 +98,8 @@ export default function AdminContent() {
     }
   };
 
-  const toggleStar = async (item: { id: number; title: string; starred: boolean }) => {
+  const toggleStar = async (item: { id: number; title: string; starred: boolean; source?: string; proposalId?: number }) => {
+    if (item.source === "proposal" || item.proposalId != null) return; // Proposals can't be starred
     const nextStarred = !item.starred;
     setContentItemsState((items) =>
       items.map((i) => (i.id === item.id ? { ...i, starred: nextStarred } : i))
@@ -213,28 +214,27 @@ export default function AdminContent() {
           <div className="w-full sm:flex-shrink-0 overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible">
             <TabsList className="bg-muted/50 inline-flex">
               <TabsTrigger value="all" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
-                All Content <Badge variant="secondary" className="ml-2 text-[10px]">{contentItemsState.length}</Badge>
+                All Content <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{contentItemsState.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="starred" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
-                <Star className="w-3 h-3 mr-1" /> Starred <Badge variant="secondary" className="ml-2 text-[10px]">{contentItemsState.filter(i => i.starred).length}</Badge>
+                <Star className="w-3 h-3 mr-1" /> Starred <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{contentItemsState.filter(i => i.starred).length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="recent" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
                 <Clock className="w-3 h-3 mr-1" /> Recent
               </TabsTrigger>
               <TabsTrigger value="by-customer" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
-                <User className="w-3 h-3 mr-1" /> By Customer <Badge variant="secondary" className="ml-2 text-[10px]">{contentByCustomer.length}</Badge>
+                <User className="w-3 h-3 mr-1" /> By Customer <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{contentByCustomer.length}</Badge>
               </TabsTrigger>
             </TabsList>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0 min-w-0">
-            <div className="relative flex-1 sm:flex-initial min-w-0 sm:min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="search-box flex-1 sm:flex-initial min-w-0 sm:min-w-[200px] w-full sm:w-64">
+              <Search className="search-box-icon" />
               <Input
                 placeholder="Search content..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-full sm:w-64"
                 data-testid="input-search-content"
               />
             </div>
@@ -352,10 +352,12 @@ export default function AdminContent() {
                                     variant="ghost" 
                                     size="icon" 
                                     className="h-8 w-8 shrink-0"
+                                    disabled={(item as { source?: string }).source === "proposal"}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       toggleStar(item);
                                     }}
+                                    title={(item as { source?: string }).source === "proposal" ? "Proposals can't be starred" : (item.starred ? "Unstar" : "Star")}
                                   >
                                     <Star className={`w-4 h-4 ${item.starred ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground'}`} />
                                   </Button>
@@ -400,87 +402,97 @@ export default function AdminContent() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem asChild>
-                                      <Link href={`/admin/content/editor?id=${item.id}`} className="flex items-center">
-                                        <Edit className="w-4 h-4 mr-2" /> Edit
-                                      </Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem 
-                                      onClick={async () => {
-                                        try {
-                                          const res = await apiRequest("GET", `/api/content/${item.id}`);
-                                          const full = await res.json();
-                                          await apiRequest("POST", "/api/content", {
-                                            title: `${full.title} (Copy)`,
-                                            category: full.category,
-                                            content: full.content,
-                                            tags: full.tags || [],
-                                            status: full.status || "draft",
-                                          });
-                                          queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
-                                          toast({ title: "Duplicated", description: `${item.title} has been duplicated.` });
-                                        } catch {
-                                          toast({ title: "Failed to duplicate", variant: "destructive" });
-                                        }
-                                      }}
-                                    >
-                                      <Copy className="w-4 h-4 mr-2" /> Duplicate
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem 
-                                      onClick={async () => {
-                                        const newTag = await prompt({
-                                          title: "Add Tag",
-                                          description: `Add a tag to "${item.title}"`,
-                                          placeholder: "Tag name",
-                                          defaultValue: "",
-                                        });
-                                        if (newTag && newTag.trim()) {
-                                          try {
-                                            const nextTags = [...(item.tags || []), newTag.trim()];
-                                            await apiRequest("PATCH", `/api/content/${item.id}`, { tags: nextTags });
-                                            queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
-                                            toast({ title: "Tag added", description: `Tag "${newTag.trim()}" added to ${item.title}` });
-                                          } catch {
-                                            toast({ title: "Failed to add tag", variant: "destructive" });
-                                          }
-                                        }
-                                      }}
-                                    >
-                                      <Tag className="w-4 h-4 mr-2" /> Manage Tags
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem 
-                                      className="text-destructive"
-                                      onClick={async () => {
-                                        const confirmed = await confirm({
-                                          title: "Delete Content",
-                                          description: `Are you sure you want to delete "${item.title}"?`,
-                                          confirmText: "Delete",
-                                          cancelText: "Cancel",
-                                          variant: "destructive",
-                                        });
-                                        if (confirmed) {
-                                          try {
-                                            setContentItemsState(items => items.filter(i => i.id !== item.id));
-                                            await apiRequest("DELETE", `/api/content/${item.id}`);
-                                            queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
-                                            toast({
-                                              title: "Deleted",
-                                              description: `${item.title} has been deleted.`,
+                                    {(item as { source?: string; proposalId?: number }).source === "proposal" && (item as { proposalId?: number }).proposalId != null ? (
+                                      <DropdownMenuItem asChild>
+                                        <Link href={`/admin/proposals/${(item as { proposalId: number }).proposalId}`} className="flex items-center">
+                                          <FileText className="w-4 h-4 mr-2" /> View proposal
+                                        </Link>
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <>
+                                        <DropdownMenuItem asChild>
+                                          <Link href={`/admin/content/editor?id=${item.id}`} className="flex items-center">
+                                            <Edit className="w-4 h-4 mr-2" /> Edit
+                                          </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem 
+                                          onClick={async () => {
+                                            try {
+                                              const res = await apiRequest("GET", `/api/content/${item.id}`);
+                                              const full = await res.json();
+                                              await apiRequest("POST", "/api/content", {
+                                                title: `${full.title} (Copy)`,
+                                                category: full.category,
+                                                content: full.content,
+                                                tags: full.tags || [],
+                                                status: full.status || "draft",
+                                              });
+                                              queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
+                                              toast({ title: "Duplicated", description: `${item.title} has been duplicated.` });
+                                            } catch {
+                                              toast({ title: "Failed to duplicate", variant: "destructive" });
+                                            }
+                                          }}
+                                        >
+                                          <Copy className="w-4 h-4 mr-2" /> Duplicate
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem 
+                                          onClick={async () => {
+                                            const newTag = await prompt({
+                                              title: "Add Tag",
+                                              description: `Add a tag to "${item.title}"`,
+                                              placeholder: "Tag name",
+                                              defaultValue: "",
+                                            });
+                                            if (newTag && newTag.trim()) {
+                                              try {
+                                                const nextTags = [...(item.tags || []), newTag.trim()];
+                                                await apiRequest("PATCH", `/api/content/${item.id}`, { tags: nextTags });
+                                                queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
+                                                toast({ title: "Tag added", description: `Tag "${newTag.trim()}" added to ${item.title}` });
+                                              } catch {
+                                                toast({ title: "Failed to add tag", variant: "destructive" });
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <Tag className="w-4 h-4 mr-2" /> Manage Tags
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem 
+                                          className="text-destructive"
+                                          onClick={async () => {
+                                            const confirmed = await confirm({
+                                              title: "Delete Content",
+                                              description: `Are you sure you want to delete "${item.title}"?`,
+                                              confirmText: "Delete",
+                                              cancelText: "Cancel",
                                               variant: "destructive",
                                             });
-                                          } catch (error) {
-                                            toast({
-                                              title: "Error",
-                                              description: "Failed to delete content.",
-                                              variant: "destructive",
-                                            });
-                                          }
-                                        }
+                                            if (confirmed) {
+                                              try {
+                                                setContentItemsState(items => items.filter(i => i.id !== item.id));
+                                                await apiRequest("DELETE", `/api/content/${item.id}`);
+                                                queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
+                                                toast({
+                                                  title: "Deleted",
+                                                  description: `${item.title} has been deleted.`,
+                                                  variant: "destructive",
+                                                });
+                                              } catch (error) {
+                                                toast({
+                                                  title: "Error",
+                                                  description: "Failed to delete content.",
+                                                  variant: "destructive",
+                                                });
+                                              }
+                                            }
                                       }}
                                     >
                                       <Trash2 className="w-4 h-4 mr-2" /> Delete
                                     </DropdownMenuItem>
+                                      </>
+                                    )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                               </td>
@@ -523,8 +535,10 @@ export default function AdminContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full max-w-full overflow-x-hidden">
               {filteredContent.map((item) => {
                 const statusConfig = getStatusConfig(item.status);
+                const isProposal = (item as { source?: string; proposalId?: number }).source === "proposal" && (item as { proposalId?: number }).proposalId != null;
+                const href = isProposal ? `/admin/proposals/${(item as { proposalId: number }).proposalId}` : `/admin/content/editor?id=${item.id}`;
                 return (
-                  <Link key={item.id} href={`/admin/content/editor?id=${item.id}`} className="w-full max-w-full">
+                  <Link key={item.id} href={href} className="w-full max-w-full">
                     <Card className="border shadow-sm hover:shadow-md transition-all cursor-pointer w-full max-w-full overflow-x-hidden" data-testid={`card-content-${item.id}`}>
                       <CardContent className="p-3 sm:p-4 w-full max-w-full overflow-x-hidden">
                         <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2">
@@ -535,6 +549,7 @@ export default function AdminContent() {
                             variant="ghost" 
                             size="icon" 
                             className="h-7 w-7 shrink-0"
+                            disabled={isProposal}
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -657,26 +672,36 @@ export default function AdminContent() {
                                         <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end">
-                                        <DropdownMenuItem asChild>
-                                          <Link href={`/admin/content/editor?id=${item.id}`} className="flex items-center">
-                                            <Edit className="w-4 h-4 mr-2" /> Edit
-                                          </Link>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="text-destructive" onClick={async () => {
-                                          const confirmed = await confirm({ title: "Delete Content", description: `Delete "${item.title}"?`, confirmText: "Delete", cancelText: "Cancel", variant: "destructive" });
-                                          if (confirmed) {
-                                            try {
-                                              setContentItemsState((items) => items.filter((i) => i.id !== item.id));
-                                              await apiRequest("DELETE", `/api/content/${item.id}`);
-                                              queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
-                                              toast({ title: "Deleted", description: `${item.title} has been deleted.`, variant: "destructive" });
-                                            } catch {
-                                              toast({ title: "Error", description: "Failed to delete.", variant: "destructive" });
-                                            }
-                                          }
-                                        }}>
-                                          <Trash2 className="w-4 h-4 mr-2" /> Delete
-                                        </DropdownMenuItem>
+                                        {(item as { source?: string; proposalId?: number }).source === "proposal" && (item as { proposalId?: number }).proposalId != null ? (
+                                          <DropdownMenuItem asChild>
+                                            <Link href={`/admin/proposals/${(item as { proposalId: number }).proposalId}`} className="flex items-center">
+                                              <FileText className="w-4 h-4 mr-2" /> View proposal
+                                            </Link>
+                                          </DropdownMenuItem>
+                                        ) : (
+                                          <>
+                                            <DropdownMenuItem asChild>
+                                              <Link href={`/admin/content/editor?id=${item.id}`} className="flex items-center">
+                                                <Edit className="w-4 h-4 mr-2" /> Edit
+                                              </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem className="text-destructive" onClick={async () => {
+                                              const confirmed = await confirm({ title: "Delete Content", description: `Delete "${item.title}"?`, confirmText: "Delete", cancelText: "Cancel", variant: "destructive" });
+                                              if (confirmed) {
+                                                try {
+                                                  setContentItemsState((items) => items.filter((i) => i.id !== item.id));
+                                                  await apiRequest("DELETE", `/api/content/${item.id}`);
+                                                  queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
+                                                  toast({ title: "Deleted", description: `${item.title} has been deleted.`, variant: "destructive" });
+                                                } catch {
+                                                  toast({ title: "Error", description: "Failed to delete.", variant: "destructive" });
+                                                }
+                                              }
+                                            }}>
+                                              <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                            </DropdownMenuItem>
+                                          </>
+                                        )}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </td>
@@ -693,12 +718,14 @@ export default function AdminContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   {filteredContent.map((item) => {
                     const statusConfig = getStatusConfig(item.status);
+                    const isProposalByCustomer = (item as { source?: string; proposalId?: number }).source === "proposal" && (item as { proposalId?: number }).proposalId != null;
+                    const hrefByCustomer = isProposalByCustomer ? `/admin/proposals/${(item as { proposalId: number }).proposalId}` : `/admin/content/editor?id=${item.id}`;
                     return (
-                      <Link key={item.id} href={`/admin/content/editor?id=${item.id}`}>
+                      <Link key={item.id} href={hrefByCustomer}>
                         <Card className="border shadow-sm hover:shadow-md transition-all cursor-pointer h-full">
                           <CardContent className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-2">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(e) => { e.preventDefault(); toggleStar(item); }}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" disabled={isProposalByCustomer} onClick={(e) => { e.preventDefault(); toggleStar(item); }}>
                                 <Star className={`w-4 h-4 ${item.starred ? "fill-amber-500 text-amber-500" : "text-muted-foreground"}`} />
                               </Button>
                               <Badge variant="outline" className={`${statusConfig.className} text-[10px]`}>{statusConfig.label}</Badge>
