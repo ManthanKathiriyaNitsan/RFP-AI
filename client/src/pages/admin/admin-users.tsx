@@ -82,6 +82,7 @@ export default function AdminUsers() {
   const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [activityLogsUser, setActivityLogsUser] = useState<any>(null);
+  const [subUsersAdmin, setSubUsersAdmin] = useState<any>(null);
   const [editRoleDialogOpen, setEditRoleDialogOpen] = useState(false);
   const [editRoleTarget, setEditRoleTarget] = useState<string | null>(null);
 
@@ -157,6 +158,11 @@ export default function AdminUsers() {
 
   const { data: apiUsers = [], isLoading: isLoadingUsers } = useQuery<any[]>({
     queryKey: ["/api/v1/users"],
+  });
+
+  const { data: subUsersList = [], isLoading: subUsersLoading } = useQuery<any[]>({
+    queryKey: ["/api/v1/users", { created_by: subUsersAdmin?.id }],
+    enabled: !!subUsersAdmin?.id,
   });
 
   const { data: apiProposals = [] } = useQuery<any[]>({
@@ -241,6 +247,31 @@ export default function AdminUsers() {
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  /** Map a raw sub-user (from API list) to the same shape as main table user for dialogs/actions. */
+  const subUserToUser = (u: any) => {
+    const fn = u.firstName ?? u.first_name ?? u.email?.split("@")[0] ?? "";
+    const ln = u.lastName ?? u.last_name ?? "";
+    return {
+      id: u.id,
+      name: `${fn} ${ln}`.trim() || u.email,
+      email: u.email,
+      role: u.role,
+      isActive: u.isActive !== false,
+      firstName: fn,
+      lastName: ln,
+      company: u.company ?? "",
+      jobTitle: u.jobTitle ?? u.job_title ?? "",
+      avatar: (fn?.[0] || "") + (ln?.[0] || "") || "U",
+      status: u.status ?? "active",
+      proposals: 0,
+      winRate: 0,
+      credits: Number(u.credits) || 0,
+      creditsUsed: 0,
+      lastActive: "—",
+      ...u,
+    };
+  };
 
   const handleEditUser = (user: any) => {
     setSelectedUser(user);
@@ -482,6 +513,85 @@ export default function AdminUsers() {
         </SheetContent>
       </Sheet>
 
+      <Sheet open={!!subUsersAdmin} onOpenChange={(open) => { if (!open) setSubUsersAdmin(null); }}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Users & collaborators</SheetTitle>
+            <SheetDescription>
+              {subUsersAdmin ? `Users and collaborators under ${subUsersAdmin.name} (${subUsersAdmin.email})` : "Sub-users"}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6">
+            {subUsersLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : Array.isArray(subUsersList) && subUsersList.length > 0 ? (
+              <ul className="space-y-3">
+                {(subUsersList as any[]).map((u: any) => {
+                  const fn = u.firstName ?? u.first_name ?? u.email?.split("@")[0] ?? "";
+                  const ln = u.lastName ?? u.last_name ?? "";
+                  const name = `${fn} ${ln}`.trim() || u.email;
+                  const roleConfig = getRoleConfig(u.role);
+                  const RoleIcon = roleConfig.icon;
+                  const userForActions = subUserToUser(u);
+                  return (
+                    <li key={u.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                      </div>
+                      <Badge variant="outline" className={`${roleConfig.className} text-[10px] font-medium shrink-0`}>
+                        <RoleIcon className="w-3 h-3 mr-1" />
+                        {roleConfig.label}
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEditUser(userForActions)}>
+                            <Edit className="w-4 h-4 mr-2" /> Edit User
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleChangeRoleClick(userForActions)}>
+                            <Shield className="w-4 h-4 mr-2" /> Change Role
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleToggleActive(userForActions)}
+                            disabled={toggleActiveMutation.isPending}
+                          >
+                            {userForActions.isActive ? (
+                              <><UserX className="w-4 h-4 mr-2" /> Deactivate</>
+                            ) : (
+                              <><UserCheck className="w-4 h-4 mr-2" /> Activate</>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setResetPasswordUser(userForActions); setResetPasswordValue(""); }}>
+                            <KeyRound className="w-4 h-4 mr-2" /> Reset Password
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setActivityLogsUser(userForActions)}>
+                            <Activity className="w-4 h-4 mr-2" /> View Activity
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => handleDeleteUser(userForActions)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No users or collaborators under this admin.</p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-users-title">{usersTitle}</h1>
@@ -682,6 +792,11 @@ export default function AdminUsers() {
                                   <DropdownMenuItem onClick={() => handleEditUser(user)}>
                                     <Edit className="w-4 h-4 mr-2" /> Edit User
                                   </DropdownMenuItem>
+                                  {(currentRole || "").toLowerCase() === "super_admin" && (user.role || "").toLowerCase() === "admin" && (
+                                    <DropdownMenuItem onClick={() => setSubUsersAdmin(user)}>
+                                      <Users className="w-4 h-4 mr-2" /> View sub-users
+                                    </DropdownMenuItem>
+                                  )}
                                   <DropdownMenuItem onClick={() => handleChangeRoleClick(user)}>
                                     <Shield className="w-4 h-4 mr-2" /> Change Role
                                   </DropdownMenuItem>
@@ -752,6 +867,11 @@ export default function AdminUsers() {
                               <DropdownMenuItem onClick={() => handleEditUser(user)}>
                                 <Edit className="w-4 h-4 mr-2" /> Edit User
                               </DropdownMenuItem>
+                              {(currentRole || "").toLowerCase() === "super_admin" && (user.role || "").toLowerCase() === "admin" && (
+                                <DropdownMenuItem onClick={() => setSubUsersAdmin(user)}>
+                                  <Users className="w-4 h-4 mr-2" /> View sub-users
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem onClick={() => handleChangeRoleClick(user)}>
                                 <Shield className="w-4 h-4 mr-2" /> Change Role
                               </DropdownMenuItem>

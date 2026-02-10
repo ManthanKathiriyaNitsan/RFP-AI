@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import crypto from "crypto";
 import { ZodError } from "zod";
+import Razorpay from "razorpay";
+import Stripe from "stripe";
 import { storage } from "./storage";
 import { insertProposalSchema, insertChatMessageSchema } from "@shared/schema";
 
@@ -532,7 +535,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: Number(userId),
         role: role || "viewer",
       });
-      const proposal = await storage.getProposal(proposalId);
       const inviterUserId = (req as any).user?.id ?? undefined;
       const link = `/rfp/${proposalId}/questions`;
       await addNotificationToProposalParticipants(
@@ -661,6 +663,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const p = await storage.getProposal(proposalId);
     return !!p;
   }
+
+  // Content Library store (shared: proposal uploads and customer KB docs sync here; routes defined later)
+  type ContentAttachment = { name: string; dataUrl: string; size?: number };
+  type ContentItemRecord = {
+    id: number;
+    title: string;
+    category: string;
+    content: string;
+    status: string;
+    tags: string[];
+    starred: boolean;
+    usageCount: number;
+    lastUsed: string;
+    lastUpdated: string;
+    author: string;
+    attachments?: ContentAttachment[];
+  };
+  const contentStore: ContentItemRecord[] = [];
+  let contentNextId = 1;
+  function formatContentDate(d: Date): string {
+    return d.toISOString().slice(0, 10);
+  }
+
+  // Proposal files (uploaded when creating/editing proposal; visible in all panels)
+  type ProposalFileRecord = { id: number; proposalId: number; name: string; type: string; size: number; data: string; createdAt: string };
+  const proposalFilesStore: ProposalFileRecord[] = [];
+  let proposalFileNextId = 1;
+
+  app.get("/api/v1/proposals/:id/files", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const list = proposalFilesStore
+        .filter((f) => f.proposalId === proposalId)
+        .map(({ id, proposalId: pid, name, type, size, createdAt }) => ({ id, proposalId: pid, name, type, size, createdAt }));
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch proposal files" });
+    }
+  });
+
+  app.post("/api/v1/proposals/:id/files", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const body = req.body || {};
+      const files = Array.isArray(body.files) ? body.files : [];
+      const created: { id: number; proposalId: number; name: string; type: string; size: number; createdAt: string }[] = [];
+      for (const f of files) {
+        const name = typeof f.name === "string" ? f.name : "file";
+        const type = typeof f.type === "string" ? f.type : "application/octet-stream";
+        const size = typeof f.size === "number" ? f.size : 0;
+        const data = typeof f.data === "string" ? f.data : "";
+        const record: ProposalFileRecord = {
+          id: proposalFileNextId++,
+          proposalId,
+          name,
+          type,
+          size,
+          data,
+          createdAt: isoNow(),
+        };
+        proposalFilesStore.push(record);
+        created.push({ id: record.id, proposalId: record.proposalId, name: record.name, type: record.type, size: record.size, createdAt: record.createdAt });
+        // Sync to Content Library with customer name (proposal owner)
+        const now = formatContentDate(new Date());
+        let authorName = "Customer";
+        try {
+          const proposal = await storage.getProposal(proposalId);
+          if (proposal?.ownerId) {
+            const owner = await storage.getUser(proposal.ownerId);
+            if (owner) {
+              const full = [owner.firstName, owner.lastName].filter(Boolean).join(" ").trim();
+              authorName = full || (owner.email ?? "Customer");
+            }
+          }
+        } catch (_) {}
+        const contentItem: ContentItemRecord = {
+          id: contentNextId++,
+          title: record.name,
+          category: "From Proposals",
+          content: "",
+          status: "draft",
+          tags: ["proposal", String(proposalId)],
+          starred: false,
+          usageCount: 0,
+          lastUsed: "",
+          lastUpdated: now,
+          author: authorName,
+          attachments: [{ name: record.name, dataUrl: record.data, size: record.size }],
+        };
+        contentStore.push(contentItem);
+      }
+      res.status(201).json(created);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to upload proposal files" });
+    }
+  });
+
+  app.get("/api/v1/proposals/:id/files/:fileId", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      const fileId = parseInt(req.params.fileId);
+      const file = proposalFilesStore.find((f) => f.proposalId === proposalId && f.id === fileId);
+      if (!file) return res.status(404).json({ message: "File not found" });
+      const base64 = file.data.replace(/^data:[^;]+;base64,/, "") || file.data;
+      const buf = Buffer.from(base64, "base64");
+      res.setHeader("Content-Type", file.type || "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(file.name)}"`);
+      res.send(buf);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to download file" });
+    }
+  });
+
+  // Sync this proposal's existing files to Content Library (for documents uploaded before sync was added)
+  app.post("/api/v1/admin/proposals/:id/sync-files-to-content", async (req, res) => {
+    try {
+      const proposalId = parseInt(req.params.id);
+      if (!(await ensureProposalExists(proposalId))) return res.status(404).json({ message: "Proposal not found" });
+      const proposal = await storage.getProposal(proposalId);
+      let authorName = "Customer";
+      if (proposal?.ownerId) {
+        try {
+          const owner = await storage.getUser(proposal.ownerId);
+          if (owner) {
+            const full = [owner.firstName, owner.lastName].filter(Boolean).join(" ").trim();
+            authorName = full || (owner.email ?? "Customer");
+          }
+        } catch (_) {}
+      }
+      const files = proposalFilesStore.filter((f) => f.proposalId === proposalId);
+      let synced = 0;
+      for (const file of files) {
+        const alreadyInContent = contentStore.some(
+          (c) => c.title === file.name && c.tags.includes("proposal") && c.tags.includes(String(proposalId))
+        );
+        if (alreadyInContent) continue;
+        const now = formatContentDate(new Date());
+        const contentItem: ContentItemRecord = {
+          id: contentNextId++,
+          title: file.name,
+          category: "From Proposals",
+          content: "",
+          status: "draft",
+          tags: ["proposal", String(proposalId)],
+          starred: false,
+          usageCount: 0,
+          lastUsed: "",
+          lastUpdated: now,
+          author: authorName,
+          attachments: [{ name: file.name, dataUrl: file.data, size: file.size }],
+        };
+        contentStore.push(contentItem);
+        synced++;
+      }
+      res.json({ success: true, synced, total: files.length });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to sync files to content library" });
+    }
+  });
 
   app.get("/api/v1/proposals/:id/questions", async (req, res) => {
     try {
@@ -1302,6 +1465,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         uploadedBy: "You",
         changes: "Initial upload",
       });
+      // Sync to Content Library so it shows there and flows to admin Knowledge Base
+      const contentNow = formatContentDate(new Date());
+      const contentItem: ContentItemRecord = {
+        id: contentNextId++,
+        title: doc.name,
+        category: "From Knowledge Base",
+        content: doc.description || "",
+        status: "approved",
+        tags: [...doc.tags],
+        starred: false,
+        usageCount: 0,
+        lastUsed: "",
+        lastUpdated: contentNow,
+        author: "Customer",
+      };
+      contentStore.push(contentItem);
       res.status(201).json(doc);
     } catch (error) {
       res.status(400).json({ message: "Failed to create document" });
@@ -1445,36 +1624,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Content Library (in-memory store; replace with DB in production)
-  type ContentAttachment = { name: string; dataUrl: string; size?: number };
-  type ContentItemRecord = {
-    id: number;
-    title: string;
-    category: string;
-    content: string;
-    status: string;
-    tags: string[];
-    starred: boolean;
-    usageCount: number;
-    lastUsed: string;
-    lastUpdated: string;
-    author: string;
-    attachments?: ContentAttachment[];
-  };
+  // Content Library routes (store declared earlier so proposal/KB uploads can sync)
   const CONTENT_CATEGORY_ICONS: Record<string, string> = {
     "Company Overview": "BookOpen",
     "Technical Capabilities": "Lightbulb",
     "Case Studies": "FileText",
     "Pricing Templates": "Tag",
     "Security & Compliance": "CheckCircle",
+    "From Proposals": "FileUp",
+    "From Knowledge Base": "Database",
   };
   const CONTENT_CATEGORY_COLORS = ["bg-blue-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500", "bg-red-500"];
-  const contentStore: ContentItemRecord[] = [];
-  let contentNextId = 1;
-
-  function formatDate(d: Date): string {
-    return d.toISOString().slice(0, 10);
-  }
 
   app.get("/api/v1/admin/content", async (_req, res) => {
     try {
@@ -1502,7 +1662,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tags: item.tags || [],
         starred: item.starred,
       }));
-      res.json({ contentCategories: categories, contentItems });
+      // Group "From Proposals" by customer (author) for "By Customer" view in admin
+      const fromProposals = contentStore.filter((c) => c.category === "From Proposals");
+      const authorCounts = new Map<string, number>();
+      for (const item of fromProposals) {
+        const name = item.author || "Unknown";
+        authorCounts.set(name, (authorCounts.get(name) || 0) + 1);
+      }
+      const contentByCustomer = Array.from(authorCounts.entries())
+        .map(([author, documentCount]) => ({ author, documentCount }))
+        .sort((a, b) => (b.documentCount - a.documentCount) || a.author.localeCompare(b.author));
+      res.json({ contentCategories: categories, contentItems, contentByCustomer });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch content" });
     }
@@ -1530,7 +1700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/content", async (req, res) => {
     try {
       const body = req.body || {};
-      const now = formatDate(new Date());
+      const now = formatContentDate(new Date());
       const attachments = Array.isArray(body.attachments)
         ? body.attachments.filter(
             (a: unknown) =>
@@ -1585,7 +1755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }));
         item.attachments = attachments.length ? attachments : undefined;
       }
-      item.lastUpdated = formatDate(new Date());
+      item.lastUpdated = formatContentDate(new Date());
       res.json(item);
     } catch (error) {
       res.status(500).json({ message: "Failed to update content" });
@@ -2053,21 +2223,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: knowledge base (embeddings, rebuild index, version control)
+  // Admin: knowledge base (built from Content Library; rebuild syncs contentStore into KB list)
   type KbDoc = { id: string; title: string; embeddingStatus: string; chunkCount?: number; lastIndexedAt?: string };
   type KbVersion = { id: string; createdAt: string; documentCount?: number; size?: string };
-  const kbDocumentsStore: KbDoc[] = [
-    { id: "kb_doc_1", title: "Product Overview", embeddingStatus: "indexed", chunkCount: 12, lastIndexedAt: new Date().toISOString() },
-    { id: "kb_doc_2", title: "Security & Compliance", embeddingStatus: "indexed", chunkCount: 8, lastIndexedAt: new Date().toISOString() },
-  ];
+  const kbDocumentsStore: KbDoc[] = [];
   let kbLastRebuildAt: string | null = null;
   const kbVersionsStore: KbVersion[] = [];
   let kbVersionNextId = 1;
 
+  function syncKnowledgeBaseFromContentLibrary(): void {
+    kbDocumentsStore.length = 0;
+    const now = new Date().toISOString();
+    for (const item of contentStore) {
+      kbDocumentsStore.push({
+        id: `content_${item.id}`,
+        title: item.title,
+        embeddingStatus: "indexed",
+        chunkCount: 0,
+        lastIndexedAt: now,
+      });
+    }
+  }
+
   app.get("/api/v1/admin/knowledge-base", async (_req, res) => {
     try {
+      // Documents in KB are always derived from Content Library (proposal uploads, customer KB, admin content)
+      const documents: KbDoc[] = contentStore.map((item) => ({
+        id: `content_${item.id}`,
+        title: item.title,
+        embeddingStatus: "indexed",
+        chunkCount: 0,
+        lastIndexedAt: item.lastUpdated ? new Date(item.lastUpdated).toISOString() : undefined,
+      }));
       res.json({
-        documents: kbDocumentsStore,
+        documents,
         lastRebuildAt: kbLastRebuildAt ?? undefined,
         indexVersion: kbLastRebuildAt ? `v-${kbVersionNextId - 1}` : undefined,
       });
@@ -2079,8 +2268,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/v1/admin/knowledge-base/rebuild", async (_req, res) => {
     try {
       const now = new Date().toISOString();
+      syncKnowledgeBaseFromContentLibrary();
       kbLastRebuildAt = now;
-      const version: KbVersion = { id: `kb_${kbVersionNextId++}`, createdAt: now, documentCount: kbDocumentsStore.length, size: "—" };
+      const version: KbVersion = { id: `kb_${kbVersionNextId++}`, createdAt: now, documentCount: contentStore.length, size: "—" };
       kbVersionsStore.unshift(version);
       res.json({ success: true, rebuiltAt: now });
     } catch (error) {
@@ -2211,6 +2401,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(apiQuotaConfig);
     } catch (error) {
       res.status(500).json({ message: "Failed to update API quota" });
+    }
+  });
+
+  // Stripe: processed session IDs so we don't add credits twice (idempotency)
+  const processedStripeSessionIds = new Set<string>();
+
+  // Admin: credits – create Stripe Checkout Session (buy flow). Requires env: STRIPE_SECRET_KEY. Optional: APP_BASE_URL for success/cancel redirect URLs.
+  app.post("/api/v1/admin/credits/create-order", async (req, res) => {
+    try {
+      const secretKey = process.env.STRIPE_SECRET_KEY;
+      if (!secretKey?.trim()) {
+        return res.status(503).json({ message: "Payment not configured (STRIPE_SECRET_KEY)" });
+      }
+      const stripe = new Stripe(secretKey.trim());
+      const body = req.body || {};
+      const packageId = typeof body.packageId === "string" ? body.packageId.trim() : "";
+      const amount = typeof body.amount === "number" ? body.amount : Number(body.amount);
+      const currency = (typeof body.currency === "string" ? body.currency : "USD").toUpperCase();
+      const credits = typeof body.credits === "number" ? body.credits : Number(body.credits);
+      const userId = body.userId != null ? Number(body.userId) : NaN;
+      if (!packageId || !Number.isFinite(amount) || amount <= 0 || !Number.isInteger(userId) || userId <= 0) {
+        return res.status(400).json({ message: "packageId, amount (positive number), credits, and userId required" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const amountCents = Math.round(amount * 100);
+      const baseUrl = process.env.APP_BASE_URL?.trim() || `${req.protocol}://${req.get("host") || "localhost:5000"}`;
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: currency.toLowerCase(),
+              unit_amount: amountCents,
+              product_data: {
+                name: `RFP AI Credits – ${packageId}`,
+                description: `${credits.toLocaleString()} credits`,
+                images: [],
+              },
+            },
+          },
+        ],
+        success_url: `${baseUrl}/admin/credits?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/admin/credits`,
+        metadata: {
+          packageId,
+          credits: String(credits),
+          userId: String(userId),
+        },
+      });
+      res.json({
+        sessionId: session.id,
+        url: session.url,
+        amount: amountCents,
+        currency,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create checkout session";
+      res.status(500).json({ message });
+    }
+  });
+
+  // Admin: credits – confirm Stripe payment and add credits (call after redirect from Checkout)
+  app.post("/api/v1/admin/credits/confirm-stripe-payment", async (req, res) => {
+    try {
+      const secretKey = process.env.STRIPE_SECRET_KEY;
+      if (!secretKey?.trim()) {
+        return res.status(503).json({ message: "Payment not configured (STRIPE_SECRET_KEY)" });
+      }
+      const stripe = new Stripe(secretKey.trim());
+      const body = req.body || {};
+      const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+      if (!sessionId) {
+        return res.status(400).json({ message: "sessionId required" });
+      }
+      if (processedStripeSessionIds.has(sessionId)) {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        const userId = session.metadata?.userId ? Number(session.metadata.userId) : NaN;
+        const user = userId ? await storage.getUser(userId) : undefined;
+        return res.json({ success: true, credits: user?.credits ?? 0, alreadyProcessed: true });
+      }
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.payment_status !== "paid") {
+        return res.status(400).json({ message: "Payment not completed" });
+      }
+      const packageId = session.metadata?.packageId ?? "";
+      const credits = session.metadata?.credits ? Number(session.metadata.credits) : 0;
+      const userId = session.metadata?.userId ? Number(session.metadata.userId) : NaN;
+      if (!packageId || !Number.isFinite(credits) || credits <= 0 || !Number.isInteger(userId) || userId <= 0) {
+        return res.status(400).json({ message: "Invalid session metadata" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      processedStripeSessionIds.add(sessionId);
+      const updatedUser = await storage.updateUser(userId, {
+        credits: (user.credits || 0) + credits,
+      });
+      await storage.createCreditTransaction({
+        userId,
+        amount: credits,
+        type: "purchase",
+        description: `Credits purchase: ${packageId} (Stripe ${sessionId})`,
+      });
+      res.json({ success: true, credits: updatedUser.credits });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to confirm payment";
+      res.status(500).json({ message });
+    }
+  });
+
+  // In-memory log of who allocated credits to whom (for super-admin activity view)
+  type AllocationLogEntry = { allocatedByUserId: number; allocatedByName: string; targetUserId: number; targetUserName: string; amount: number; date: string };
+  const allocationLog: AllocationLogEntry[] = [];
+
+  // Admin: credits – allocate credits to a user (and record who allocated, for super-admin view)
+  app.post("/api/v1/admin/credits/allocate", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const targetUserId = body.userId != null ? Number(body.userId) : NaN;
+      const amount = typeof body.amount === "number" ? body.amount : Number(body.amount);
+      const allocatedByUserId = body.allocatedBy != null ? Number(body.allocatedBy) : null;
+      if (!Number.isInteger(targetUserId) || targetUserId <= 0 || !Number.isFinite(amount)) {
+        return res.status(400).json({ message: "userId and amount required" });
+      }
+      const user = await storage.getUser(targetUserId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const newCredits = (user.credits || 0) + amount;
+      await storage.updateUser(targetUserId, { credits: newCredits });
+      await storage.createCreditTransaction({
+        userId: targetUserId,
+        amount,
+        type: "allocation",
+        description: body.description || (amount >= 0 ? `Allocated +${amount}` : `Deducted ${amount}`),
+      });
+      const targetName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${targetUserId}`;
+      if (allocatedByUserId != null && Number.isInteger(allocatedByUserId)) {
+        const allocator = await storage.getUser(allocatedByUserId);
+        const allocatorName = allocator ? ([allocator.firstName, allocator.lastName].filter(Boolean).join(" ").trim() || allocator.email || `User ${allocatedByUserId}`) : `User ${allocatedByUserId}`;
+        allocationLog.push({
+          allocatedByUserId,
+          allocatedByName: allocatorName,
+          targetUserId,
+          targetUserName: targetName,
+          amount,
+          date: new Date().toISOString(),
+        });
+      }
+      res.json({ userId: targetUserId, previousCredits: user.credits || 0, newCredits, amount });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to allocate";
+      res.status(500).json({ message });
+    }
+  });
+
+  // Super-admin: credit activity – who bought credits and who allocated how much to whom
+  app.get("/api/v1/admin/credits/activity", async (_req, res) => {
+    try {
+      const allTx = await storage.getAllCreditTransactions();
+      const users = await storage.getAllUsers();
+      const userById = new Map(users.map((u) => [u.id, u]));
+      const name = (u: { firstName?: string | null; lastName?: string | null; email?: string | null; id: number }) =>
+        [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || `User ${u.id}`;
+
+      const purchaseTx = allTx.filter((t) => t.type === "purchase");
+      const byAdmin = new Map<number, { adminId: number; adminName: string; totalCredits: number; count: number; transactions: { amount: number; date: string; description: string | null }[] }>();
+      for (const t of purchaseTx) {
+        const uid = t.userId;
+        if (uid == null) continue;
+        const u = userById.get(uid);
+        const adminName = u ? name(u) : `User ${uid}`;
+        if (!byAdmin.has(uid)) byAdmin.set(uid, { adminId: uid, adminName, totalCredits: 0, count: 0, transactions: [] });
+        const row = byAdmin.get(uid)!;
+        row.totalCredits += t.amount;
+        row.count += 1;
+        row.transactions.push({ amount: t.amount, date: t.createdAt ? new Date(t.createdAt).toISOString() : "", description: t.description });
+      }
+      const purchasesByAdmin = Array.from(byAdmin.values()).sort((a, b) => b.totalCredits - a.totalCredits);
+
+      const byAllocator = new Map<number, { adminId: number; adminName: string; allocations: { targetUserId: number; targetUserName: string; amount: number; date: string }[] }>();
+      for (const e of allocationLog) {
+        if (!byAllocator.has(e.allocatedByUserId)) byAllocator.set(e.allocatedByUserId, { adminId: e.allocatedByUserId, adminName: e.allocatedByName, allocations: [] });
+        byAllocator.get(e.allocatedByUserId)!.allocations.push({
+          targetUserId: e.targetUserId,
+          targetUserName: e.targetUserName,
+          amount: e.amount,
+          date: e.date,
+        });
+      }
+      const allocationsByAdmin = Array.from(byAllocator.values()).sort((a, b) => b.allocations.length - a.allocations.length);
+
+      res.json({ purchasesByAdmin, allocationsByAdmin });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch activity";
+      res.status(500).json({ message });
     }
   });
 

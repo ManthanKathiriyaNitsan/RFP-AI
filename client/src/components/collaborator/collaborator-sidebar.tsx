@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { FolderOpen, BarChart3, Brain, ChevronRight } from "lucide-react";
+import { FolderOpen, BarChart3, Brain, ChevronRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -8,6 +8,7 @@ import { useBranding } from "@/contexts/BrandingContext";
 const WORK_ITEMS = [
   { href: "/collaborator", label: "Assigned RFPs", icon: FolderOpen },
   { href: "/collaborator/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/credits", label: "My Credits", icon: Sparkles },
 ] as const;
 
 interface CollaboratorSidebarProps {

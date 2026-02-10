@@ -1368,6 +1368,19 @@ body {
   animation: cursorBlink 1s step-end infinite;
 }
 
+/* Hide scrollbar on tab lists to prevent temporary scrollbar flash when switching tabs */
+.tabs-list-scrollbar-hide,
+[data-tabs-list] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tabs-list-scrollbar-hide::-webkit-scrollbar,
+[data-tabs-list]::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 *::-webkit-scrollbar {
   width: 4px;
   height: 4px;

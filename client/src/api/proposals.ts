@@ -24,6 +24,14 @@ function callerQuery(): string {
 
 export type ProposalStatus = "draft" | "in_progress" | "completed";
 
+export interface AssigneeSummary {
+  id: number;
+  name: string;
+  avatar: string;
+  avatarUrl?: string | null;
+  email?: string | null;
+}
+
 export interface Proposal {
   id: number;
   title: string;
@@ -38,6 +46,7 @@ export interface Proposal {
   clientName?: string | null;
   clientContact?: string | null;
   clientEmail?: string | null;
+  assignees?: AssigneeSummary[];
   createdAt: string;
   updatedAt: string;
 }
@@ -62,6 +71,7 @@ export interface ProposalUpdateInput {
   timeline?: string | null;
   dueDate?: string | null;
   status?: ProposalStatus | null;
+  assigneeIds?: number[] | null;
   content?: Record<string, unknown> | null;
   clientName?: string | null;
   clientContact?: string | null;
@@ -131,6 +141,24 @@ export interface DraftResponse {
   status: string;
 }
 
+/** Proposal file (uploaded when creating proposal); list from API does not include data. */
+export interface ProposalFileApi {
+  id: number;
+  proposalId: number;
+  name: string;
+  type: string;
+  size: number;
+  createdAt: string;
+}
+
+/** Payload for uploading a single file (base64 data). */
+export interface ProposalFileUploadItem {
+  name: string;
+  type: string;
+  size: number;
+  data: string;
+}
+
 // --- API functions ---
 
 export async function fetchProposals(): Promise<Proposal[]> {
@@ -155,6 +183,26 @@ export async function updateProposal(proposalId: number, body: ProposalUpdateInp
 
 export async function deleteProposal(proposalId: number): Promise<void> {
   await apiRequest("DELETE", `${PROPOSALS}/${proposalId}`);
+}
+
+export async function fetchProposalFiles(proposalId: number): Promise<ProposalFileApi[]> {
+  const res = await apiRequest("GET", `${PROPOSALS}/${proposalId}/files${callerQuery()}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function uploadProposalFiles(
+  proposalId: number,
+  files: ProposalFileUploadItem[]
+): Promise<ProposalFileApi[]> {
+  const res = await apiRequest("POST", `${PROPOSALS}/${proposalId}/files${callerQuery()}`, { files });
+  return res.json();
+}
+
+/** Fetch file binary for download. */
+export async function fetchProposalFileBlob(proposalId: number, fileId: number): Promise<Blob> {
+  const res = await apiRequest("GET", `${PROPOSALS}/${proposalId}/files/${fileId}${callerQuery()}`);
+  return res.blob();
 }
 
 /** Response from backend when parsing an uploaded RFP file (PDF/Word). */

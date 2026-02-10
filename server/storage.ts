@@ -47,6 +47,7 @@ export interface IStorage {
 
   // Credit Transactions
   getCreditTransactionsByUserId(userId: number): Promise<CreditTransaction[]>;
+  getAllCreditTransactions(): Promise<CreditTransaction[]>;
   createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction>;
 }
 
@@ -423,11 +424,18 @@ export class MemStorage implements IStorage {
     return Array.from(this.creditTransactions.values())
       .filter(transaction => transaction.userId === userId)
       .sort((a, b) => {
-        // Sort by createdAt (newest first)
         const dateA = a.createdAt?.getTime() || 0;
         const dateB = b.createdAt?.getTime() || 0;
-        return dateB - dateA; // Descending order (newest first)
+        return dateB - dateA;
       });
+  }
+
+  async getAllCreditTransactions(): Promise<CreditTransaction[]> {
+    return Array.from(this.creditTransactions.values()).sort((a, b) => {
+      const dateA = a.createdAt?.getTime() || 0;
+      const dateB = b.createdAt?.getTime() || 0;
+      return dateB - dateA;
+    });
   }
 
   async createCreditTransaction(insertTransaction: InsertCreditTransaction): Promise<CreditTransaction> {

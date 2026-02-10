@@ -113,6 +113,14 @@ export default function CollaboratorView() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex-1 min-h-0 flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-8">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

@@ -54,6 +54,41 @@ export async function fetchCustomerSidebar(): Promise<CustomerSidebarData> {
   return res.json() as Promise<CustomerSidebarData>;
 }
 
+// --- Customer dashboard (GET /api/v1/customer/dashboard) ---
+export interface CustomerDashboardData {
+  credits: number;
+  usedThisMonth: number;
+  allocation: number;
+  allocationPercentage: number;
+  stats: {
+    activeProposals: number;
+    completedProposals: number;
+    collaborators: number;
+  };
+  upcomingDeadlines: Array<{
+    id: number;
+    title: string;
+    date: string;
+    proposalId: number;
+  }>;
+  recentProposals: Array<{
+    id: number;
+    title: string;
+    status: string;
+    dueDate: string;
+    updatedAt: string | null;
+    createdAt: string | null;
+  }>;
+  averageCompletion: number;
+}
+
+export async function fetchCustomerDashboard(): Promise<CustomerDashboardData> {
+  const url = getApiUrl("/api/v1/customer/dashboard");
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Customer dashboard: ${res.status}`);
+  return res.json() as Promise<CustomerDashboardData>;
+}
+
 export async function fetchCustomerNotifications(): Promise<CustomerNotificationsData> {
   const url = getApiUrl("/api/v1/customer/notifications");
   const res = await fetchWithAuth(url);
@@ -110,31 +145,45 @@ export async function fetchCollaboratorRoleOptions(): Promise<CollaboratorRoleOp
   return res.json() as Promise<CollaboratorRoleOptionsData>;
 }
 
-// --- Credit purchase (plans from backend, purchase via customer API) ---
-export interface CreditPlanItem {
+// --- Credit Purchase API ---
+
+export interface CreditPlan {
   id: string;
   name: string;
   price: number;
   credits: number;
   popular?: boolean;
-  features?: string[];
+  features: string[];
 }
 
-export async function fetchCreditPlans(): Promise<CreditPlanItem[]> {
+export async function fetchCreditPlans(): Promise<CreditPlan[]> {
   const url = getApiUrl("/api/v1/customer/credits/plans");
   const res = await fetchWithAuth(url);
   if (!res.ok) throw new Error(`Credit plans: ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  return res.json() as Promise<CreditPlan[]>;
 }
 
-export async function purchaseCredits(body: { plan: string; amount: number; couponCode?: string | null }): Promise<{ credits: number }> {
+export async function validateCoupon(code: string): Promise<{ valid: boolean; discountPercent: number }> {
+  const url = getApiUrl("/api/v1/customer/credits/validate-coupon");
+  const res = await fetchWithAuth(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Invalid coupon code");
+    throw new Error(`Validate coupon: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function purchaseCredits(plan: string, amount: number, couponCode?: string): Promise<{ credits: number }> {
   const url = getApiUrl("/api/v1/customer/credits/purchase");
   const res = await fetchWithAuth(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ plan, amount, couponCode }),
   });
-  if (!res.ok) throw new Error(`Credit purchase: ${res.status}`);
-  return res.json() as Promise<{ credits: number }>;
+  if (!res.ok) throw new Error(`Purchase credits: ${res.status}`);
+  return res.json();
 }

@@ -89,7 +89,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
       <Navigation sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       <div className="flex w-full max-w-full overflow-x-hidden">
         <AdminSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
-        <main className="flex-1 p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-var(--navbar-height))] p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
           <Component />
         </main>
       </div>
@@ -147,7 +147,7 @@ function CustomerRoute({ component: Component }: { component: React.ComponentTyp
       <Navigation sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       <div className="flex w-full max-w-full overflow-x-hidden">
         <CustomerSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
-        <main className="flex-1 p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-var(--navbar-height))] p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
           <Component />
         </main>
       </div>
@@ -173,7 +173,7 @@ function CollaboratorRoute({ component: Component }: { component: React.Componen
       <Navigation sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       <div className="flex w-full max-w-full overflow-x-hidden">
         <CollaboratorSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
-        <main className="flex-1 p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-var(--navbar-height))] p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
           <Component />
         </main>
       </div>

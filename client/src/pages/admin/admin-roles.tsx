@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/hooks/use-auth";
 
 function formatPermissionSummary(permissions: Record<string, string[]>): string {
   const keys = Object.keys(permissions).filter((k) => (permissions[k]?.length ?? 0) > 0);
@@ -38,13 +39,31 @@ export default function AdminRoles() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { currentRole } = useAuth();
+  const roleLower = (currentRole || "").toLowerCase();
+  const isSuperAdmin = roleLower === "super_admin";
+  const isAdmin = roleLower === "admin";
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["admin", "roles"],
-    queryFn: fetchAdminRoles,
+    queryKey: ["admin", "roles", roleLower],
+    queryFn: () => fetchAdminRoles(roleLower || undefined),
   });
 
-  const roles = data?.roles ?? [];
+  const allRoles = data?.roles ?? [];
+  // Super Admin: only Admin role. Admin: no Admin role (User & Collaborator only).
+  const roles = isSuperAdmin
+    ? allRoles.filter((r) => (r.id || "").toLowerCase() === "admin")
+    : isAdmin
+      ? allRoles.filter((r) => (r.id || "").toLowerCase() !== "admin")
+      : allRoles;
+  // Super Admin: edit only Admin. Admin: edit only User/Collaborator (and custom).
+  const canEditRole = (role: RoleItem) => {
+    if (!role.isBuiltIn) return true;
+    const id = (role.id || "").toLowerCase();
+    if (isSuperAdmin) return id === "admin";
+    if (isAdmin) return id === "customer" || id === "user" || id === "collaborator";
+    return false;
+  };
   const permissionDefinitionsRaw = data?.permissionDefinitions ?? [];
   const defaultPermissionDefinitions: PermissionDefinition[] = [
     { key: "can_create_rfp", label: "Create Proposals", scopes: ["read", "write", "delete"] },
@@ -124,7 +143,7 @@ export default function AdminRoles() {
       return;
     }
     setSaving(true);
-    const updated = await updateAdminRole(editRole.id, { name, permissions: rolePermissions });
+    const updated = await updateAdminRole(editRole.id, { name, permissions: rolePermissions }, roleLower || undefined);
     setSaving(false);
     if (updated) {
       qc.invalidateQueries({ queryKey: ["admin", "roles"] });
@@ -201,7 +220,7 @@ export default function AdminRoles() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -250,11 +269,13 @@ export default function AdminRoles() {
                     </span>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(role)}>
-                      <Pencil className="w-4 h-4 mr-1" />
-                      Edit
-                    </Button>
-                    {!role.isBuiltIn && (
+                    {canEditRole(role) && (
+                      <Button variant="outline" size="sm" onClick={() => openEdit(role)}>
+                        <Pencil className="w-4 h-4 mr-1" />
+                        Edit
+                      </Button>
+                    )}
+                    {!role.isBuiltIn && canEditRole(role) && (
                       <Button
                         variant="outline"
                         size="sm"

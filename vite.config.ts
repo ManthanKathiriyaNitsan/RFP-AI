@@ -35,10 +35,10 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     // All /api requests go to RFP backend (auth, users, proposals, etc.)
-    // Uses VITE_API_BASE_URL from client/.env when set; otherwise localhost:8000
+    // Uses VITE_API_BASE_URL from client/.env when set; otherwise http://192.168.0.119:8000
     proxy: {
       "/api": {
-        target: process.env.VITE_API_BASE_URL?.trim() || "http://localhost:8000",
+        target: process.env.VITE_API_BASE_URL?.trim() || "http://192.168.0.119:8000",
         changeOrigin: true,
       },
     },

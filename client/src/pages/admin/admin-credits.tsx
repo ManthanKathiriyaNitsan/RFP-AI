@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { fetchAdminCredits, allocateAdminCredits, fetchAdminUsersList, assignPlanToCustomer } from "@/api/admin-data";
+import { fetchAdminCredits, allocateAdminCredits, fetchAdminUsersList, createCreditsOrder, confirmStripePayment, fetchAdminCreditsActivity } from "@/api/admin-data";
+import { authStorage } from "@/lib/auth";
+import { useAuth } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { 
   CreditCard, 
@@ -13,8 +15,9 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Download,
-  Filter,
-  Search
+  Search,
+  ShoppingCart,
+  UserPlus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,28 +45,34 @@ export default function AdminCredits() {
   const [allocateOpen, setAllocateOpen] = useState(false);
   const [allocateUserId, setAllocateUserId] = useState<string>("");
   const [allocateAmount, setAllocateAmount] = useState("");
-  const [assignPlanOpen, setAssignPlanOpen] = useState(false);
-  const [assignPlanPackage, setAssignPlanPackage] = useState<{ id: string; name: string; credits: number; price: number } | null>(null);
-  const [assignPlanUserId, setAssignPlanUserId] = useState<string>("");
-  const [assigning, setAssigning] = useState(false);
+  const [purchasingPackageId, setPurchasingPackageId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const { currentRole } = useAuth();
+  const isSuperAdmin = (currentRole || "").toLowerCase() === "super_admin";
   const { prompt, PromptDialog } = usePrompt();
+  const { data: activityData, isError: activityError, error: activityErr, refetch: refetchActivity } = useQuery({
+    queryKey: ["admin", "credits", "activity"],
+    queryFn: fetchAdminCreditsActivity,
+    enabled: isSuperAdmin,
+  });
   const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "credits"],
     queryFn: fetchAdminCredits,
+    enabled: !isSuperAdmin,
   });
   const { data: usersList = [] } = useQuery({
     queryKey: ["/api/v1/users"],
     queryFn: fetchAdminUsersList,
-    enabled: allocateOpen || assignPlanOpen,
+    enabled: allocateOpen && !isSuperAdmin,
   });
   const allocateMutation = useMutation({
     mutationFn: ({ userId, amount }: { userId: number; amount: number }) =>
-      allocateAdminCredits(userId, amount),
+      allocateAdminCredits(userId, amount, undefined, authStorage.getAuth().user?.id),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "credits", "activity"] });
       setAllocateOpen(false);
       setAllocateUserId("");
       setAllocateAmount("");
@@ -82,6 +91,39 @@ export default function AdminCredits() {
   const totalCredits = data?.totalCredits ?? 25000;
   const usedCredits = data?.usedCredits ?? 18750;
   const remainingCredits = data?.remainingCredits ?? totalCredits - usedCredits;
+
+  // After redirect from Stripe Checkout, confirm payment and add credits
+  useEffect(() => {
+    if (isSuperAdmin) return;
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    const sessionId = params.get("session_id");
+    if (!sessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await confirmStripePayment(sessionId);
+        if (cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
+        queryClient.invalidateQueries({ queryKey: ["admin", "credits", "activity"] });
+        const url = new URL(window.location.href);
+        url.searchParams.delete("session_id");
+        window.history.replaceState({}, "", url.pathname + url.search);
+        if (result.alreadyProcessed) {
+          toast({ title: "Payment already applied", description: "Credits were added previously." });
+        } else {
+          toast({ title: "Payment successful", description: `${result.credits.toLocaleString()} credits in your account.` });
+        }
+      } catch (e) {
+        if (!cancelled) {
+          toast({ title: "Payment confirmation failed", description: (e as Error).message, variant: "destructive" });
+          const url = new URL(window.location.href);
+          url.searchParams.delete("session_id");
+          window.history.replaceState({}, "", url.pathname + url.search);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isSuperAdmin, queryClient, toast]);
 
   const getTransactionIcon = (type: string) => {
     switch (type) {
@@ -108,29 +150,118 @@ export default function AdminCredits() {
     allocateMutation.mutate({ userId, amount });
   };
 
-  const handleAssignPlan = async () => {
-    if (!assignPlanPackage || !assignPlanUserId) {
-      toast({ title: "Select user", description: "Choose a user to assign this plan to.", variant: "destructive" });
+  const handleBuyPackage = async (pkg: { id: string; name: string; credits: number; price: number }) => {
+    const userId = authStorage.getAuth().user?.id;
+    if (userId == null) {
+      toast({ title: "Sign in required", description: "You must be signed in to buy credits.", variant: "destructive" });
       return;
     }
-    setAssigning(true);
+    setPurchasingPackageId(pkg.id);
     try {
-      const ok = await assignPlanToCustomer(Number(assignPlanUserId), String(assignPlanPackage.id));
-      if (ok) {
-        queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
-        setAssignPlanOpen(false);
-        setAssignPlanPackage(null);
-        setAssignPlanUserId("");
-        toast({ title: "Plan assigned", description: `${assignPlanPackage.name} assigned to selected user.` });
-      } else {
-        toast({ title: "Failed to assign plan", description: "The server could not assign this plan. Check that the plan exists in Billing.", variant: "destructive" });
+      const { url } = await createCreditsOrder(pkg.id, {
+        amount: pkg.price,
+        currency: "USD",
+        credits: pkg.credits > 0 ? pkg.credits : 0,
+        userId,
+      });
+      if (url) {
+        window.location.href = url;
+        return;
       }
+      toast({ title: "Payment unavailable", description: "Could not start checkout.", variant: "destructive" });
     } catch (e) {
-      toast({ title: "Error", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "Could not start payment", description: (e as Error).message, variant: "destructive" });
     } finally {
-      setAssigning(false);
+      setPurchasingPackageId(null);
     }
   };
+
+  // Super-admin: only credit activity (who bought, who allocated how much to whom)
+  if (isSuperAdmin) {
+    if (activityError) {
+      return (
+        <div className="p-4">
+          <QueryErrorState refetch={refetchActivity} error={activityErr} />
+        </div>
+      );
+    }
+    const purchasesByAdmin = activityData?.purchasesByAdmin ?? [];
+    const allocationsByAdmin = activityData?.allocationsByAdmin ?? [];
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-credits-title">Credit activity</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1">See which admins bought credits and how much they allocated to customers and collaborators.</p>
+        </div>
+
+        <Card className="border shadow-sm">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+              <ShoppingCart className="w-4 h-4" />
+              Credits purchased by admin
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Total credits each admin has bought (payment flow).</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6 pt-0">
+            {purchasesByAdmin.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No purchase records yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {purchasesByAdmin.map((row) => (
+                  <div key={row.adminId} className="rounded-lg border p-4 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{row.adminName}</p>
+                      <Badge variant="secondary">{row.totalCredits.toLocaleString()} credits total</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{row.count} purchase(s)</p>
+                    <ul className="text-sm space-y-1">
+                      {row.transactions.slice(0, 5).map((tx, i) => (
+                        <li key={i}>+{tx.amount.toLocaleString()} — {tx.description || "Purchase"} — {tx.date ? new Date(tx.date).toLocaleDateString() : ""}</li>
+                      ))}
+                      {row.transactions.length > 5 && <li className="text-muted-foreground">+{row.transactions.length - 5} more</li>}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border shadow-sm">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+              <UserPlus className="w-4 h-4" />
+              Credits allocated by admin
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm">How much each admin gave to customers and collaborators.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6 pt-0">
+            {allocationsByAdmin.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No allocation records yet. Allocations made via this server will appear here.</p>
+            ) : (
+              <div className="space-y-4">
+                {allocationsByAdmin.map((row) => (
+                  <div key={row.adminId} className="rounded-lg border p-4 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{row.adminName}</p>
+                      <span className="text-xs text-muted-foreground">{row.allocations.length} allocation(s)</span>
+                    </div>
+                    <ul className="text-sm space-y-1">
+                      {row.allocations.map((a, i) => (
+                        <li key={i}>
+                          → <span className="font-medium">{a.targetUserName}</span>: {a.amount >= 0 ? "+" : ""}{a.amount.toLocaleString()} credits ({a.date ? new Date(a.date).toLocaleDateString() : ""})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isError) {
     return (
@@ -141,19 +272,19 @@ export default function AdminCredits() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6 sm:space-y-8">
       <PromptDialog />
       <Dialog open={allocateOpen} onOpenChange={setAllocateOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Allocate / Share Credits</DialogTitle>
-            <DialogDescription>Select a user and enter amount (positive to add credits, negative to deduct).</DialogDescription>
+            <DialogTitle className="text-lg">Allocate credits</DialogTitle>
+            <DialogDescription>Select a user and enter amount (positive to add, negative to deduct).</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label>User</Label>
               <Select value={allocateUserId} onValueChange={setAllocateUserId}>
-                <SelectTrigger>
+                <SelectTrigger className="rounded-lg">
                   <SelectValue placeholder="Select user" />
                 </SelectTrigger>
                 <SelectContent>
@@ -175,218 +306,205 @@ export default function AdminCredits() {
                 placeholder="e.g. 500 or -100"
                 value={allocateAmount}
                 onChange={(e) => setAllocateAmount(e.target.value)}
+                className="rounded-lg"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAllocateOpen(false)}>Cancel</Button>
-            <Button onClick={handleAllocateSubmit} disabled={allocateMutation.isPending || !allocateUserId || !allocateAmount.trim()}>
+            <Button variant="outline" onClick={() => setAllocateOpen(false)} className="rounded-lg">Cancel</Button>
+            <Button onClick={handleAllocateSubmit} disabled={allocateMutation.isPending || !allocateUserId || !allocateAmount.trim()} className="rounded-lg">
               {allocateMutation.isPending ? "Allocating…" : "Allocate"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={assignPlanOpen} onOpenChange={(open) => { setAssignPlanOpen(open); if (!open) setAssignPlanPackage(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Assign Plan</DialogTitle>
-            <DialogDescription>
-              {assignPlanPackage
-                ? `Assign "${assignPlanPackage.name}" ($${assignPlanPackage.price}${assignPlanPackage.credits > 0 ? "/mo" : ""}) to a user.`
-                : "Select a user to assign the plan to."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>User</Label>
-              <Select value={assignPlanUserId} onValueChange={setAssignPlanUserId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select user" />
-                </SelectTrigger>
-                <SelectContent>
-                  {usersList.map((u: { id: number; email?: string; first_name?: string; last_name?: string }) => (
-                    <SelectItem key={u.id} value={String(u.id)}>
-                      {(u.first_name || u.last_name) ? `${u.first_name || ""} ${u.last_name || ""}`.trim() : u.email || `User ${u.id}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Page header */}
+      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/5 via-background to-primary/10 p-6 sm:p-8">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary shadow-sm">
+              <CreditCard className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid="text-credits-title">Credit Management</h1>
+              <p className="text-muted-foreground text-sm mt-1">Manage AI credits, allocations, and usage across your team.</p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignPlanOpen(false)}>Cancel</Button>
-            <Button onClick={handleAssignPlan} disabled={assigning || !assignPlanUserId}>
-              {assigning ? "Assigning…" : "Assign Plan"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-credits-title">Credit Management</h1>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1">Manage AI credits and allocations.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-        <Card className="border shadow-sm">
-          <CardContent className="p-4 sm:p-5">
-            <div className="rounded-xl bg-primary/10 p-3 sm:p-4 mb-3 sm:mb-4">
-              <div className="flex items-center justify-between">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-                </div>
-                <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs shrink-0`}>Active</Badge>
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        <Card className="border-0 shadow-lg shadow-primary/5 bg-gradient-to-br from-primary/8 to-primary/5 overflow-hidden transition-all hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
+                <CreditCard className="h-6 w-6" />
               </div>
-              <p className="text-2xl sm:text-3xl font-bold text-primary mt-3">{remainingCredits.toLocaleString()}</p>
+              <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs shrink-0`}>Active</Badge>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground">Available Credits</p>
-            <div className="mt-2 sm:mt-3">
-              <Progress value={(usedCredits / totalCredits) * 100} className="h-2" />
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{usedCredits.toLocaleString()} of {totalCredits.toLocaleString()} used</p>
+            <p className="text-3xl sm:text-4xl font-bold mt-4 tracking-tight">{remainingCredits.toLocaleString()}</p>
+            <p className="text-sm font-medium text-muted-foreground mt-1">Available Credits</p>
+            <div className="mt-4 space-y-1.5">
+              <Progress value={(usedCredits / totalCredits) * 100} className="h-2.5 rounded-full" />
+              <p className="text-xs text-muted-foreground">{usedCredits.toLocaleString()} of {totalCredits.toLocaleString()} used</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border shadow-sm">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center gap-3 mb-3 sm:mb-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-emerald dark:text-emerald" />
-              </div>
+        <Card className="border shadow-md overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <TrendingUp className="h-6 w-6" />
             </div>
-            <p className="text-2xl sm:text-3xl font-bold text-emerald dark:text-emerald">+12.5%</p>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Efficiency Improvement</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-2">vs. last month</p>
+            <p className="text-3xl sm:text-4xl font-bold mt-4 text-emerald-600 dark:text-emerald-400">+12.5%</p>
+            <p className="text-sm font-medium text-muted-foreground mt-1">Efficiency improvement</p>
+            <p className="text-xs text-muted-foreground mt-2">vs. last month</p>
           </CardContent>
         </Card>
 
-        <Card className="border shadow-sm sm:col-span-2 md:col-span-1">
-          <CardContent className="p-4 sm:p-5">
-            <div className="flex items-center gap-3 mb-3 sm:mb-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-amber dark:text-amber" />
-              </div>
+        <Card className="border shadow-md overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5 sm:col-span-2 lg:col-span-1">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              <Gift className="h-6 w-6" />
             </div>
-            <p className="text-2xl sm:text-3xl font-bold">2,500</p>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Bonus Credits</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-2">Expires Jan 31, 2026</p>
+            <p className="text-3xl sm:text-4xl font-bold mt-4">2,500</p>
+            <p className="text-sm font-medium text-muted-foreground mt-1">Bonus Credits</p>
+            <p className="text-xs text-muted-foreground mt-2">Expires Jan 31, 2026</p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="packages" className="w-full">
-        <TabsList className="bg-muted/50 overflow-x-auto overflow-y-hidden w-full sm:w-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-          <TabsTrigger value="packages" className="data-[state=active]:bg-background text-xs sm:text-sm">
+        <TabsList className="h-12 p-1 rounded-xl bg-muted/60 overflow-x-auto overflow-y-hidden w-full sm:w-auto -mx-4 px-4 sm:mx-0 sm:px-0 gap-1">
+          <TabsTrigger
+            value="packages"
+            className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs sm:text-sm font-medium px-4 transition-all"
+          >
             <span className="hidden sm:inline">Credit Packages</span>
             <span className="sm:hidden">Packages</span>
           </TabsTrigger>
-          <TabsTrigger value="allocations" className="data-[state=active]:bg-background text-xs sm:text-sm">
+          <TabsTrigger
+            value="allocations"
+            className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs sm:text-sm font-medium px-4 transition-all"
+          >
             <span className="hidden sm:inline">User Allocations</span>
             <span className="sm:hidden">Allocations</span>
           </TabsTrigger>
-          <TabsTrigger value="history" className="data-[state=active]:bg-background text-xs sm:text-sm">
+          <TabsTrigger
+            value="history"
+            className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs sm:text-sm font-medium px-4 transition-all"
+          >
             <span className="hidden sm:inline">Transaction History</span>
             <span className="sm:hidden">History</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="packages" className="mt-4 sm:mt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <TabsContent value="packages" className="mt-6 sm:mt-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {creditPackages.map((pkg) => (
-              <Card 
-                key={pkg.id} 
-                className={`border shadow-sm relative overflow-hidden ${pkg.popular ? 'ring-2 ring-primary' : ''}`}
+              <Card
+                key={pkg.id}
+                className={`relative overflow-hidden rounded-2xl border transition-all hover:shadow-lg hover:-translate-y-0.5 ${pkg.popular ? "ring-2 ring-primary shadow-md shadow-primary/10" : "shadow-sm"}`}
                 data-testid={`card-package-${pkg.id}`}
               >
                 {pkg.popular && (
-                  <div className="absolute top-0 right-0 bg-primary text-white text-[10px] font-bold px-2 sm:px-3 py-1 rounded-bl-lg">
-                    POPULAR
+                  <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-semibold uppercase tracking-wider px-3 py-1.5 rounded-bl-xl">
+                    Popular
                   </div>
                 )}
-                <CardContent className="p-4 sm:p-5">
-                  <h3 className="font-semibold text-base sm:text-lg">{pkg.name}</h3>
-                  <div className="mt-3 sm:mt-4 mb-4 sm:mb-6">
+                <CardContent className="p-5 sm:p-6">
+                  <h3 className="font-semibold text-lg">{pkg.name}</h3>
+                  <div className="mt-4 mb-5">
                     <span className="text-2xl sm:text-3xl font-bold">${pkg.price}</span>
-                    {pkg.credits > 0 && <span className="text-xs sm:text-sm text-muted-foreground">/mo</span>}
+                    {pkg.credits > 0 && <span className="text-sm text-muted-foreground">/mo</span>}
                   </div>
-                  <div className="space-y-2 mb-4 sm:mb-6">
-                    <p className="text-xs sm:text-sm">
-                      {pkg.credits > 0 ? `${pkg.credits.toLocaleString()} credits` : 'Unlimited credits'}
+                  <div className="space-y-1.5 mb-6">
+                    <p className="text-sm">
+                      {pkg.credits > 0 ? `${pkg.credits.toLocaleString()} credits` : "Unlimited credits"}
                     </p>
                     {pkg.perCredit > 0 && (
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">${pkg.perCredit} per credit</p>
+                      <p className="text-xs text-muted-foreground">${pkg.perCredit} per credit</p>
                     )}
                   </div>
-                  <Button 
-                    className={`w-full text-xs sm:text-sm ${pkg.popular ? 'theme-gradient-bg text-white' : ''}`}
+                  <Button
+                    className={`w-full rounded-lg text-sm font-medium ${pkg.popular ? "theme-gradient-bg text-white shadow-md" : ""}`}
                     variant={pkg.popular ? "default" : "outline"}
-                    onClick={() => {
-                      setAssignPlanPackage(pkg);
-                      setAssignPlanUserId("");
-                      setAssignPlanOpen(true);
-                    }}
+                    onClick={() => handleBuyPackage(pkg)}
+                    disabled={purchasingPackageId != null || pkg.credits <= 0}
                   >
-                    Select Plan
+                    {purchasingPackageId === pkg.id ? "Opening payment…" : pkg.credits > 0 ? "Buy credits" : "Contact sales"}
                   </Button>
+                  {pkg.credits > 0 && (
+                    <p className="text-[10px] text-muted-foreground text-center mt-1.5">Secure payment by Stripe</p>
+                  )}
                 </CardContent>
               </Card>
             ))}
           </div>
         </TabsContent>
 
-        <TabsContent value="allocations" className="mt-4 sm:mt-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
+        <TabsContent value="allocations" className="mt-6 sm:mt-8">
+          <Card className="rounded-2xl border shadow-sm overflow-hidden">
+            <CardHeader className="p-6 sm:p-8 bg-muted/30 border-b">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-sm sm:text-base">User Credit Allocations</CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">Manage credit distribution across team members</CardDescription>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base sm:text-lg">User credit allocations</CardTitle>
+                    <CardDescription className="text-sm mt-0.5">Manage credit distribution across team members. Assign credits to customers and collaborators.</CardDescription>
+                  </div>
                 </div>
-                <Button 
+                <Button
                   size="sm"
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto rounded-lg font-medium shadow-sm"
                   onClick={() => setAllocateOpen(true)}
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Allocate Credits
+                  Allocate credits
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="space-y-3 sm:space-y-4">
+            <CardContent className="p-4 sm:p-6">
+              <div className="space-y-3">
                 {userAllocations.map((user) => (
-                  <div key={user.id} className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-3 sm:gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors`} data-testid={`row-allocation-${user.id}`}>
-                    <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                      <Avatar className="w-10 h-10 shrink-0">
-                        <AvatarFallback className="theme-gradient-bg text-white text-xs sm:text-sm font-semibold">
+                  <div
+                    key={user.id}
+                    className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40 hover:border-primary/20"
+                    data-testid={`row-allocation-${user.id}`}
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <Avatar className="h-11 w-11 shrink-0 rounded-xl border-2 border-background shadow-sm">
+                        <AvatarFallback className="rounded-xl theme-gradient-bg text-white text-sm font-semibold">
                           {user.avatar}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-xs sm:text-sm truncate">{user.name}</p>
-                        <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-2 mt-1`}>
-                          <Progress value={user.allocated ? Math.min(100, (user.used / user.allocated) * 100) : 0} className={`h-1.5 ${isMobile ? 'w-full' : 'flex-1'}`} />
-                          <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
-                            {user.remaining} remaining
-                          </span>
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <p className="font-semibold text-sm truncate">{user.name}</p>
+                        <div className="flex items-center gap-3">
+                          <Progress
+                            value={user.allocated ? Math.min(100, (user.used / user.allocated) * 100) : 0}
+                            className="h-2 flex-1 max-w-[200px] rounded-full"
+                          />
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{user.remaining} remaining</span>
                         </div>
                       </div>
                     </div>
-                    <div className={`flex ${isMobile ? 'items-center justify-between' : 'flex-col text-right'} gap-1 sm:gap-0`}>
-                      <div>
-                        <p className="text-xs sm:text-sm font-semibold">{user.used.toLocaleString()}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground">of {user.allocated.toLocaleString()}</p>
+                    <div className="flex items-center gap-4 sm:gap-6">
+                      <div className="text-right">
+                        <p className="text-sm font-semibold tabular-nums">{user.used.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">of {user.allocated.toLocaleString()}</p>
                       </div>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="outline"
                         size="sm"
-                        className={`${isMobile ? 'w-auto' : ''} text-xs sm:text-sm`}
+                        className="rounded-lg shrink-0"
                         onClick={async () => {
                           const newAmountStr = await prompt({
-                            title: "Update Allocation",
+                            title: "Update allocation",
                             description: `Enter new credit allocation for ${user.name} (current: ${user.allocated})`,
                             placeholder: "e.g. 1500",
                             type: "number",
@@ -410,89 +528,63 @@ export default function AdminCredits() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="history" className="mt-4 sm:mt-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
+        <TabsContent value="history" className="mt-6 sm:mt-8">
+          <Card className="rounded-2xl border shadow-sm overflow-hidden">
+            <CardHeader className="p-6 sm:p-8 bg-muted/30 border-b">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <CardTitle className="text-sm sm:text-base">Transaction History</CardTitle>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <CardTitle className="text-base sm:text-lg">Transaction history</CardTitle>
+                </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <div className="relative flex-1 sm:flex-initial">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search..." className="pl-9 w-full sm:w-48 text-sm sm:text-base" data-testid="input-search-transactions" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search…" className="pl-9 w-full sm:w-48 rounded-lg" data-testid="input-search-transactions" />
                   </div>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="icon"
-                    className="shrink-0"
-                    onClick={async () => {
-                      const filterType = await prompt({
-                        title: "Filter Transactions",
-                        description: "Filter by:\n1. Type (purchase/usage/allocation/refund)\n2. Date Range\n3. User",
-                        placeholder: "Enter option (1-3) or leave empty",
-                      });
-                      if (filterType === "1") {
-                        const type = await prompt({
-                          title: "Filter by Type",
-                          description: "Enter transaction type",
-                          placeholder: "purchase/usage/allocation/refund",
-                        });
-                        if (type) {
-                          toast({
-                            title: "Filter applied",
-                            description: `Filtering transactions by type: ${type}`,
-                          });
-                        }
-                      } else if (filterType) {
-                        toast({
-                          title: "Filter option",
-                          description: "This filter option will be available in the next update.",
-                        });
-                      }
-                    }}
-                  >
-                    <Filter className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    className="shrink-0"
+                    className="shrink-0 rounded-lg"
                     onClick={() => {
                       const dataStr = JSON.stringify(transactions, null, 2);
                       const dataBlob = new Blob([dataStr], { type: "application/json" });
                       const url = URL.createObjectURL(dataBlob);
                       const link = document.createElement("a");
                       link.href = url;
-                      link.download = `transactions_${new Date().toISOString().split('T')[0]}.json`;
+                      link.download = `transactions_${new Date().toISOString().split("T")[0]}.json`;
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
                       URL.revokeObjectURL(url);
-                      toast({
-                        title: "Exported",
-                        description: "Transaction history has been exported.",
-                      });
+                      toast({ title: "Exported", description: "Transaction history has been exported." });
                     }}
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
+            <CardContent className="p-4 sm:p-6">
               <div className="space-y-2">
                 {transactions.map((tx) => (
-                  <div key={tx.id} className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-3 sm:gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors`} data-testid={`row-transaction-${tx.id}`}>
-                    <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                  <div
+                    key={tx.id}
+                    className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40"
+                    data-testid={`row-transaction-${tx.id}`}
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
                         {getTransactionIcon(tx.type)}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-xs sm:text-sm truncate">{tx.description}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{tx.user} • {tx.date}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{tx.description}</p>
+                        <p className="text-xs text-muted-foreground truncate">{tx.user} • {tx.date}</p>
                       </div>
                     </div>
-                    <div className={`font-semibold text-xs sm:text-sm ${tx.amount > 0 ? 'text-emerald dark:text-emerald' : 'text-foreground'} ${isMobile ? 'self-end' : ''}`}>
-                      {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
+                    <div className={`text-sm font-semibold tabular-nums ${tx.amount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
+                      {tx.amount > 0 ? "+" : ""}{tx.amount.toLocaleString()}
                     </div>
                   </div>
                 ))}

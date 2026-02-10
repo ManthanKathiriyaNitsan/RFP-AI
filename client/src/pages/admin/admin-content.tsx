@@ -26,9 +26,11 @@ import {
   List,
   BookOpen,
   Lightbulb,
-  CheckCircle
+  CheckCircle,
+  User,
+  ArrowLeft,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -55,11 +57,13 @@ export default function AdminContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [activeTab, setActiveTab] = useState("all");
+  const [selectedCustomerName, setSelectedCustomerName] = useState<string | null>(null);
   const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "content"],
     queryFn: fetchAdminContent,
   });
   const contentCategoriesRaw = data?.contentCategories ?? [];
+  const contentByCustomer = data?.contentByCustomer ?? [];
   type ContentCategory = { id: number; name: string; color: string; count: number; icon: import("lucide-react").LucideIcon };
   const contentCategories: ContentCategory[] = contentCategoriesRaw.map((c: { id?: number; name?: string; color?: string; count?: number; icon?: string; [k: string]: unknown }) => ({
     id: c.id ?? 0,
@@ -72,6 +76,9 @@ export default function AdminContent() {
   useEffect(() => {
     if (data?.contentItems != null) setContentItemsState(data.contentItems);
   }, [data?.contentItems]);
+  useEffect(() => {
+    if (activeTab !== "by-customer") setSelectedCustomerName(null);
+  }, [activeTab]);
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
   const { prompt, PromptDialog } = usePrompt();
@@ -116,6 +123,8 @@ export default function AdminContent() {
   // Filter by tab
   if (activeTab === "starred") {
     filteredContent = filteredContent.filter(item => item.starred);
+  } else if (activeTab === "by-customer" && selectedCustomerName) {
+    filteredContent = contentItemsState.filter((item) => (item.author || "").trim() === selectedCustomerName);
   } else if (activeTab === "recent") {
     filteredContent = [...filteredContent].sort((a, b) => {
       const dateA = new Date(a.lastUpdated || 0);
@@ -211,6 +220,9 @@ export default function AdminContent() {
               </TabsTrigger>
               <TabsTrigger value="recent" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
                 <Clock className="w-3 h-3 mr-1" /> Recent
+              </TabsTrigger>
+              <TabsTrigger value="by-customer" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
+                <User className="w-3 h-3 mr-1" /> By Customer <Badge variant="secondary" className="ml-2 text-[10px]">{contentByCustomer.length}</Badge>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -547,6 +559,163 @@ export default function AdminContent() {
           )}
         </TabsContent>
         ))}
+
+        <TabsContent value="by-customer" className="w-full max-w-full overflow-x-hidden">
+          {selectedCustomerName === null ? (
+            <Card className="border shadow-sm w-full max-w-full overflow-x-hidden">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  Documents by Customer
+                </CardTitle>
+                <CardDescription>
+                  Click a customer name to see the documents they uploaded from proposals.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {contentByCustomer.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    No proposal documents yet. When customers upload files in proposals, they will appear here by name.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {contentByCustomer.map((entry) => (
+                      <li key={entry.author}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCustomerName(entry.author)}
+                          className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left hover:bg-muted/50 transition-colors"
+                        >
+                          <span className="font-medium truncate">{entry.author}</span>
+                          <Badge variant="secondary" className="shrink-0">
+                            {entry.documentCount} document{entry.documentCount !== 1 ? "s" : ""}
+                          </Badge>
+                          <ArrowLeft className="w-4 h-4 shrink-0 rotate-180 text-muted-foreground" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedCustomerName(null)}
+                  className="gap-2"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to customers
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {selectedCustomerName} — {contentItemsState.filter((i) => (i.author || "").trim() === selectedCustomerName).length} document(s)
+                </span>
+              </div>
+              {viewMode === "list" ? (
+                <Card className="border shadow-sm w-full max-w-full overflow-x-hidden">
+                  <CardContent className="p-0 w-full max-w-full overflow-x-hidden">
+                    <div className="overflow-x-auto w-full max-w-full">
+                      <table className="w-full min-w-[600px]">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/30">
+                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Content</th>
+                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
+                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Updated</th>
+                            <th className="text-right py-3 px-4 w-12"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredContent.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-8 px-4 text-center text-sm text-muted-foreground">No documents for this customer.</td>
+                            </tr>
+                          ) : (
+                            filteredContent.map((item) => {
+                              const statusConfig = getStatusConfig(item.status);
+                              return (
+                                <tr key={item.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                                  <td className="py-3 px-4 min-w-0">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(e) => { e.stopPropagation(); toggleStar(item); }}>
+                                        <Star className={`w-4 h-4 ${item.starred ? "fill-amber-500 text-amber-500" : "text-muted-foreground"}`} />
+                                      </Button>
+                                      <p className="font-medium text-sm truncate">{item.title}</p>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 min-w-0"><span className="text-sm truncate block">{item.category}</span></td>
+                                  <td className="py-3 px-4">
+                                    <Badge variant="outline" className={`${statusConfig.className} text-[10px] font-medium shrink-0`}>{statusConfig.label}</Badge>
+                                  </td>
+                                  <td className="py-3 px-4 min-w-0"><span className="text-sm truncate">{item.lastUpdated}</span></td>
+                                  <td className="py-3 px-4">
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem asChild>
+                                          <Link href={`/admin/content/editor?id=${item.id}`} className="flex items-center">
+                                            <Edit className="w-4 h-4 mr-2" /> Edit
+                                          </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="text-destructive" onClick={async () => {
+                                          const confirmed = await confirm({ title: "Delete Content", description: `Delete "${item.title}"?`, confirmText: "Delete", cancelText: "Cancel", variant: "destructive" });
+                                          if (confirmed) {
+                                            try {
+                                              setContentItemsState((items) => items.filter((i) => i.id !== item.id));
+                                              await apiRequest("DELETE", `/api/content/${item.id}`);
+                                              queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
+                                              toast({ title: "Deleted", description: `${item.title} has been deleted.`, variant: "destructive" });
+                                            } catch {
+                                              toast({ title: "Error", description: "Failed to delete.", variant: "destructive" });
+                                            }
+                                          }
+                                        }}>
+                                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {filteredContent.map((item) => {
+                    const statusConfig = getStatusConfig(item.status);
+                    return (
+                      <Link key={item.id} href={`/admin/content/editor?id=${item.id}`}>
+                        <Card className="border shadow-sm hover:shadow-md transition-all cursor-pointer h-full">
+                          <CardContent className="p-3 sm:p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(e) => { e.preventDefault(); toggleStar(item); }}>
+                                <Star className={`w-4 h-4 ${item.starred ? "fill-amber-500 text-amber-500" : "text-muted-foreground"}`} />
+                              </Button>
+                              <Badge variant="outline" className={`${statusConfig.className} text-[10px]`}>{statusConfig.label}</Badge>
+                            </div>
+                            <h3 className="font-medium text-sm mb-1.5 line-clamp-2 break-words">{item.title}</h3>
+                            <p className="text-xs text-muted-foreground truncate">{item.category}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{item.lastUpdated}</p>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
       </Tabs>
       </div>
     </>

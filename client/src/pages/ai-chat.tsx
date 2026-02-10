@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { Bot, Send, MessageSquare, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { fetchChatMessages } from "@/api/proposals";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
+import { parseApiError } from "@/lib/utils";
 import { authStorage } from "@/lib/auth";
 import type { AiChatConfig } from "@/config/ai-chat.types";
 
@@ -57,11 +59,11 @@ function initialMessagesFromConfig(config: AiChatConfig): Array<{ id: number; is
   const now = Date.now();
   const out = list.length
     ? list.map((m, i) => ({
-        id: Number(m.id) || i + 1,
-        isAi: m.isAi,
-        message: m.message,
-        timestamp: new Date(now - (list.length - 1 - i) * 60 * 1000),
-      }))
+      id: Number(m.id) || i + 1,
+      isAi: m.isAi,
+      message: m.message,
+      timestamp: new Date(now - (list.length - 1 - i) * 60 * 1000),
+    }))
     : [{ ...DEFAULT_WELCOME_MESSAGE, timestamp: new Date(now) }];
   return out;
 }
@@ -159,12 +161,19 @@ export default function AIChat() {
         }, 1500);
       }
     },
-    onError: () => {
+    onError: (error: unknown) => {
       setIsAiThinking(false);
+      const { message } = parseApiError(error);
+      const is402 = error instanceof Error && /^402:/.test(error.message);
       toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
+        title: is402 ? "Insufficient credits" : "Error",
+        description: is402 ? `${message} Purchase more credits to continue.` : message || "Failed to send message. Please try again.",
         variant: "destructive",
+        action: is402 ? (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/credits"}>
+            Buy Credits
+          </Button>
+        ) : undefined,
       });
     },
   });
@@ -249,9 +258,8 @@ export default function AIChat() {
                     )}
                     <div className="flex flex-col max-w-[75%] sm:max-w-xs lg:max-w-md">
                       <div
-                        className={`rounded-lg p-2 sm:p-3 text-xs sm:text-sm ${
-                          message.isAi ? "bg-muted" : "bg-primary text-primary-foreground"
-                        }`}
+                        className={`rounded-lg p-2 sm:p-3 text-xs sm:text-sm ${message.isAi ? "bg-muted" : "bg-primary text-primary-foreground"
+                          }`}
                       >
                         <p className="whitespace-pre-line break-words">{message.message}</p>
                       </div>

@@ -1,6 +1,6 @@
 /**
  * Admin data layer: fetch from backend API only. All admin data is dynamic.
- * Set VITE_API_BASE_URL in .env to point at the RFP backend (e.g. http://localhost:8000).
+ * Set VITE_API_BASE_URL in .env to point at the RFP backend (e.g. http://localhost:8000 or http://192.168.0.119:8000).
  */
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
@@ -65,6 +65,12 @@ export interface CreditsData {
   userAllocations?: { id: number; name: string; avatar: string; allocated: number; used: number; remaining: number }[];
 }
 
+/** Super-admin: who bought credits and who allocated how much to whom */
+export interface CreditsActivityData {
+  purchasesByAdmin?: { adminId: number; adminName: string; totalCredits: number; count: number; transactions: { amount: number; date: string; description: string | null }[] }[];
+  allocationsByAdmin?: { adminId: number; adminName: string; allocations: { targetUserId: number; targetUserName: string; amount: number; date: string }[] }[];
+}
+
 /** Subscription plan for plan builder */
 export interface BillingPlanItem {
   id: string;
@@ -118,9 +124,16 @@ export interface IntegrationsData {
   availableIntegrations?: { id: number; name: string; category: string; description: string; logo: string }[];
 }
 
+export interface ContentByCustomer {
+  author: string;
+  documentCount: number;
+}
+
 export interface ContentData {
   contentCategories?: { id: number; name: string; icon: string; count: number; color: string }[];
   contentItems?: { id: number; title: string; category: string; status: string; usageCount: number; lastUsed: string; lastUpdated: string; author: string; tags: string[]; starred: boolean }[];
+  /** Customers who have uploaded proposal documents; click to see their documents */
+  contentByCustomer?: ContentByCustomer[];
 }
 
 /** Knowledge base document with embedding status */
@@ -399,19 +412,23 @@ export function fetchAdminCredits(): Promise<CreditsData> {
   return getAdminJson<CreditsData>("/api/v1/admin/credits");
 }
 
-/** Allocate or deduct credits for a user (admin/super_admin). Returns { userId, previousCredits, newCredits, amount }. */
+/** Allocate or deduct credits for a user (admin/super_admin). Pass allocatedBy (current user id) so super-admin can see who allocated. */
 export async function allocateAdminCredits(
   userId: number,
   amount: number,
-  description?: string
+  description?: string,
+  allocatedBy?: number
 ): Promise<{ userId: number; previousCredits: number; newCredits: number; amount: number }> {
   const token = authStorage.getAccessToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  const body: { userId: number; amount: number; description?: string; allocatedBy?: number } = { userId, amount };
+  if (description != null) body.description = description;
+  if (allocatedBy != null) body.allocatedBy = allocatedBy;
   const res = await fetch(getApiUrl("/api/v1/admin/credits/allocate"), {
     method: "POST",
     headers,
-    body: JSON.stringify({ userId, amount, description }),
+    body: JSON.stringify(body),
     credentials: "include",
   });
   if (!res.ok) {
@@ -421,9 +438,82 @@ export async function allocateAdminCredits(
   return res.json() as Promise<{ userId: number; previousCredits: number; newCredits: number; amount: number }>;
 }
 
+/** Super-admin: fetch credit activity (purchases by admin, allocations by admin). Returns empty data if endpoint is not available (e.g. Python backend). */
+export async function fetchAdminCreditsActivity(): Promise<CreditsActivityData> {
+  try {
+    return await getAdminJson<CreditsActivityData>("/api/v1/admin/credits/activity");
+  } catch {
+    return { purchasesByAdmin: [], allocationsByAdmin: [] };
+  }
+}
+
+/** Create a Stripe Checkout Session for buying a credit package. Returns sessionId and url for redirect. */
+export async function createCreditsOrder(
+  packageId: string,
+  packageDetails: { amount: number; currency?: string; credits: number; userId: number }
+): Promise<{ sessionId: string; url: string | null; amount: number; currency: string }> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl("/api/v1/admin/credits/create-order"), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      packageId,
+      amount: packageDetails.amount,
+      currency: packageDetails.currency ?? "USD",
+      credits: packageDetails.credits,
+      userId: packageDetails.userId,
+    }),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = `HTTP ${res.status}`;
+    try {
+      const data = JSON.parse(text) as { message?: string; detail?: string };
+      msg = (data.message ?? data.detail ?? text) || msg;
+    } catch {
+      msg = text || msg;
+    }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<{ sessionId: string; url: string | null; amount: number; currency: string }>;
+}
+
+/** Confirm Stripe payment after redirect and add credits. Call with session_id from URL. Returns { success, credits }. */
+export async function confirmStripePayment(sessionId: string): Promise<{ success: boolean; credits: number; alreadyProcessed?: boolean }> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl("/api/v1/admin/credits/confirm-stripe-payment"), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ sessionId }),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = `HTTP ${res.status}`;
+    try {
+      const data = JSON.parse(text) as { message?: string; detail?: string };
+      msg = (data.message ?? data.detail ?? text) || msg;
+    } catch {
+      msg = text || msg;
+    }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<{ success: boolean; credits: number; alreadyProcessed?: boolean }>;
+}
+
 /** List all users (for admin allocate-credits modal). */
 export async function fetchAdminUsersList(): Promise<{ id: number; email?: string; first_name?: string; last_name?: string; role?: string }[]> {
   return getAdminJson("/api/v1/users");
+}
+
+/** List users that can be assigned to proposals (includes admin role). Use in Assign dialog. */
+export async function fetchAdminUsersListForAssignees(): Promise<{ id: number; email?: string; first_name?: string; last_name?: string; role?: string }[]> {
+  return getAdminJson("/api/v1/users", { for_assignees: "true" });
 }
 
 export async function fetchAdminBillingPlans(): Promise<BillingPlansData> {
@@ -551,6 +641,21 @@ export function fetchAdminSidebar(): Promise<AdminSidebarData> {
 
 export function fetchAdminContent(): Promise<ContentData> {
   return getAdminJson<ContentData>("/api/v1/admin/content");
+}
+
+/** Sync this proposal's documents to Content Library (for files uploaded before auto-sync existed). */
+export async function syncProposalFilesToContentLibrary(proposalId: number): Promise<{ success: boolean; synced: number; total: number }> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl(`/api/v1/admin/proposals/${proposalId}/sync-files-to-content`), {
+    method: "POST",
+    headers,
+    credentials: "include",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { message?: string }).message ?? "Failed to sync");
+  return data as { success: boolean; synced: number; total: number };
 }
 
 export async function fetchAdminKnowledgeBase(): Promise<KnowledgeBaseData> {
@@ -712,9 +817,10 @@ export function fetchAdminPermissions(): Promise<PermissionsData> {
   return getAdminJson<PermissionsData>("/api/v1/admin/permissions");
 }
 
-export async function fetchAdminRoles(): Promise<RolesData> {
+export async function fetchAdminRoles(userRole?: string): Promise<RolesData> {
   try {
-    return await getAdminJson<RolesData>("/api/v1/admin/roles");
+    const params = userRole ? { userRole } : undefined;
+    return await getAdminJson<RolesData>("/api/v1/admin/roles", params);
   } catch {
     return { roles: [], permissionDefinitions: [] };
   }
@@ -738,15 +844,20 @@ export async function createAdminRole(body: { name: string; permissions: Record<
   }
 }
 
-export async function updateAdminRole(id: string, body: { name?: string; permissions?: Record<string, string[]> }): Promise<RoleItem | null> {
+export async function updateAdminRole(
+  id: string,
+  body: { name?: string; permissions?: Record<string, string[]> },
+  userRole?: string
+): Promise<RoleItem | null> {
   try {
     const token = authStorage.getAccessToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    const payload = userRole ? { ...body, userRole } : body;
     const res = await fetch(getApiUrl(`/api/v1/admin/roles/${encodeURIComponent(id)}`), {
       method: "PATCH",
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
       credentials: "include",
     });
     if (!res.ok) return null;

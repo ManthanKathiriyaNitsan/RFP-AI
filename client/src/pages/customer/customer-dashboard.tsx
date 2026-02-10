@@ -1,80 +1,56 @@
-import { useMemo } from "react";
 import { Plus, Coins, FileText, CheckCircle, Users, ArrowRight, Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
-import { useProposalsList, proposalKeys } from "@/hooks/use-proposals-api";
-import { fetchCollaborations } from "@/api/proposals";
+import { fetchCustomerDashboard } from "@/api/customer-data";
 import { Link, useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { QueryErrorState } from "@/components/shared/query-error-state";
-import type { Proposal } from "@/api/proposals";
 import { getProposalStatusBadgeClass } from "@/lib/badge-classes";
+
+function completionFromStatus(status: string): number {
+  if (status === "completed" || status === "won" || status === "lost") return 100;
+  if (status === "draft") return 25;
+  return 65;
+}
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [, navigate] = useLocation();
   const isMobile = useIsMobile();
-  const { data: proposalsData, isLoading: proposalsLoading, isError: proposalsError, error: proposalsErrorObj, refetch: refetchProposals } = useProposalsList();
-  const proposals = proposalsData ?? [];
-  const proposalIds = proposals.map((p) => p.id);
-  const collaborationQueries = useQueries({
-    queries: proposalIds.map((proposalId) => ({
-      queryKey: proposalKeys.collaborations(proposalId),
-      queryFn: () => fetchCollaborations(proposalId),
-      enabled: proposalId > 0,
-    })),
+  const {
+    data: dashboard,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["customer", "dashboard"],
+    queryFn: fetchCustomerDashboard,
   });
-  const allCollaborations = collaborationQueries.flatMap((q) => q.data ?? []);
-  const uniqueCollaboratorIds = new Set(allCollaborations.map((c) => c.userId));
-  const isLoading = proposalsLoading;
 
-  if (proposalsError) {
+  if (isError) {
     return (
       <div className="p-4 sm:p-6">
-        <QueryErrorState refetch={refetchProposals} error={proposalsErrorObj} />
+        <QueryErrorState refetch={refetch} error={error} />
       </div>
     );
   }
 
-  // Deadlines from proposals (API data): proposals with dueDate in the future, sorted by date
-  const upcomingDeadlines = useMemo(() => {
-    const now = Date.now();
-    return proposals
-      .filter((p: Proposal) => p.dueDate) 
-      .map((p: Proposal) => ({
-        id: p.id,
-        title: p.title,
-        date: new Date(p.dueDate!),
-        proposalId: p.id,
-      }))
-      .filter((d) => d.date.getTime() >= now)
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .slice(0, 10);
-  }, [proposals]);
-
-  const stats = {
-    credits: user?.credits ?? 0,
-    activeProposals: proposals.filter((p: Proposal) => p.status === "in_progress").length,
-    completedProposals: proposals.filter((p: Proposal) => p.status === "completed").length,
-    collaborators: uniqueCollaboratorIds.size,
+  const stats = dashboard?.stats ?? {
+    activeProposals: 0,
+    completedProposals: 0,
+    collaborators: 0,
   };
-
-  /** Completion % derived from proposal status (dynamic from API). */
-  const calculateCompletion = (proposal: Proposal) => {
-    if (proposal.status === "completed") return 100;
-    if (proposal.status === "draft") return 25;
-    return 65; // in_progress
-  };
-
-  const averageCompletion = proposals.length > 0
-    ? Math.round(proposals.reduce((sum: number, p: Proposal) => sum + calculateCompletion(p), 0) / proposals.length)
-    : 0;
+  const credits = dashboard?.credits ?? user?.credits ?? 0;
+  const usedThisMonth = dashboard?.usedThisMonth ?? 0;
+  const allocationPercentage = dashboard?.allocationPercentage ?? 0;
+  const upcomingDeadlines = dashboard?.upcomingDeadlines ?? [];
+  const recentProposals = dashboard?.recentProposals ?? [];
+  const averageCompletion = dashboard?.averageCompletion ?? 0;
 
   const getStatusBadgeClass = (status: string) => getProposalStatusBadgeClass(status);
   const getStatusLabel = (status: string) => {
@@ -82,31 +58,32 @@ export default function CustomerDashboard() {
     return status.replace("_", " ");
   };
 
-  const formatTimeAgo = (date: string | Date | null) => {
+  const formatTimeAgo = (date: string | null) => {
     if (!date) return "Recently";
     const now = new Date();
     const past = new Date(date);
     const diffInHours = Math.floor((now.getTime() - past.getTime()) / (1000 * 60 * 60));
-    
     if (diffInHours < 1) return "Less than an hour ago";
-    if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+    if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? "s" : ""} ago`;
     const diffInDays = Math.floor(diffInHours / 24);
-    return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+    return `${diffInDays} day${diffInDays > 1 ? "s" : ""} ago`;
   };
 
   if (isLoading) {
     return (
-      <div className="space-y-4 sm:space-y-8">
-        <div className="animate-pulse">
-          <div className="h-6 sm:h-8 bg-muted rounded w-1/3 mb-2"></div>
-          <div className="h-3 sm:h-4 bg-muted rounded w-1/2"></div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="animate-pulse">
-              <div className="h-24 sm:h-32 bg-muted rounded-xl"></div>
-            </div>
-          ))}
+      <div className="flex-1 min-h-0 flex items-center justify-center">
+        <div className="space-y-4 sm:space-y-8 w-full max-w-4xl">
+          <div className="animate-pulse">
+            <div className="h-6 sm:h-8 bg-muted rounded w-1/3 mb-2"></div>
+            <div className="h-3 sm:h-4 bg-muted rounded w-1/2"></div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="animate-pulse">
+                <div className="h-24 sm:h-32 bg-muted rounded-xl"></div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -134,9 +111,19 @@ export default function CustomerDashboard() {
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-light rounded-lg flex items-center justify-center shrink-0">
                 <Coins className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               </div>
+              <Link href="/credits">
+                <Button variant="outline" size="sm" className="h-8 text-xs">
+                  Top Up
+                </Button>
+              </Link>
             </div>
-            <h3 className="text-xl sm:text-2xl font-bold mb-1">{stats.credits}</h3>
+            <h3 className="text-xl sm:text-2xl font-bold mb-1">{credits.toLocaleString()}</h3>
             <p className="text-xs sm:text-sm text-muted-foreground">Available Credits</p>
+            {(usedThisMonth > 0 || allocationPercentage > 0) && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Used this month: {usedThisMonth.toLocaleString()} ({allocationPercentage}% of allocation)
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -195,10 +182,10 @@ export default function CustomerDashboard() {
                 </div>
                 <Progress value={averageCompletion} className="h-2" />
               </div>
-              {proposals.length > 0 && (
+              {recentProposals.length > 0 && (
                 <div className="space-y-3">
-                  {proposals.slice(0, 3).map((proposal: Proposal) => {
-                    const completion = calculateCompletion(proposal);
+                  {recentProposals.slice(0, 3).map((proposal) => {
+                    const completion = completionFromStatus(proposal.status);
                     return (
                       <div key={proposal.id}>
                         <div className="flex justify-between text-xs mb-1.5">
@@ -228,14 +215,19 @@ export default function CustomerDashboard() {
             ) : (
               <div className="space-y-3">
                 {upcomingDeadlines.map((deadline) => {
-                  const daysUntil = Math.ceil((deadline.date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  const deadlineDate = new Date(deadline.date);
+                  const daysUntil = Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                   const isUrgent = daysUntil <= 7;
                   return (
                     <div key={deadline.id} className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-muted/30">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{deadline.title}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {deadline.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {deadlineDate.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
                         </p>
                       </div>
                       <Badge variant={isUrgent ? "destructive" : "outline"} className="shrink-0">
@@ -264,7 +256,7 @@ export default function CustomerDashboard() {
           </div>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0">
-          {proposals.length === 0 ? (
+          {recentProposals.length === 0 ? (
             <div className="text-center py-6 sm:py-8">
               <FileText className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mx-auto mb-3 sm:mb-4" />
               <h3 className="text-base sm:text-lg font-semibold mb-2">No proposals yet</h3>
@@ -280,33 +272,29 @@ export default function CustomerDashboard() {
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
-              {[...proposals]
-                .sort((a, b) => {
-                  const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-                  const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-                  return dateB - dateA;
-                })
-                .slice(0, 5)
-                .map((proposal: Proposal) => (
+              {recentProposals.map((proposal) => (
                 <div key={proposal.id} className="proposal-card">
-                  <div className={`flex ${isMobile ? 'flex-col' : 'items-center justify-between'} gap-3 sm:gap-4`}>
-                    <div className={`flex items-center ${isMobile ? 'w-full' : 'space-x-4'} min-w-0 flex-1`}>
+                  <div className={`flex ${isMobile ? "flex-col" : "items-center justify-between"} gap-3 sm:gap-4`}>
+                    <div className={`flex items-center ${isMobile ? "w-full" : "space-x-4"} min-w-0 flex-1`}>
                       <div className="w-10 h-10 bg-blue-light rounded-lg flex items-center justify-center shrink-0">
                         <FileText className="w-5 h-5 text-primary" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-medium text-sm sm:text-base truncate">{proposal.title}</h3>
                         <p className="text-xs sm:text-sm text-muted-foreground">
-                          Updated {formatTimeAgo(proposal.updatedAt || proposal.createdAt)}
+                          Updated {formatTimeAgo(proposal.updatedAt ?? proposal.createdAt)}
                         </p>
                       </div>
                     </div>
-                    <div className={`flex items-center ${isMobile ? 'justify-between w-full' : 'space-x-4'} shrink-0`}>
-                      <Badge variant="outline" className={`${getStatusBadgeClass(proposal.status)} text-[10px] sm:text-xs shrink-0 border`}>
+                    <div className={`flex items-center ${isMobile ? "justify-between w-full" : "space-x-4"} shrink-0`}>
+                      <Badge
+                        variant="outline"
+                        className={`${getStatusBadgeClass(proposal.status)} text-[10px] sm:text-xs shrink-0 border`}
+                      >
                         {getStatusLabel(proposal.status)}
                       </Badge>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         className="h-8 w-8 sm:h-10 sm:w-10"
                         onClick={() => navigate(`/rfp/${proposal.id}`)}

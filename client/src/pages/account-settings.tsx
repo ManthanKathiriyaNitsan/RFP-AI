@@ -51,7 +51,6 @@ const defaultAccountSettingsConfig: AccountSettingsConfig = {
       { id: "profile", label: "Profile", icon: "user" },
       { id: "security", label: "Security", icon: "lock" },
       { id: "notifications", label: "Notifications", icon: "bell" },
-      { id: "billing", label: "Billing", icon: "creditCard" },
     ],
     userCard: { creditsLabel: "Credits", creditsSuffix: "credits available", showCreditsBar: true },
   },
@@ -112,41 +111,6 @@ const defaultAccountSettingsConfig: AccountSettingsConfig = {
       successTitle: "Preferences saved",
       successDescription: "Your notification preferences have been saved.",
     },
-    billing: {
-      title: "Billing & Subscription",
-      plan: {
-        title: "Current Plan",
-        planName: "Professional Plan",
-        statusBadge: "Active",
-        creditsLabel: "Credits Remaining:",
-        nextBillingLabel: "Next Billing Date:",
-      },
-      paymentMethod: {
-        title: "Payment Method",
-        maskLabel: "•••• •••• •••• 4242",
-        expiresLabel: "Expires 12/24",
-        updateButtonLabel: "Update",
-        updatePromptTitle: "Update Card Number",
-        updatePromptDescription: "Enter new card number (16 digits)",
-        updatePromptPlaceholder: "•••• •••• •••• ••••",
-        successTitle: "Payment method updated",
-        successDescription: "Your payment method has been updated successfully.",
-        invalidTitle: "Invalid card number",
-        invalidDescription: "Please enter a valid 16-digit card number.",
-      },
-      transactionsTitle: "Recent Transactions",
-      transactions: [],
-      downloadInvoiceLabel: "Download Invoice",
-      cancelSubscriptionLabel: "Cancel Subscription",
-      cancelConfirmTitle: "Cancel Subscription",
-      cancelConfirmDescription: "Are you sure you want to cancel your subscription? This action cannot be undone.",
-      cancelConfirmButton: "Cancel Subscription",
-      cancelKeepButton: "Keep Subscription",
-      cancelSuccessTitle: "Subscription cancelled",
-      cancelSuccessDescription: "Your subscription has been cancelled. Access will continue until the end of the billing period.",
-      invoiceDownloadedTitle: "Invoice downloaded",
-      invoiceDownloadedDescription: "Your invoice has been downloaded.",
-    },
   },
 };
 
@@ -194,6 +158,8 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
   const config = configData ?? defaultAccountSettingsConfig;
   const [activeTab, setActiveTab] = useState(config.sidebar.nav[0]?.id ?? "profile");
   const isMobile = useIsMobile();
+  const isCustomerOrCollaborator = ["customer", "collaborator"].includes((currentRole || "").toLowerCase());
+  const showBillingTab = Boolean(config.sections.billing) && !isCustomerOrCollaborator;
 
   const getHomeRoute = () => {
     if (currentRole === "admin") return "/admin";
@@ -251,6 +217,13 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
       setProfileData((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     }
   }, [user?.id, profileFieldIds]);
+
+  // When billing tab is hidden (no section or customer/collaborator), switch away if it was selected
+  useEffect(() => {
+    if (!showBillingTab && activeTab === "billing") {
+      setActiveTab("profile");
+    }
+  }, [showBillingTab, activeTab]);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: Record<string, string>) => {
@@ -480,6 +453,7 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
   const notificationsSection = sections.notifications;
   const billingSection = sections.billing;
   const credits = user?.credits ?? 0;
+  const navItems = sidebar.nav.filter((item) => item.id !== "billing" || showBillingTab);
 
   return (
     <div className="space-y-4 sm:space-y-8">
@@ -523,7 +497,7 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
                       {sidebar.settingsLabel}
                     </h3>
                     <nav className="space-y-0.5">
-                      {sidebar.nav.map(renderNavItem)}
+                      {navItems.map(renderNavItem)}
                     </nav>
                   </div>
                 </div>
@@ -595,7 +569,7 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
                       {sidebar.settingsLabel}
                     </h3>
                     <nav className="space-y-0.5">
-                      {sidebar.nav.map((item) => {
+                      {navItems.map((item) => {
                         const active = activeTab === item.id;
                         const Icon = ICON_MAP[item.icon] ?? User;
                         return (
@@ -942,206 +916,207 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
               </Card>
             </TabsContent>
 
-            {/* Billing */}
-            <TabsContent value="billing">
-              <Card>
-                <CardHeader className="p-4 sm:p-6">
-                  <CardTitle className="text-sm sm:text-base">
-                    {billingSection.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6 pt-0">
-                  <div className="border rounded-lg p-3 sm:p-4">
-                    <div
-                      className={cn(
-                        "flex",
-                        isMobile ? "flex-col" : "items-center justify-between",
-                        "gap-3 mb-3 sm:mb-4"
-                      )}
-                    >
-                      <div>
-                        <h4 className="font-medium text-sm sm:text-base">
-                          {billingSection.plan.title}
-                        </h4>
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          {billingSection.plan.planName}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs shrink-0`}>
-                        {billingSection.plan.statusBadge}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
-                      <div>
-                        <span className="text-muted-foreground">
-                          {billingSection.plan.creditsLabel}
-                        </span>
-                        <span className="font-medium ml-2">{credits}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">
-                          {billingSection.plan.nextBillingLabel}
-                        </span>
-                        <span className="font-medium ml-2">Jan 15, 2024</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 sm:space-y-3">
-                    <h4 className="font-medium text-sm sm:text-base">
-                      {billingSection.paymentMethod.title}
-                    </h4>
+            {showBillingTab && billingSection && (
+              <TabsContent value="billing">
+                <Card>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-sm sm:text-base">
+                      {billingSection.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6 pt-0">
                     <div className="border rounded-lg p-3 sm:p-4">
                       <div
                         className={cn(
                           "flex",
                           isMobile ? "flex-col" : "items-center justify-between",
-                          "gap-3"
+                          "gap-3 mb-3 sm:mb-4"
                         )}
                       >
-                        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
-                          <div className="w-8 h-8 bg-muted rounded flex items-center justify-center shrink-0">
-                            <CreditCard className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-xs sm:text-sm">
-                              {billingSection.paymentMethod.maskLabel}
-                            </p>
-                            <p className="text-[10px] sm:text-sm text-muted-foreground">
-                              {billingSection.paymentMethod.expiresLabel}
-                            </p>
-                          </div>
+                        <div>
+                          <h4 className="font-medium text-sm sm:text-base">
+                            {billingSection.plan.title}
+                          </h4>
+                          <p className="text-xs sm:text-sm text-muted-foreground">
+                            {billingSection.plan.planName}
+                          </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full sm:w-auto text-xs sm:text-sm"
-                          onClick={async () => {
-                            const cardNumber = await prompt({
-                              title: billingSection.paymentMethod.updatePromptTitle,
-                              description: billingSection.paymentMethod.updatePromptDescription,
-                              placeholder: billingSection.paymentMethod.updatePromptPlaceholder,
-                              type: "text",
-                            });
-                            if (
-                              cardNumber &&
-                              cardNumber.replace(/\s+/g, "").length === 16
-                            ) {
-                              toast({
-                                title: billingSection.paymentMethod.successTitle,
-                                description:
-                                  billingSection.paymentMethod.successDescription,
-                              });
-                            } else if (cardNumber) {
-                              toast({
-                                title: billingSection.paymentMethod.invalidTitle,
-                                description:
-                                  billingSection.paymentMethod.invalidDescription,
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                        >
-                          {billingSection.paymentMethod.updateButtonLabel}
-                        </Button>
+                        <Badge variant="outline" className={`${softBadgeClasses.primary} text-[10px] sm:text-xs shrink-0`}>
+                          {billingSection.plan.statusBadge}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
+                        <div>
+                          <span className="text-muted-foreground">
+                            {billingSection.plan.creditsLabel}
+                          </span>
+                          <span className="font-medium ml-2">{credits}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">
+                            {billingSection.plan.nextBillingLabel}
+                          </span>
+                          <span className="font-medium ml-2">Jan 15, 2024</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-2 sm:space-y-3">
-                    <h4 className="font-medium text-sm sm:text-base">
-                      {billingSection.transactionsTitle}
-                    </h4>
-                    <div className="space-y-2">
-                      {billingSection.transactions.map((tx) => (
+                    <div className="space-y-2 sm:space-y-3">
+                      <h4 className="font-medium text-sm sm:text-base">
+                        {billingSection.paymentMethod.title}
+                      </h4>
+                      <div className="border rounded-lg p-3 sm:p-4">
                         <div
-                          key={tx.id}
                           className={cn(
                             "flex",
                             isMobile ? "flex-col" : "items-center justify-between",
-                            "gap-2 p-3 border rounded-lg"
+                            "gap-3"
                           )}
                         >
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-xs sm:text-sm">
-                              {tx.description}
-                            </p>
-                            <p className="text-[10px] sm:text-xs text-muted-foreground">
-                              {tx.date}
-                            </p>
+                          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                            <div className="w-8 h-8 bg-muted rounded flex items-center justify-center shrink-0">
+                              <CreditCard className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-xs sm:text-sm">
+                                {billingSection.paymentMethod.maskLabel}
+                              </p>
+                              <p className="text-[10px] sm:text-sm text-muted-foreground">
+                                {billingSection.paymentMethod.expiresLabel}
+                              </p>
+                            </div>
                           </div>
-                          <span className="font-medium text-xs sm:text-sm shrink-0">
-                            {tx.amount}
-                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full sm:w-auto text-xs sm:text-sm"
+                            onClick={async () => {
+                              const cardNumber = await prompt({
+                                title: billingSection.paymentMethod.updatePromptTitle,
+                                description: billingSection.paymentMethod.updatePromptDescription,
+                                placeholder: billingSection.paymentMethod.updatePromptPlaceholder,
+                                type: "text",
+                              });
+                              if (
+                                cardNumber &&
+                                cardNumber.replace(/\s+/g, "").length === 16
+                              ) {
+                                toast({
+                                  title: billingSection.paymentMethod.successTitle,
+                                  description:
+                                    billingSection.paymentMethod.successDescription,
+                                });
+                              } else if (cardNumber) {
+                                toast({
+                                  title: billingSection.paymentMethod.invalidTitle,
+                                  description:
+                                    billingSection.paymentMethod.invalidDescription,
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            {billingSection.paymentMethod.updateButtonLabel}
+                          </Button>
                         </div>
-                      ))}
+                      </div>
                     </div>
-                  </div>
 
-                  <div
-                    className={cn(
-                      "flex",
-                      isMobile ? "flex-col-reverse" : "justify-between",
-                      "gap-2 sm:gap-0 pt-4 sm:pt-6 border-t"
-                    )}
-                  >
-                    <Button
-                      variant="outline"
-                      className="w-full sm:w-auto text-xs sm:text-sm"
-                      onClick={() => {
-                        const invoiceData = {
-                          invoiceNumber: `INV-${Date.now()}`,
-                          date: new Date().toLocaleDateString(),
-                          amount: "$99.00",
-                          plan: billingSection.plan.planName,
-                          status: "Paid",
-                        };
-                        const dataStr = JSON.stringify(invoiceData, null, 2);
-                        const dataBlob = new Blob([dataStr], {
-                          type: "application/json",
-                        });
-                        const url = URL.createObjectURL(dataBlob);
-                        const link = document.createElement("a");
-                        link.href = url;
-                        link.download = `invoice_${invoiceData.invoiceNumber}.json`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(url);
-                        toast({
-                          title: billingSection.invoiceDownloadedTitle,
-                          description: billingSection.invoiceDownloadedDescription,
-                        });
-                      }}
+                    <div className="space-y-2 sm:space-y-3">
+                      <h4 className="font-medium text-sm sm:text-base">
+                        {billingSection.transactionsTitle}
+                      </h4>
+                      <div className="space-y-2">
+                        {billingSection.transactions.map((tx) => (
+                          <div
+                            key={tx.id}
+                            className={cn(
+                              "flex",
+                              isMobile ? "flex-col" : "items-center justify-between",
+                              "gap-2 p-3 border rounded-lg"
+                            )}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-xs sm:text-sm">
+                                {tx.description}
+                              </p>
+                              <p className="text-[10px] sm:text-xs text-muted-foreground">
+                                {tx.date}
+                              </p>
+                            </div>
+                            <span className="font-medium text-xs sm:text-sm shrink-0">
+                              {tx.amount}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "flex",
+                        isMobile ? "flex-col-reverse" : "justify-between",
+                        "gap-2 sm:gap-0 pt-4 sm:pt-6 border-t"
+                      )}
                     >
-                      {billingSection.downloadInvoiceLabel}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      className="w-full sm:w-auto text-xs sm:text-sm"
-                      onClick={async () => {
-                        const confirmed = await confirm({
-                          title: billingSection.cancelConfirmTitle,
-                          description: billingSection.cancelConfirmDescription,
-                          confirmText: billingSection.cancelConfirmButton,
-                          cancelText: billingSection.cancelKeepButton,
-                          variant: "destructive",
-                        });
-                        if (confirmed) {
+                      <Button
+                        variant="outline"
+                        className="w-full sm:w-auto text-xs sm:text-sm"
+                        onClick={() => {
+                          const invoiceData = {
+                            invoiceNumber: `INV-${Date.now()}`,
+                            date: new Date().toLocaleDateString(),
+                            amount: "$99.00",
+                            plan: billingSection.plan.planName,
+                            status: "Paid",
+                          };
+                          const dataStr = JSON.stringify(invoiceData, null, 2);
+                          const dataBlob = new Blob([dataStr], {
+                            type: "application/json",
+                          });
+                          const url = URL.createObjectURL(dataBlob);
+                          const link = document.createElement("a");
+                          link.href = url;
+                          link.download = `invoice_${invoiceData.invoiceNumber}.json`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
                           toast({
-                            title: billingSection.cancelSuccessTitle,
-                            description: billingSection.cancelSuccessDescription,
+                            title: billingSection.invoiceDownloadedTitle,
+                            description: billingSection.invoiceDownloadedDescription,
+                          });
+                        }}
+                      >
+                        {billingSection.downloadInvoiceLabel}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="w-full sm:w-auto text-xs sm:text-sm"
+                        onClick={async () => {
+                          const confirmed = await confirm({
+                            title: billingSection.cancelConfirmTitle,
+                            description: billingSection.cancelConfirmDescription,
+                            confirmText: billingSection.cancelConfirmButton,
+                            cancelText: billingSection.cancelKeepButton,
                             variant: "destructive",
                           });
-                        }
-                      }}
-                    >
-                      {billingSection.cancelSubscriptionLabel}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                          if (confirmed) {
+                            toast({
+                              title: billingSection.cancelSuccessTitle,
+                              description: billingSection.cancelSuccessDescription,
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      >
+                        {billingSection.cancelSubscriptionLabel}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
           </Tabs>
         </div>
       </div>

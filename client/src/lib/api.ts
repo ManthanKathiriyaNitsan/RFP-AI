@@ -1,10 +1,10 @@
 /**
  * Global API configuration – all requests go to the RFP-AI Python backend.
- * Set VITE_API_BASE_URL in .env to your RFP-AI backend (e.g. http://localhost:8000 or http://192.168.0.118:8000).
- * Defaults to http://localhost:8000 so the app always uses the Python backend; no local/JSON data.
+ * Set VITE_API_BASE_URL in .env to your RFP-AI backend (e.g. http://localhost:8000 or http://192.168.0.119:8000).
+ * Defaults to http://192.168.0.119:8000 so the app always uses the backend.
  */
 const API_BASE_URL =
-  (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.trim() || "http://localhost:8000";
+  (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.trim() || "http://192.168.0.119:8000";
 
 /** Remove trailing slash from base so path can start with / */
 const BASE = API_BASE_URL.replace(/\/+$/, "");

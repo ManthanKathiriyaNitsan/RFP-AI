@@ -22,6 +22,7 @@ export type NotificationType =
   | "chat"
   | "deadline_reminder"
   | "status_change"
+  | "proposal_assigned"
   | "credit_added"
   | "organization_created"
   | "collaboration_invite";

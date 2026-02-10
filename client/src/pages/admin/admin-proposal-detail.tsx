@@ -12,7 +12,8 @@ import {
   useSearchUsers,
   proposalKeys,
 } from "@/hooks/use-proposals-api";
-import { addCollaboration, updateCollaboration, deleteCollaboration, fetchCollaborations } from "@/api/proposals";
+import { addCollaboration, updateCollaboration, deleteCollaboration, fetchCollaborations, fetchProposalFiles, fetchProposalFileBlob, type ProposalFileApi } from "@/api/proposals";
+import { syncProposalFilesToContentLibrary } from "@/api/admin-data";
 import { QueryErrorState } from "@/components/shared/query-error-state";
 import { 
   ArrowLeft, 
@@ -43,6 +44,9 @@ import {
   FolderPlus,
   UserCog,
   UserX,
+  Paperclip,
+  FileDown,
+  Library,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,7 +67,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getAvatarUrl } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -80,9 +85,10 @@ import {
   downloadProposalXlsx,
   downloadProposalJson,
 } from "@/lib/export-proposal";
-import { fetchAdminOptions } from "@/api/admin-data";
+import { fetchAdminOptions, fetchAdminUsersListForAssignees } from "@/api/admin-data";
 import type { CollaboratorPermissions } from "@/api/customer-data";
 import { ProposalDiscussionTab } from "@/components/customer/proposal-discussion";
+import { ProposalQuillEditor } from "@/components/editor/ProposalQuillEditor";
 
 const COLLABORATOR_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   viewer: Eye,
@@ -96,6 +102,38 @@ const PERMISSION_ICON_MAP: Record<string, React.ComponentType<{ className?: stri
   canReview: CheckCircle,
   canGenerateAi: Sparkles,
 };
+
+function SyncToContentLibraryButton({ proposalId, onSuccess }: { proposalId: number; onSuccess: () => void }) {
+  const { toast } = useToast();
+  const syncMutation = useMutation({
+    mutationFn: () => syncProposalFilesToContentLibrary(proposalId),
+    onSuccess: (data) => {
+      onSuccess();
+      toast({
+        title: "Synced to Content Library",
+        description: data.synced === 0
+          ? "All documents were already in the Content Library."
+          : `${data.synced} document(s) added to Content Library. They will appear in Knowledge Base.`,
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Sync failed", description: e.message ?? "Could not sync to Content Library.", variant: "destructive" });
+    },
+  });
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="shrink-0 gap-2"
+      onClick={() => syncMutation.mutate()}
+      disabled={syncMutation.isPending}
+    >
+      <Library className="w-4 h-4" />
+      {syncMutation.isPending ? "Syncing…" : "Sync to Content Library"}
+    </Button>
+  );
+}
 
 export default function AdminProposalDetail() {
   const [location, setLocation] = useLocation();
@@ -136,11 +174,35 @@ export default function AdminProposalDetail() {
   const [assignMoreProposalIds, setAssignMoreProposalIds] = useState<number[]>([]);
   const [isTasksOpen, setIsTasksOpen] = useState(false);
   const [tasksRow, setTasksRow] = useState<{ c: { id: number; userId: number; role: string; user?: { id: number; email: string; firstName: string; lastName: string } }; proposalTitle: string } | null>(null);
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [assignAddUserId, setAssignAddUserId] = useState<string>("");
   const { confirm, ConfirmDialog } = useConfirm();
 
   // Extract proposal ID from URL
   const proposalId = location.split('/').pop();
   const id = proposalId ? parseInt(proposalId) : null;
+
+  const { data: proposalFilesData = [] } = useQuery({
+    queryKey: [...proposalKeys.detail(id ?? 0), "files"],
+    queryFn: () => fetchProposalFiles(id!),
+    enabled: !!id,
+  });
+  const proposalFiles: ProposalFileApi[] = proposalFilesData;
+
+  const downloadProposalFile = async (file: ProposalFileApi) => {
+    if (!id) return;
+    try {
+      const blob = await fetchProposalFileBlob(id, file.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Download failed", description: "Could not download file.", variant: "destructive" });
+    }
+  };
 
   const { data: collaborationsData = [] } = useCollaborations(id);
   const collaborations = collaborationsData;
@@ -151,6 +213,11 @@ export default function AdminProposalDetail() {
   const { data: inviteSearchResults = [] } = useSearchUsers({
     email: inviteEmail.trim().length >= 2 ? inviteEmail.trim() : null,
     role: "collaborator",
+  });
+  const { data: assignUsersList = [] } = useQuery({
+    queryKey: ["/api/v1/users", "for_assignees"],
+    queryFn: fetchAdminUsersListForAssignees,
+    enabled: isAssignOpen && !!id,
   });
 
   const openInviteDialog = () => {
@@ -217,6 +284,8 @@ export default function AdminProposalDetail() {
     queryKey: [`/api/proposals/${id}`],
     enabled: !!id,
   });
+  const assignees = (proposal as { assignees?: { id: number; name: string; avatar: string; avatarUrl?: string | null; email?: string }[] })?.assignees ?? [];
+  const assigneeIds = assignees.map((a) => a.id);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -491,13 +560,29 @@ export default function AdminProposalDetail() {
   };
 
   const isFullDocumentContent = (c: any) => c && typeof (c as { fullDocument?: string }).fullDocument === "string";
+  const getFullDocumentText = (c: any): string => (c && typeof (c as { fullDocument?: string }).fullDocument === "string" ? (c as { fullDocument: string }).fullDocument : "") ?? "";
+  const structuredContentToDocumentString = (c: any): string => {
+    if (!c || typeof c !== "object") return "";
+    const parts: string[] = [];
+    const es = c.executiveSummary; if (typeof es === "string" && es) parts.push(`Executive Summary\n\n${es}`); else if (es && typeof es === "object" && (es as { description?: string }).description) parts.push(`Executive Summary\n\n${(es as { description: string }).description}`);
+    const intro = c.introduction; if (typeof intro === "string" && intro) parts.push(`Introduction\n\n${intro}`); else if (intro && typeof intro === "object" && (intro as { description?: string }).description) parts.push(`Introduction\n\n${(intro as { description: string }).description}`);
+    const po = c.projectOverview; if (po && typeof po === "object") { const desc = (po as { description?: string }).description || (po as { industry?: string }).industry || ""; if (desc) parts.push(`Project Overview\n\n${desc}`); }
+    if (typeof c.solutionApproach === "string" && c.solutionApproach) parts.push(`Solution Approach\n\n${c.solutionApproach}`);
+    if (Array.isArray(c.requirements) && c.requirements.length > 0) parts.push(`Requirements\n\n${c.requirements.map((r: string | { description?: string }) => typeof r === "string" ? r : (r as { description?: string })?.description ?? "").join("\n")}`);
+    if (typeof c.timeline === "string" && c.timeline) parts.push(`Timeline\n\n${c.timeline}`); if (typeof c.team === "string" && c.team) parts.push(`Team\n\n${c.team}`); if (typeof c.pricing === "string" && c.pricing) parts.push(`Pricing\n\n${c.pricing}`); if (typeof c.nextSteps === "string" && c.nextSteps) parts.push(`Next Steps\n\n${c.nextSteps}`);
+    return parts.join("\n\n");
+  };
+  const getContentEditorValue = (c: any): string => isFullDocumentContent(c) ? getFullDocumentText(c) : structuredContentToDocumentString(c);
 
   const renderContentSections = (content: any, isGenerating: boolean, isEditable: boolean = false) => {
     if (isFullDocumentContent(content)) {
       return (
-        <div className="prose prose-sm sm:prose-base max-w-none text-foreground dark:prose-invert">
-          <ReactMarkdown>{(content as { fullDocument: string }).fullDocument}</ReactMarkdown>
-        </div>
+        <ProposalQuillEditor
+          value={getFullDocumentText(content)}
+          onChange={(html) => setContentData({ ...content, fullDocument: html })}
+          readOnly={!isEditable}
+          minHeight="280px"
+        />
       );
     }
     return (
@@ -745,7 +830,7 @@ export default function AdminProposalDetail() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <div className="text-muted-foreground dark:text-foreground/90">Loading proposal...</div>
       </div>
     );
@@ -889,25 +974,169 @@ export default function AdminProposalDetail() {
             )}
           </TabsList>
           {activeTab === "content" && (
-            <Button
-              onClick={handleGenerateAiContent}
-              disabled={isGenerating || (oldContent && newContent)}
-              className="theme-gradient-bg text-white shadow-lg shadow-primary/20 transition-all duration-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
-            >
-              {isGenerating ? (
-                <>
-                  <Clock className="w-4 h-4 mr-2 animate-spin" />
-                  Generating...
-                </>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {assignees.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => { setAssignAddUserId(""); setIsAssignOpen(true); }}
+                  className="flex items-center -space-x-4 rtl:space-x-reverse focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-full"
+                  title="Manage assignees"
+                >
+                  {assignees.slice(0, 4).map((a) => (
+                    <Avatar key={a.id} className="h-9 w-9 rounded-full border-2 border-white/80 dark:border-white/50 shadow-sm ring-2 ring-background shrink-0">
+                      {getAvatarUrl(a.avatarUrl ?? null) ? (
+                        <AvatarImage src={getAvatarUrl(a.avatarUrl ?? null)!} alt={a.name} className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className="text-xs font-medium theme-gradient-bg text-white rounded-full border-0">
+                        {a.avatar}
+                      </AvatarFallback>
+                    </Avatar>
+                  ))}
+                  {assignees.length > 4 && (
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/80 dark:border-white/50 ring-2 ring-background bg-muted text-foreground text-xs font-medium shrink-0">
+                      +{assignees.length - 4}
+                    </span>
+                  )}
+                </button>
               ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate New AI Content
-                </>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => { setAssignAddUserId(""); setIsAssignOpen(true); }}
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Assign
+                </Button>
               )}
-            </Button>
+              <Button
+                onClick={handleGenerateAiContent}
+                disabled={isGenerating || (oldContent && newContent)}
+                className="theme-gradient-bg text-white shadow-lg shadow-primary/20 transition-all duration-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGenerating ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Generate New AI Content
+                  </>
+                )}
+              </Button>
+            </div>
           )}
         </div>
+
+        <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+          <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5" />
+                Assignees &amp; stage
+              </DialogTitle>
+              <DialogDescription>
+                Assign users to this proposal and set the current stage. Assignees receive notifications when added or when status changes.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground">Stage</Label>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Select
+                    value={formData.status}
+                    onValueChange={(v) => {
+                      setFormData((prev) => ({ ...prev, status: v as typeof prev.status }));
+                      updateMutation.mutate({ status: v });
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proposalStatuses.map((opt: { value: string; label: string }) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Badge variant="outline" className={getStatusConfig(formData.status).className}>
+                    {getStatusConfig(formData.status).label}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground">Assignees</Label>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {assignees.map((a) => (
+                      <div key={a.id} className="relative flex-shrink-0">
+                        <button
+                          type="button"
+                          className="flex h-9 w-9 rounded-full border-2 border-background hover:ring-2 hover:ring-primary focus:outline-none focus:ring-2 focus:ring-primary transition-all overflow-hidden"
+                          title={`${a.name} (click to remove)`}
+                          onClick={() => {
+                            const next = assigneeIds.filter((id) => id !== a.id);
+                            updateMutation.mutate({ assigneeIds: next });
+                          }}
+                        >
+                          <Avatar className="h-full w-full rounded-full border-0">
+                            {getAvatarUrl(a.avatarUrl ?? null) ? (
+                              <AvatarImage src={getAvatarUrl(a.avatarUrl ?? null)!} alt={a.name} className="object-cover" />
+                            ) : null}
+                            <AvatarFallback className="text-xs font-medium theme-gradient-bg text-white rounded-full border-0">
+                              {a.avatar}
+                            </AvatarFallback>
+                          </Avatar>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = assigneeIds.filter((id) => id !== a.id);
+                            updateMutation.mutate({ assigneeIds: next });
+                          }}
+                          className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground border-2 border-background flex items-center justify-center shadow-sm hover:bg-destructive/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 z-10"
+                          title={`Remove ${a.name}`}
+                          aria-label={`Remove ${a.name}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <Select
+                    value={assignAddUserId}
+                    onValueChange={(val) => {
+                      if (!val) return;
+                      const uid = parseInt(val, 10);
+                      if (!assigneeIds.includes(uid)) {
+                        updateMutation.mutate({ assigneeIds: [...assigneeIds, uid] });
+                        setAssignAddUserId("");
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[200px] h-9">
+                      <SelectValue placeholder="Add user, collaborator, or admin" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(assignUsersList as { id: number; email?: string; first_name?: string; last_name?: string; firstName?: string; lastName?: string }[])
+                        .filter((u) => !assigneeIds.includes(u.id))
+                        .map((u) => {
+                          const name = [u.first_name ?? u.firstName, u.last_name ?? u.lastName].filter(Boolean).join(" ") || u.email || `User ${u.id}`;
+                          return (
+                            <SelectItem key={u.id} value={String(u.id)}>
+                              {name}{u.email ? ` (${u.email})` : ""}
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <TabsContent value="overview" className="mt-6 space-y-4 sm:space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -1000,6 +1229,58 @@ export default function AdminProposalDetail() {
               </CardContent>
             </Card>
           </div>
+
+          {id && (
+            <Card className="mt-4 sm:mt-6">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Paperclip className="w-4 h-4 text-muted-foreground" />
+                      Documents
+                    </CardTitle>
+                    <CardDescription>
+                      Files uploaded when this proposal was created. They appear in Content Library and Knowledge Base.
+                    </CardDescription>
+                  </div>
+                  {proposalFiles.length > 0 && (
+                    <SyncToContentLibraryButton
+                      proposalId={Number(id)}
+                      onSuccess={() => {
+                        queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
+                        queryClient.invalidateQueries({ queryKey: [...proposalKeys.detail(Number(id)), "files"] });
+                      }}
+                    />
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {proposalFiles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No documents uploaded.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {proposalFiles.map((file) => (
+                      <li key={file.id} className="flex items-center justify-between gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-2">
+                        <span className="text-sm font-medium truncate flex-1 min-w-0" title={file.name}>{file.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {(file.size / 1024).toFixed(1)} KB
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => downloadProposalFile(file)}
+                        >
+                          <FileDown className="w-4 h-4 mr-1.5" />
+                          Download
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="content" className="mt-6">
@@ -1146,545 +1427,16 @@ export default function AdminProposalDetail() {
                         pricing: "",
                         nextSteps: "",
                       };
-                      if (isFullDocumentContent(content)) {
-                        const fullText = (content as { fullDocument: string }).fullDocument ?? "";
-                        return isEditing ? (
-                          <Textarea
-                            value={fullText}
-                            onChange={(e) => setContentData({ ...content, fullDocument: e.target.value })}
-                            className="w-full min-h-[400px] font-normal leading-relaxed whitespace-pre-wrap resize-y"
-                            placeholder="Proposal content (markdown supported)"
-                          />
-                        ) : (
-                          <div className="prose prose-sm sm:prose-base max-w-none text-foreground dark:prose-invert">
-                            <ReactMarkdown>{fullText}</ReactMarkdown>
-                          </div>
-                        );
-                      }
-                    return (
-                      <div className="space-y-6">
-                      {/* Executive Summary */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <FileText className="w-4 h-4 text-primary" />
-                          Executive Summary
-                        </h2>
-                        {isEditing ? (
-                          <Textarea
-                            value={typeof content.executiveSummary === 'string' ? content.executiveSummary : ''}
-                            onChange={(e) => setContentData({ ...content, executiveSummary: e.target.value })}
-                            className="min-h-[150px]"
-                            placeholder="Enter executive summary..."
-                          />
-                        ) : (
-                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                            {typeof content.executiveSummary === 'string' && content.executiveSummary 
-                              ? content.executiveSummary 
-                              : "No executive summary available. Generate AI content to create one."}
-                          </p>
-                        )}
-                      </section>
-
-                      {/* Introduction */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <FileText className="w-4 h-4 text-primary" />
-                          Introduction
-                        </h2>
-                        {isEditing ? (
-                          <Textarea
-                            value={typeof content.introduction === 'string' ? content.introduction : ''}
-                            onChange={(e) => setContentData({ ...content, introduction: e.target.value })}
-                            className="min-h-[150px]"
-                            placeholder="Enter introduction..."
-                          />
-                        ) : (
-                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                            {typeof content.introduction === 'string' && content.introduction
-                              ? content.introduction 
-                              : "No introduction available. Generate AI content to create one."}
-                          </p>
-                        )}
-                      </section>
-
-                      {/* Project Overview */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <Building2 className="w-4 h-4 text-primary" />
-                          Project Overview
-                        </h2>
-                        {isEditing ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Industry</Label>
-                              <Input
-                                value={content.projectOverview?.industry || formData.industry || ''}
-                                onChange={(e) => setContentData({
-                                  ...content,
-                                  projectOverview: {
-                                    ...content.projectOverview,
-                                    industry: e.target.value
-                                  }
-                                })}
-                                className="mt-1.5"
-                                placeholder="Enter industry..."
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Timeline</Label>
-                              <Input
-                                value={content.projectOverview?.timeline || formData.timeline || ''}
-                                onChange={(e) => setContentData({
-                                  ...content,
-                                  projectOverview: {
-                                    ...content.projectOverview,
-                                    timeline: e.target.value
-                                  }
-                                })}
-                                className="mt-1.5"
-                                placeholder="Enter timeline..."
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Budget</Label>
-                              <Input
-                                value={content.projectOverview?.budget || formData.budgetRange || ''}
-                                onChange={(e) => setContentData({
-                                  ...content,
-                                  projectOverview: {
-                                    ...content.projectOverview,
-                                    budget: e.target.value
-                                  }
-                                })}
-                                className="mt-1.5"
-                                placeholder="Enter budget..."
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Description</Label>
-                              <Textarea
-                                value={content.projectOverview?.description || formData.description || ''}
-                                onChange={(e) => setContentData({
-                                  ...content,
-                                  projectOverview: {
-                                    ...content.projectOverview,
-                                    description: e.target.value
-                                  }
-                                })}
-                                className="mt-1.5 min-h-[80px]"
-                                placeholder="Enter description..."
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          content.projectOverview && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
-                              <div>
-                                <Label className="text-xs text-muted-foreground">Industry</Label>
-                                <p className="font-medium m-0 text-foreground">{content.projectOverview.industry || formData.industry || "Not specified"}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground">Timeline</Label>
-                                <p className="font-medium m-0 text-foreground">{content.projectOverview.timeline || formData.timeline || "Not specified"}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground">Budget</Label>
-                                <p className="font-medium m-0 text-foreground">{content.projectOverview.budget || formData.budgetRange || "Not specified"}</p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground">Description</Label>
-                                <p className="font-medium m-0 text-foreground">{content.projectOverview.description || formData.description || "Not specified"}</p>
-                              </div>
-                            </div>
-                          )
-                        )}
-                      </section>
-
-                      {/* Requirements */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <CheckCircle className="w-4 h-4 text-primary" />
-                          Requirements
-                        </h2>
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            {(Array.isArray(content.requirements) ? content.requirements : []).map((req: string, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <Input
-                                  value={req}
-                                  onChange={(e) => {
-                                    const newRequirements = [...(Array.isArray(content.requirements) ? content.requirements : [])];
-                                    newRequirements[idx] = e.target.value;
-                                    setContentData({ ...content, requirements: newRequirements });
-                                  }}
-                                  placeholder="Enter requirement..."
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newRequirements = [...(Array.isArray(content.requirements) ? content.requirements : [])];
-                                    newRequirements.splice(idx, 1);
-                                    setContentData({ ...content, requirements: newRequirements });
-                                  }}
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const newRequirements = [...(Array.isArray(content.requirements) ? content.requirements : []), ''];
-                                setContentData({ ...content, requirements: newRequirements });
-                              }}
-                            >
-                              + Add Requirement
-                            </Button>
-                          </div>
-                        ) : (
-                          Array.isArray(content.requirements) && content.requirements.length > 0 ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
-                              {content.requirements.map((req: string, idx: number) => (
-                                <li key={idx} className="leading-relaxed">{req}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-muted-foreground dark:text-foreground/90">No requirements listed. Generate AI content to create requirements.</p>
-                          )
-                        )}
-                      </section>
-
-                      {/* Solution Approach */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <FileText className="w-4 h-4 text-primary" />
-                          Solution Approach
-                        </h2>
-                        {isEditing ? (
-                          <Textarea
-                            value={typeof content.solutionApproach === 'string' ? content.solutionApproach : ''}
-                            onChange={(e) => setContentData({ ...content, solutionApproach: e.target.value })}
-                            className="min-h-[150px]"
-                            placeholder="Enter solution approach..."
-                          />
-                        ) : (
-                          <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                            {typeof content.solutionApproach === 'string' && content.solutionApproach
-                              ? content.solutionApproach 
-                              : "No solution approach available. Generate AI content to create one."}
-                          </p>
-                        )}
-                      </section>
-
-                      {/* Technical Specifications */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <FileText className="w-4 h-4 text-primary" />
-                          Technical Specifications
-                        </h2>
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            {(Array.isArray(content.technicalSpecifications) ? content.technicalSpecifications : []).map((spec: string, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <Input
-                                  value={spec}
-                                  onChange={(e) => {
-                                    const newSpecs = [...(Array.isArray(content.technicalSpecifications) ? content.technicalSpecifications : [])];
-                                    newSpecs[idx] = e.target.value;
-                                    setContentData({ ...content, technicalSpecifications: newSpecs });
-                                  }}
-                                  placeholder="Enter specification..."
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newSpecs = [...(Array.isArray(content.technicalSpecifications) ? content.technicalSpecifications : [])];
-                                    newSpecs.splice(idx, 1);
-                                    setContentData({ ...content, technicalSpecifications: newSpecs });
-                                  }}
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const newSpecs = [...(Array.isArray(content.technicalSpecifications) ? content.technicalSpecifications : []), ''];
-                                setContentData({ ...content, technicalSpecifications: newSpecs });
-                              }}
-                            >
-                              + Add Specification
-                            </Button>
-                          </div>
-                        ) : (
-                          Array.isArray(content.technicalSpecifications) && content.technicalSpecifications.length > 0 ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
-                              {content.technicalSpecifications.map((spec: string, idx: number) => (
-                                <li key={idx} className="leading-relaxed">{spec}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-muted-foreground dark:text-foreground/90">No technical specifications listed. Generate AI content to create specifications.</p>
-                          )
-                        )}
-                      </section>
-
-                      {/* Deliverables */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <FileText className="w-4 h-4 text-primary" />
-                          Deliverables
-                        </h2>
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            {(Array.isArray(content.deliverables) ? content.deliverables : []).map((deliverable: string, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <Input
-                                  value={deliverable}
-                                  onChange={(e) => {
-                                    const newDeliverables = [...(Array.isArray(content.deliverables) ? content.deliverables : [])];
-                                    newDeliverables[idx] = e.target.value;
-                                    setContentData({ ...content, deliverables: newDeliverables });
-                                  }}
-                                  placeholder="Enter deliverable..."
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newDeliverables = [...(Array.isArray(content.deliverables) ? content.deliverables : [])];
-                                    newDeliverables.splice(idx, 1);
-                                    setContentData({ ...content, deliverables: newDeliverables });
-                                  }}
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const newDeliverables = [...(Array.isArray(content.deliverables) ? content.deliverables : []), ''];
-                                setContentData({ ...content, deliverables: newDeliverables });
-                              }}
-                            >
-                              + Add Deliverable
-                            </Button>
-                          </div>
-                        ) : Array.isArray(content.deliverables) && content.deliverables.length > 0 ? (
-                          <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
-                            {content.deliverables.map((deliverable: string, idx: number) => (
-                              <li key={idx} className="leading-relaxed">{deliverable}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-muted-foreground dark:text-foreground/90">No deliverables listed. Generate AI content to create deliverables.</p>
-                        )}
-                      </section>
-
-                      {/* Timeline */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <Calendar className="w-4 h-4 text-primary" />
-                          Timeline
-                        </h2>
-                        {isEditing ? (
-                          <Textarea
-                            value={typeof content.timeline === 'string' ? content.timeline : (typeof content.timeline === 'object' && content.timeline !== null ? Object.values(content.timeline).join('\n') : '')}
-                            onChange={(e) => setContentData({ ...content, timeline: e.target.value })}
-                            className="min-h-[150px]"
-                            placeholder="Enter timeline..."
-                          />
-                        ) : (
-                          typeof content.timeline === 'string' ? (
-                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                              {content.timeline}
-                            </p>
-                          ) : typeof content.timeline === 'object' && content.timeline !== null ? (
-                            <div className="space-y-3">
-                              {Object.entries(content.timeline).map(([key, value]) => (
-                                <div key={key} className="flex items-start gap-3">
-                                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                    <span className="text-xs font-semibold text-primary">
-                                      {key.replace('phase', '')}
-                                    </span>
-                                  </div>
-                                  <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed flex-1">
-                                    {typeof value === 'string' ? value : String(value)}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground dark:text-foreground/90 m-0 leading-relaxed whitespace-pre-wrap">
-                              No timeline available. Generate AI content to create a timeline.
-                            </p>
-                          )
-                        )}
-                      </section>
-
-                      {/* Team */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <User className="w-4 h-4 text-primary" />
-                          Team
-                        </h2>
-                        {isEditing ? (
-                          <Textarea
-                            value={typeof content.team === 'string' ? content.team : (typeof content.team === 'object' && content.team !== null ? Object.entries(content.team).map(([k, v]) => `${k.replace(/([A-Z])/g, ' $1').trim()}: ${v}`).join('\n') : '')}
-                            onChange={(e) => setContentData({ ...content, team: e.target.value })}
-                            className="min-h-[150px]"
-                            placeholder="Enter team information..."
-                          />
-                        ) : (
-                          typeof content.team === 'string' ? (
-                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                              {content.team}
-                            </p>
-                          ) : typeof content.team === 'object' && content.team !== null ? (
-                            <div className="space-y-2">
-                              {Object.entries(content.team).map(([key, value]) => (
-                                <div key={key} className="flex flex-col sm:flex-row items-start gap-1 sm:gap-2">
-                                  <span className="text-sm font-medium text-foreground capitalize min-w-0 sm:min-w-[120px]">
-                                    {key.replace(/([A-Z])/g, ' $1').trim()}:
-                                  </span>
-                                  <span className="text-muted-foreground dark:text-foreground/90 text-sm">
-                                    {typeof value === 'string' ? value : String(value)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                              No team information available. Generate AI content to create team details.
-                            </p>
-                          )
-                        )}
-                      </section>
-
-                      {/* Pricing */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <DollarSign className="w-4 h-4 text-primary" />
-                          Pricing
-                        </h2>
-                        {isEditing ? (
-                          <Textarea
-                            value={typeof content.pricing === 'string' ? content.pricing : (typeof content.pricing === 'object' && content.pricing !== null ? Object.entries(content.pricing).map(([k, v]) => `${k.replace(/([A-Z])/g, ' $1').trim()}: ${v}`).join('\n') : '')}
-                            onChange={(e) => setContentData({ ...content, pricing: e.target.value })}
-                            className="min-h-[150px]"
-                            placeholder="Enter pricing information..."
-                          />
-                        ) : (
-                          typeof content.pricing === 'string' ? (
-                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                              {content.pricing}
-                            </p>
-                          ) : typeof content.pricing === 'object' && content.pricing !== null ? (
-                            <div className="space-y-2">
-                              {Object.entries(content.pricing).map(([key, value]) => (
-                                <div key={key} className="flex flex-col sm:flex-row items-start gap-1 sm:gap-2">
-                                  <span className="text-sm font-medium text-foreground capitalize min-w-0 sm:min-w-[140px]">
-                                    {key.replace(/([A-Z])/g, ' $1').trim()}:
-                                  </span>
-                                  <span className="text-muted-foreground dark:text-foreground/90 text-sm">
-                                    {typeof value === 'string' ? value : String(value)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                              No pricing information available. Generate AI content to create pricing details.
-                            </p>
-                          )
-                        )}
-                      </section>
-
-                      {/* Next Steps */}
-                      <section>
-                        <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2 text-foreground">
-                          <ArrowLeft className="w-4 h-4 text-primary rotate-180" />
-                          Next Steps
-                        </h2>
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            {(Array.isArray(content.nextSteps) ? content.nextSteps : []).map((step: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <Input
-                                  value={typeof step === 'string' ? step : String(step)}
-                                  onChange={(e) => {
-                                    const newSteps = [...(Array.isArray(content.nextSteps) ? content.nextSteps : [])];
-                                    newSteps[idx] = e.target.value;
-                                    setContentData({ ...content, nextSteps: newSteps });
-                                  }}
-                                  placeholder="Enter next step..."
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newSteps = [...(Array.isArray(content.nextSteps) ? content.nextSteps : [])];
-                                    newSteps.splice(idx, 1);
-                                    setContentData({ ...content, nextSteps: newSteps });
-                                  }}
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const newSteps = [...(Array.isArray(content.nextSteps) ? content.nextSteps : []), ''];
-                                setContentData({ ...content, nextSteps: newSteps });
-                              }}
-                            >
-                              + Add Next Step
-                            </Button>
-                          </div>
-                        ) : (
-                          typeof content.nextSteps === 'string' ? (
-                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                              {content.nextSteps}
-                            </p>
-                          ) : Array.isArray(content.nextSteps) ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
-                              {content.nextSteps.map((step: any, idx: number) => (
-                                <li key={idx} className="leading-relaxed">
-                                  {typeof step === 'string' ? step : String(step)}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : typeof content.nextSteps === 'object' && content.nextSteps !== null ? (
-                            <ul className="list-disc list-inside space-y-2 text-muted-foreground dark:text-foreground/90">
-                              {Object.values(content.nextSteps).map((step: any, idx: number) => (
-                                <li key={idx} className="leading-relaxed">
-                                  {typeof step === 'string' ? step : String(step)}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-muted-foreground dark:text-foreground/90 leading-relaxed whitespace-pre-wrap">
-                              No next steps available. Generate AI content to create next steps.
-                            </p>
-                          )
-                        )}
-                      </section>
-                      </div>
-                    );
-                  })()}
-                  </div>
-                  <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground pt-4 border-t">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    <span>Content generated by AI</span>
+                      return (
+                        <ProposalQuillEditor
+                          value={getContentEditorValue(content)}
+                          onChange={(html) => setContentData({ ...content, fullDocument: html })}
+                          readOnly={!isEditing}
+                          placeholder="Proposal content"
+                          minHeight="400px"
+                        />
+                      );
+                    })()}
                   </div>
                 </div>
               )}

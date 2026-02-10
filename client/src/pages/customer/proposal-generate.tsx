@@ -77,7 +77,7 @@ export default function ProposalGenerate() {
 
   if (proposalLoading || (!proposal && id)) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );

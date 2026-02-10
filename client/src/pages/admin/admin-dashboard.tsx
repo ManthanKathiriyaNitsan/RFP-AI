@@ -190,8 +190,8 @@ export default function AdminDashboard() {
 
   if (isLoading && !data) {
     return (
-      <div className="space-y-4 sm:space-y-6 animate-fade-in">
-        <div className="flex items-center justify-center min-h-[200px] text-muted-foreground">Loading dashboard...</div>
+      <div className="flex-1 min-h-0 flex items-center justify-center animate-fade-in">
+        <p className="text-muted-foreground">Loading dashboard...</p>
       </div>
     );
   }

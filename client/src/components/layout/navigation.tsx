@@ -199,12 +199,12 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
                     AI Chat
                   </DropdownMenuItem>
                 </Link>
-                {/* Credits: only for customer (purchase). Admin has Credit Management in sidebar; collaborator has no credits. */}
-                {currentRole?.toLowerCase() === "customer" && (
+                {/* My Credits: customer and collaborator see assigned credits only; admin has Credit Management in sidebar. */}
+                {(currentRole?.toLowerCase() === "customer" || currentRole?.toLowerCase() === "collaborator") && (
                   <Link href="/credits">
                     <DropdownMenuItem>
                       <User className="w-4 h-4 mr-2" />
-                      Credits
+                      My Credits
                     </DropdownMenuItem>
                   </Link>
                 )}

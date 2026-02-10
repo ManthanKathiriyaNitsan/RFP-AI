@@ -33,6 +33,8 @@ import { ProposalStepper } from "@/components/customer/proposal-stepper";
 import type { ProposalFile } from "@/lib/store-types";
 import { authStorage } from "@/lib/auth";
 import { parseApiError } from "@/lib/utils";
+import { useStore } from "@/contexts/StoreContext";
+import { uploadProposalFiles, type ProposalFileUploadItem } from "@/api/proposals";
 
 export default function ProposalBuilder() {
   const [location] = useWouterLocation();
@@ -40,6 +42,7 @@ export default function ProposalBuilder() {
   const { user, currentRole } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const store = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,7 +53,6 @@ export default function ProposalBuilder() {
   const { data: draft } = useDraft(proposalId);
   const createProposalMutation = useCreateProposal();
   const updateProposalMutation = useUpdateProposal(proposalId ?? 0);
-  const existingFiles: ProposalFile[] = []; // Files not persisted to API; keep local-only if needed
 
   const [formData, setFormData] = useState({
     title: "",
@@ -103,9 +105,13 @@ export default function ProposalBuilder() {
         newRequirement: "",
       });
       setDueDateMode(/^\d{4}-\d{2}-\d{2}$/.test(due) ? "date" : tl ? "timeline" : "date");
-      setFiles(existingFiles);
+      if (proposalId) {
+        setFiles(store.getProposalFiles(proposalId));
+      } else {
+        setFiles([]);
+      }
     }
-  }, [proposalSource]);
+  }, [proposalSource, proposalId, store]);
 
   const addRequirement = () => {
     if (formData.newRequirement.trim()) {
@@ -140,6 +146,7 @@ export default function ProposalBuilder() {
   };
 
   const removeStoredFile = (fileId: number) => {
+    store.removeProposalFile(fileId);
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
@@ -210,6 +217,29 @@ export default function ProposalBuilder() {
         id = proposal.id;
         toast({ title: "Proposal created", description: "Now add questions and get a share link." });
       }
+      if (pendingFiles.length > 0) {
+        const items: ProposalFileUploadItem[] = await Promise.all(
+          pendingFiles.map(
+            (file) =>
+              new Promise<ProposalFileUploadItem>((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () =>
+                  resolve({
+                    name: file.name,
+                    type: file.type || "application/octet-stream",
+                    size: file.size,
+                    data: (r.result as string) || "",
+                  });
+                r.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+                r.readAsDataURL(file);
+              })
+          )
+        );
+        await uploadProposalFiles(id, items);
+      }
+      for (const file of pendingFiles) {
+        await store.addProposalFile(id, file);
+      }
       setPendingFiles([]);
       navigate(`/rfp/${id}/questions`);
     } catch (e) {
@@ -254,7 +284,7 @@ export default function ProposalBuilder() {
 
   if (isEditMode && proposalLoading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <p className="text-muted-foreground">Loading proposal...</p>
       </div>
     );

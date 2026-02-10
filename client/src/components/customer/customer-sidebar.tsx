@@ -151,7 +151,7 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
 
     if (activeItem && scrollContainerRef.current) {
       const activeElement = navItemRefs.current.get(activeItem.href);
-      
+
       if (activeElement) {
         // Use setTimeout to ensure DOM has updated after route change
         const timeoutId = setTimeout(() => {
@@ -189,7 +189,7 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
       )}
       <div className="p-4">
         <Link href="/proposals/new" onClick={handleLinkClick}>
-          <Button 
+          <Button
             className="w-full justify-start gap-2 sidebar-button-primary"
             data-testid="button-new-proposal"
           >
@@ -198,7 +198,7 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
           </Button>
         </Link>
       </div>
-      
+
       <div ref={scrollContainerRef} className="flex-1 p-4 overflow-y-auto overflow-x-hidden">
         <div className="px-3 space-y-6 pb-4">
           {navGroups.map((group) => (
@@ -234,15 +234,15 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
                         </span>
                         <span className="flex items-center gap-2">
                           {item.badge && (
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className={cn(
                                 "text-[10px] font-semibold px-1.5 py-0 border-0",
-                                item.badgeVariant === "success" 
+                                item.badgeVariant === "success"
                                   ? "sidebar-badge-success"
                                   : item.badgeVariant === "warning"
-                                  ? "sidebar-badge-warning"
-                                  : "sidebar-badge-default"
+                                    ? "sidebar-badge-warning"
+                                    : "sidebar-badge-default"
                               )}
                             >
                               {item.badge}
@@ -263,27 +263,29 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
       </div>
 
       <div className="p-4 border-t border-border">
-        <div className="rounded-xl p-4 sidebar-widget-bg">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="p-1.5 rounded-lg sidebar-widget-icon-bg">
-              <Sparkles className="w-3.5 h-3.5 sidebar-widget-icon" />
+        <Link href="/credits">
+          <div className="rounded-xl p-4 sidebar-widget-bg cursor-pointer hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-1.5 rounded-lg sidebar-widget-icon-bg">
+                <Sparkles className="w-3.5 h-3.5 sidebar-widget-icon" />
+              </div>
+              <span className="text-sm font-semibold text-foreground">{sidebarWidget.title}</span>
             </div>
-            <span className="text-sm font-semibold text-foreground">{sidebarWidget.title}</span>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">{sidebarWidget.usedLabel}</span>
+                <span className="font-medium text-foreground">{sidebarWidget.usedValue}</span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full theme-gradient-fill rounded-full transition-all"
+                  style={{ width: `${sidebarWidget.percentage ?? 75}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">{sidebarWidget.percentageLabel}</p>
+            </div>
           </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">{sidebarWidget.usedLabel}</span>
-              <span className="font-medium text-foreground">{sidebarWidget.usedValue}</span>
-            </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full theme-gradient-fill rounded-full transition-all"
-                style={{ width: `${sidebarWidget.percentage ?? 75}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-muted-foreground">{sidebarWidget.percentageLabel}</p>
-          </div>
-        </div>
+        </Link>
       </div>
     </>
   );

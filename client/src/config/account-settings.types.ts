@@ -157,6 +157,6 @@ export interface AccountSettingsConfig {
     profile: ProfileSectionConfig;
     security: SecuritySectionConfig;
     notifications: NotificationsSectionConfig;
-    billing: BillingSectionConfig;
+    billing?: BillingSectionConfig;
   };
 }
