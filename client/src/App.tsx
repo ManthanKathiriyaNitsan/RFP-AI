@@ -108,6 +108,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   const hasCreatedOutOfCreditsNotifRef = useRef(false);
 
   useEffect(() => {
+    if (role === "super_admin") return;
     if (!sidebarData?.sidebarWidget) return;
     const prev = prevCreditsRef.current;
     if (prev === null) {
@@ -137,9 +138,10 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
       }
     }
     prevCreditsRef.current = credits;
-  }, [sidebarData, user?.credits, credits, toast]);
+  }, [role, sidebarData, user?.credits, credits, toast]);
 
   useEffect(() => {
+    if (role === "super_admin") return;
     if (!sidebarData?.sidebarWidget) return;
     if (hasShownLowCreditsToastThisSession("admin")) return;
     const lowOpts = getLowCreditsToastOptions(credits, { isAdmin: true });
@@ -150,9 +152,10 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
     createNotification({ title: lowOpts.title, message: lowOpts.description, type: "credit_alert", link: lowOpts.actionHref }).catch(() => {}).finally(() => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     });
-  }, [sidebarData, user?.credits, toast, credits]);
+  }, [role, sidebarData, user?.credits, toast, credits]);
 
   useEffect(() => {
+    if (role === "super_admin") return;
     if (!sidebarData?.sidebarWidget) return;
     const threshold = getCreditThresholdToAlert(credits, "admin");
     if (threshold == null) return;
@@ -163,9 +166,10 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
     createNotification({ title: opts.title, message: opts.description, type: "credit_alert", link: opts.actionHref }).catch(() => {}).finally(() => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     });
-  }, [sidebarData, user?.credits, credits, toast]);
+  }, [role, sidebarData, user?.credits, credits, toast]);
 
   useEffect(() => {
+    if (role === "super_admin") return;
     const id = setInterval(() => {
       if (creditsRef.current > 0) return;
       const opts = getOutOfCreditsToastOptions(creditsRef.current, { isAdmin: true });
@@ -177,7 +181,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
       toast({ ...opts, variant: "destructive" });
     }, 24 * 60 * 60 * 1000); // 24 hours
     return () => clearInterval(id);
-  }, [toast]);
+  }, [role, toast]);
 
   if (!user) {
     return <Redirect to="/auth" />;
