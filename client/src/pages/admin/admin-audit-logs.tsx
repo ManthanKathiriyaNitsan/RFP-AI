@@ -16,6 +16,8 @@ import {
   Filter,
   ArrowRight,
   User,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +53,8 @@ const STATUS_CLASS: Record<string, string> = {
   warning: "bg-amber-500",
 };
 
+const AUDIT_LOG_PAGE_SIZE = 10;
+
 function formatDateRangeKey(dateRange: string): { dateFrom: string; dateTo: string } {
   const now = new Date();
   const to = now.toISOString().split("T")[0];
@@ -75,6 +79,14 @@ export default function AdminAuditLogs() {
   const [dateRange, setDateRange] = useState("7d");
   const [userFilter, setUserFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [pageByTab, setPageByTab] = useState<Record<AuditLogType, number>>({
+    login: 1,
+    data_access: 1,
+    file: 1,
+    ai_usage: 1,
+  });
+  const setPage = (tab: AuditLogType, p: number) =>
+    setPageByTab((prev) => ({ ...prev, [tab]: p }));
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const { currentRole } = useAuth();
@@ -115,29 +127,42 @@ export default function AdminAuditLogs() {
     [loginData, dataAccessData, fileData, aiUsageData]
   );
 
-  const filterEntries = (entries: AuditLogEntry[], tabType: AuditLogType) => {
-    let out = entries;
-    if (!isSuperAdmin && tabType === "login") {
-      out = out.filter((e) => {
-        const u = (e.user ?? "").toLowerCase();
-        return u !== "super admin" && !u.includes("super admin");
-      });
-    }
-    if (userFilter.trim()) {
-      const u = userFilter.trim().toLowerCase();
-      out = out.filter((e) => e.user?.toLowerCase().includes(u));
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      out = out.filter(
-        (e) =>
-          e.action?.toLowerCase().includes(q) ||
-          e.resource?.toLowerCase().includes(q) ||
-          e.details?.toLowerCase().includes(q)
-      );
-    }
-    return out;
-  };
+  const filterEntries = useMemo(
+    () => (entries: AuditLogEntry[], tabType: AuditLogType) => {
+      let out = entries;
+      if (!isSuperAdmin && tabType === "login") {
+        out = out.filter((e) => {
+          const u = (e.user ?? "").toLowerCase();
+          return u !== "super admin" && !u.includes("super admin");
+        });
+      }
+      if (userFilter.trim()) {
+        const u = userFilter.trim().toLowerCase();
+        out = out.filter((e) => e.user?.toLowerCase().includes(u));
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        out = out.filter(
+          (e) =>
+            e.action?.toLowerCase().includes(q) ||
+            e.resource?.toLowerCase().includes(q) ||
+            e.details?.toLowerCase().includes(q)
+        );
+      }
+      return out;
+    },
+    [isSuperAdmin, userFilter, searchQuery]
+  );
+
+  const totalByTab: Record<AuditLogType, number> = useMemo(
+    () => ({
+      login: filterEntries(dataByTab.login, "login").length,
+      data_access: filterEntries(dataByTab.data_access, "data_access").length,
+      file: filterEntries(dataByTab.file, "file").length,
+      ai_usage: filterEntries(dataByTab.ai_usage, "ai_usage").length,
+    }),
+    [dataByTab, filterEntries]
+  );
 
   const handleExport = (type: AuditLogType) => {
     const entries = filterEntries(dataByTab[type], type);
@@ -209,28 +234,28 @@ export default function AdminAuditLogs() {
           <TabsTrigger value="login" className="data-[state=active]:bg-background text-xs sm:text-sm">
             <LogIn className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Login
-            <Badge variant="secondary" className="ml-1.5 text-[10px]">
+            <Badge variant="secondary" className="ml-1.5 text-[10px] text-white">
               {dataByTab.login.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="data_access" className="data-[state=active]:bg-background text-xs sm:text-sm">
             <Database className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Data access
-            <Badge variant="secondary" className="ml-1.5 text-[10px]">
+            <Badge variant="secondary" className="ml-1.5 text-[10px] text-white">
               {dataByTab.data_access.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="file" className="data-[state=active]:bg-background text-xs sm:text-sm">
             <FileStack className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             File activity
-            <Badge variant="secondary" className="ml-1.5 text-[10px]">
+            <Badge variant="secondary" className="ml-1.5 text-[10px] text-white">
               {dataByTab.file.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="ai_usage" className="data-[state=active]:bg-background text-xs sm:text-sm">
             <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             AI usage
-            <Badge variant="secondary" className="ml-1.5 text-[10px]">
+            <Badge variant="secondary" className="ml-1.5 text-[10px] text-white">
               {dataByTab.ai_usage.length}
             </Badge>
           </TabsTrigger>
@@ -239,6 +264,15 @@ export default function AdminAuditLogs() {
         {(["login", "data_access", "file", "ai_usage"] as const).map((tabType) => {
           const entries = filterEntries(dataByTab[tabType], tabType);
           const Icon = TYPE_ICONS[tabType];
+          const total = totalByTab[tabType];
+          const page = pageByTab[tabType];
+          const start = total === 0 ? 0 : (page - 1) * AUDIT_LOG_PAGE_SIZE + 1;
+          const end = Math.min(page * AUDIT_LOG_PAGE_SIZE, total);
+          const totalPages = Math.max(1, Math.ceil(total / AUDIT_LOG_PAGE_SIZE));
+          const paginatedEntries = entries.slice(
+            (page - 1) * AUDIT_LOG_PAGE_SIZE,
+            page * AUDIT_LOG_PAGE_SIZE
+          );
           return (
             <TabsContent key={tabType} value={tabType} className="mt-4 sm:mt-6">
               <Card className="border shadow-sm overflow-hidden">
@@ -277,8 +311,9 @@ export default function AdminAuditLogs() {
                       No {TYPE_LABELS[tabType].toLowerCase()} events in the selected period.
                     </div>
                   ) : (
+                    <>
                     <div className="space-y-3">
-                      {entries.map((entry) => (
+                      {paginatedEntries.map((entry) => (
                         <div
                           key={entry.id}
                           className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors"
@@ -330,6 +365,36 @@ export default function AdminAuditLogs() {
                         </div>
                       ))}
                     </div>
+                    {total > 0 && (
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 mt-4 border-t border-border/60">
+                        <p className="text-sm text-muted-foreground">
+                          Showing {start}–{end} of {total.toLocaleString()}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={page <= 1}
+                            onClick={() => setPage(tabType, page - 1)}
+                          >
+                            <ChevronLeft className="w-4 h-4 mr-1" />
+                            Previous
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={page >= totalPages}
+                            onClick={() => setPage(tabType, page + 1)}
+                          >
+                            Next
+                            <ChevronRight className="w-4 h-4 ml-1" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    </>
                   )}
                 </CardContent>
               </Card>

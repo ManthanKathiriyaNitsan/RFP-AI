@@ -38,7 +38,6 @@ function getDefaultPages(role: string): PageConfig[] {
     { id: "dashboard", label: "Dashboard", href: "/dashboard", keywords: "home dashboard" },
     { id: "rfp-projects", label: "RFP Projects", href: "/rfp-projects", keywords: "rfp projects list" },
     { id: "proposals-new", label: "New Proposal", href: "/proposals/new", keywords: "new proposal create" },
-    { id: "credits", label: "Credits", href: "/credits", keywords: "credits purchase" },
     { id: "knowledge-base", label: "Knowledge Base", href: "/knowledge-base", keywords: "knowledge base docs" },
     { id: "collaborators", label: "Collaborators", href: "/collaborators", keywords: "collaborators team" },
     { id: "account-settings", label: "Account Settings", href: "/account-settings", keywords: "account settings profile" },

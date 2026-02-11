@@ -30,6 +30,8 @@ export default function CustomerDashboard() {
   } = useQuery({
     queryKey: ["customer", "dashboard"],
     queryFn: fetchCustomerDashboard,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   if (isError) {
@@ -111,11 +113,6 @@ export default function CustomerDashboard() {
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-light rounded-lg flex items-center justify-center shrink-0">
                 <Coins className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               </div>
-              <Link href="/credits">
-                <Button variant="outline" size="sm" className="h-8 text-xs">
-                  Top Up
-                </Button>
-              </Link>
             </div>
             <h3 className="text-xl sm:text-2xl font-bold mb-1">{credits.toLocaleString()}</h3>
             <p className="text-xs sm:text-sm text-muted-foreground">Available Credits</p>

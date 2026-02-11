@@ -68,12 +68,18 @@ export default function AdminOrganizations() {
         setCreateOpen(false);
         toast({ title: "Organization created", description: name });
       } else {
-        const id = nextId;
-        setNextId((n) => n + 1);
-        setLocalOrgs((prev) => [...prev, { id, name, customerIds: [], archived: false }]);
+        const body = await res.json().catch(() => ({}));
+        const detail = body?.detail ?? body?.message;
+        if (res.status === 503 && detail) {
+          toast({ title: "Database schema update required", description: String(detail), variant: "destructive" });
+        } else {
+          const id = nextId;
+          setNextId((n) => n + 1);
+          setLocalOrgs((prev) => [...prev, { id, name, customerIds: [], archived: false }]);
+          toast({ title: "Organization added", description: "Backend not connected; added locally." });
+        }
         setNewName("");
         setCreateOpen(false);
-        toast({ title: "Organization added", description: "Backend not connected; added locally." });
       }
     } catch {
       const id = nextId;

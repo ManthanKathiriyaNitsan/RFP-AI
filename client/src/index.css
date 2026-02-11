@@ -405,32 +405,32 @@ body {
 
   .sidebar-badge-success {
     background: hsl(152, 76%, 92%);
-    color: hsl(152, 76%, 30%);
+    color: white;
   }
 
   .dark .sidebar-badge-success {
     background: hsl(152, 76%, 20%);
-    color: hsl(152, 76%, 70%);
+    color: white;
   }
 
   .sidebar-badge-warning {
     background: hsl(38, 92%, 92%);
-    color: hsl(38, 92%, 35%);
+    color: white;
   }
 
   .dark .sidebar-badge-warning {
     background: hsl(38, 92%, 20%);
-    color: hsl(38, 92%, 70%);
+    color: white;
   }
 
   .sidebar-badge-default {
     background: color-mix(in srgb, var(--primary) 12%, white);
-    color: var(--primary);
+    color: white;
   }
 
   .dark .sidebar-badge-default {
     background: color-mix(in srgb, var(--primary) 22%, transparent);
-    color: var(--primary);
+    color: white;
   }
 
   .sidebar-widget-bg {

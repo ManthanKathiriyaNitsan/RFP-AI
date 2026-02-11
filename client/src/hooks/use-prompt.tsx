@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -32,83 +32,101 @@ export function usePrompt() {
     cancelText: "Cancel",
     type: "text",
   });
-  const [inputValue, setInputValue] = useState("");
   const [resolvePromise, setResolvePromise] = useState<((value: string | null) => void) | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const prompt = useCallback((options: PromptOptions): Promise<string | null> => {
+  const prompt = useCallback((opts: PromptOptions): Promise<string | null> => {
     return new Promise((resolve) => {
       setOptions({
-        title: options.title || "Input",
-        description: options.description,
-        placeholder: options.placeholder || "",
-        defaultValue: options.defaultValue || "",
-        confirmText: options.confirmText || "OK",
-        cancelText: options.cancelText || "Cancel",
-        type: options.type || "text",
+        title: opts.title || "Input",
+        description: opts.description,
+        placeholder: opts.placeholder || "",
+        defaultValue: opts.defaultValue || "",
+        confirmText: opts.confirmText || "OK",
+        cancelText: opts.cancelText || "Cancel",
+        type: opts.type || "text",
       });
-      setInputValue(options.defaultValue || "");
       setResolvePromise(() => resolve);
       setIsOpen(true);
     });
   }, []);
 
   const handleConfirm = useCallback(() => {
+    const value = inputRef.current?.value?.trim() ?? "";
     setIsOpen(false);
     if (resolvePromise) {
-      resolvePromise(inputValue || null);
+      resolvePromise(value || null);
       setResolvePromise(null);
-      setInputValue("");
     }
-  }, [resolvePromise, inputValue]);
+  }, [resolvePromise]);
 
   const handleCancel = useCallback(() => {
     setIsOpen(false);
     if (resolvePromise) {
       resolvePromise(null);
       setResolvePromise(null);
-      setInputValue("");
     }
   }, [resolvePromise]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      handleConfirm();
-    } else if (e.key === "Escape") {
-      handleCancel();
-    }
-  }, [handleConfirm, handleCancel]);
-
-  const PromptDialog = () => (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{options.title}</DialogTitle>
-          {options.description && <DialogDescription>{options.description}</DialogDescription>}
-        </DialogHeader>
-        <div className="py-4">
-          <Label htmlFor="prompt-input" className="sr-only">
-            {options.placeholder || "Enter value"}
-          </Label>
-          <Input
-            id="prompt-input"
-            type={options.type}
-            placeholder={options.placeholder}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            autoFocus
-            className="w-full"
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
-            {options.cancelText}
-          </Button>
-          <Button onClick={handleConfirm}>{options.confirmText}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleConfirm();
+      } else if (e.key === "Escape") {
+        handleCancel();
+      }
+    },
+    [handleConfirm, handleCancel]
   );
 
-  return { prompt, PromptDialog };
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open && resolvePromise) {
+        resolvePromise(null);
+        setResolvePromise(null);
+      }
+      setIsOpen(open);
+    },
+    [resolvePromise]
+  );
+
+  return {
+    prompt,
+    PromptDialog: () => (
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{options.title}</DialogTitle>
+            {options.description && <DialogDescription>{options.description}</DialogDescription>}
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="prompt-input" className="sr-only">
+              {options.placeholder || "Enter value"}
+            </Label>
+            <Input
+              ref={inputRef}
+              id="prompt-input"
+              key={isOpen ? `prompt-${options.title}-${options.defaultValue ?? ""}` : "prompt-closed"}
+              type={options.type}
+              placeholder={options.placeholder}
+              defaultValue={options.defaultValue ?? ""}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              className="w-full"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancel}>
+              {options.cancelText}
+            </Button>
+            <Button onClick={handleConfirm}>{options.confirmText}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    ),
+  };
 }

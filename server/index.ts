@@ -106,14 +106,16 @@ if (process.env.VERCEL !== "1") {
     try {
       server.listen(port, host, () => {
         server.removeListener("error", errorHandler);
+        const bound = server.address();
+        const actualPort = bound && typeof bound === "object" ? bound.port : port;
         const localIP = getLocalIP();
-        if (port !== requestedPort) {
-          log(`Port ${requestedPort} was in use, serving on port ${port} instead`);
+        if (actualPort !== requestedPort) {
+          log(`Port ${requestedPort} was in use, serving on port ${actualPort} instead`);
         }
         log(`✓ Server is running!`);
-        log(`  Local:   http://localhost:${port}`);
+        log(`  Local:   http://localhost:${actualPort}`);
         if (localIP) {
-          log(`  Network: http://${localIP}:${port}`);
+          log(`  Network: http://${localIP}:${actualPort}`);
         }
       });
     } catch (err) {

@@ -34,6 +34,7 @@ import {
   AlertCircle,
   XCircle,
   Sparkles,
+  Coins,
   Users as UsersIcon,
   UserPlus,
   X,
@@ -160,6 +161,7 @@ export default function RFPDetail() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [newContentTypingComplete, setNewContentTypingComplete] = useState(false);
   const [isEditingNewContent, setIsEditingNewContent] = useState(false);
+  const [lastGenerationCreditsUsed, setLastGenerationCreditsUsed] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -527,6 +529,20 @@ export default function RFPDetail() {
 
   const handleGenerateAiContent = () => {
     if (!proposalId || !proposal) return;
+    const credits = user?.credits ?? 0;
+    if (credits <= 0) {
+      toast({
+        title: "No credits",
+        description: "Contact your admin for more credits to generate content.",
+        variant: "destructive",
+        action: (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/rfp-projects"}>
+            Go to Dashboard
+          </Button>
+        ),
+      });
+      return;
+    }
     const currentContent = proposal.content || contentData || {};
     setOldContent(currentContent);
     setNewContent(null);
@@ -542,7 +558,7 @@ export default function RFPDetail() {
         return prev + 10;
       });
     }, 300);
-    generateContentMutation.mutate(undefined, {
+    generateContentMutation.mutate({ userId: user?.id }, {
       onSuccess: (data) => {
         if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
@@ -555,17 +571,38 @@ export default function RFPDetail() {
           setNewContent(content);
           setEditableNewContent({ ...content });
           setGenerationProgress(100);
-          setNewContentTypingComplete(false);
+          setNewContentTypingComplete(true);
           setIsEditingNewContent(false);
-          toast({ title: "AI Content Generated", description: "New content is ready for review." });
+          const creditsUsed = data && typeof (data as { creditsUsed?: number }).creditsUsed === "number" ? (data as { creditsUsed: number }).creditsUsed : null;
+          if (creditsUsed != null) setLastGenerationCreditsUsed(creditsUsed);
+          toast({
+            title: creditsUsed != null ? `AI content ready • ${creditsUsed} credit(s) used` : "AI content ready",
+            description: "New content is ready for review.",
+          });
+          qc.invalidateQueries({ queryKey: ["customer", "sidebar"] });
+          qc.invalidateQueries({ queryKey: ["customer", "credits", "usage"] });
+          qc.invalidateQueries({ queryKey: ["customer", "dashboard"] });
+          qc.invalidateQueries({ queryKey: ["notifications"] });
         }
         setIsGenerating(false);
       },
-      onError: () => {
+      onError: (e) => {
         if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
         setIsGenerating(false);
-        toast({ title: "Error", description: "Failed to generate content.", variant: "destructive" });
+        const message = e instanceof Error ? e.message : "Failed to generate content.";
+        const is402 = e instanceof Error && /^402:/.test(e.message);
+        const creditMsg = "Contact your admin for more credits.";
+        toast({
+          title: is402 ? "Insufficient credits" : "Error",
+          description: is402 ? (message ? `${message} ${creditMsg}` : creditMsg) : message,
+          variant: "destructive",
+          action: is402 ? (
+            <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/rfp-projects"}>
+              Go to Dashboard
+            </Button>
+          ) : undefined,
+        });
       },
     });
   };
@@ -1252,13 +1289,19 @@ export default function RFPDetail() {
               {canGenerateAi && (
                 <Button
                   onClick={handleGenerateAiContent}
-                  disabled={isGenerating}
+                  disabled={isGenerating || (user?.credits ?? 0) <= 0}
                   className="theme-gradient-bg text-white shadow-lg shadow-primary/20 transition-all duration-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={(user?.credits ?? 0) <= 0 ? "Contact your admin for more credits" : undefined}
                 >
                   {isGenerating ? (
                     <>
                       <Clock className="w-4 h-4 mr-2 animate-spin" />
                       Generating...
+                    </>
+                  ) : (user?.credits ?? 0) <= 0 ? (
+                    <>
+                      <Coins className="w-4 h-4 mr-2" />
+                      No credits — contact admin
                     </>
                   ) : (
                     <>
@@ -1562,17 +1605,25 @@ export default function RFPDetail() {
                     {isGenerating ? "Generating new AI content..." : "AI-generated proposal content"}
                   </CardDescription>
                 </div>
-                {isGenerating ? (
-                  <Badge variant="outline" className={`${softBadgeClasses.primary} shrink-0`}>
-                    <Clock className="w-3 h-3 mr-1 animate-spin" />
-                    Generating {generationProgress}%
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className={`${softBadgeClasses.primary} shrink-0`}>
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    AI Generated
-                  </Badge>
-                )}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {isGenerating ? (
+                    <Badge variant="outline" className={softBadgeClasses.primary}>
+                      <Clock className="w-3 h-3 mr-1 animate-spin" />
+                      Generating {generationProgress}%
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className={softBadgeClasses.primary}>
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      AI Generated
+                    </Badge>
+                  )}
+                  {!isGenerating && lastGenerationCreditsUsed != null && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/12 dark:bg-primary/20 text-primary px-3 py-1.5 text-sm font-medium border border-primary/20 shadow-sm">
+                      <Coins className="w-4 h-4 shrink-0" />
+                      This generation: {lastGenerationCreditsUsed} credit{lastGenerationCreditsUsed !== 1 ? "s" : ""} used
+                    </span>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1604,7 +1655,7 @@ export default function RFPDetail() {
                           New Content
                         </h3>
                         <div className="flex justify-center">
-                          {!isGenerating && newContent && isFullDocumentContent(editableNewContent ?? newContent) && newContentTypingComplete && (
+                          {!isGenerating && newContent && isFullDocumentContent(editableNewContent ?? newContent) && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -1650,25 +1701,16 @@ export default function RFPDetail() {
                         ) : newContent ? (
                           isFullDocumentContent(editableNewContent ?? newContent) ? (
                             <div className="space-y-6">
-                              {!newContentTypingComplete ? (
-                                <TypingReveal
-                                  key={`typing-${(editableNewContent ?? newContent)?.generatedAt ?? "new"}`}
-                                  text={getFullDocumentText(editableNewContent ?? newContent)}
-                                  speedMs={14}
-                                  className="min-h-[280px]"
-                                  onComplete={() => setNewContentTypingComplete(true)}
-                                />
-                              ) : (
-                                <ProposalQuillEditor
-                                  value={getFullDocumentText(editableNewContent ?? newContent)}
-                                  onChange={(html) =>
-                                    setEditableNewContent({ ...(editableNewContent ?? newContent), fullDocument: html })
-                                  }
-                                  readOnly={!isEditingNewContent}
-                                  placeholder="AI-generated proposal"
-                                  minHeight="280px"
-                                />
-                              )}
+                              <ProposalQuillEditor
+                                key={`content-${(editableNewContent ?? newContent)?.generatedAt ?? "new"}`}
+                                value={getFullDocumentText(editableNewContent ?? newContent)}
+                                onChange={(html) =>
+                                  setEditableNewContent({ ...(editableNewContent ?? newContent), fullDocument: html })
+                                }
+                                readOnly={!isEditingNewContent}
+                                placeholder="AI-generated proposal"
+                                minHeight="280px"
+                              />
                             </div>
                           ) : (
                             renderContentSections(editableNewContent ?? newContent, true, (next) => setEditableNewContent(next))

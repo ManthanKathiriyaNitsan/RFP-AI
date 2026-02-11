@@ -4,6 +4,7 @@
  */
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
+import { notifyApiUnavailable } from "@/contexts/ApiStatusContext";
 
 // --- Response types (match backend /api/v1/admin/* response shapes) ---
 
@@ -68,7 +69,7 @@ export interface CreditsData {
 /** Super-admin: who bought credits and who allocated how much to whom */
 export interface CreditsActivityData {
   purchasesByAdmin?: { adminId: number; adminName: string; totalCredits: number; count: number; transactions: { amount: number; date: string; description: string | null }[] }[];
-  allocationsByAdmin?: { adminId: number; adminName: string; allocations: { targetUserId: number; targetUserName: string; amount: number; date: string }[] }[];
+  allocationsByAdmin?: { adminId: number; adminName: string; allocations: { targetUserId: number; targetUserName: string; targetUserRole?: string; amount: number; date: string }[] }[];
 }
 
 /** Subscription plan for plan builder */
@@ -259,7 +260,7 @@ export interface RolesData {
 
 export interface AdminSidebarData {
   navGroups?: { title: string; items: { href: string; label: string; icon: string; badge?: string | number; badgeVariant?: string }[] }[];
-  sidebarWidget?: { title: string; usedLabel: string; usedValue: string; percentage: number; percentageLabel: string };
+  sidebarWidget?: { title: string; credits?: number; creditsLabel?: string; usedThisMonth?: number; usageDetailHref?: string; creditsDistributed?: number };
 }
 
 export interface IntegrationsSetupData {
@@ -383,6 +384,7 @@ async function getAdminJson<T>(path: string, params?: Record<string, string>): P
     : url;
   const res = await fetchWithAuth(fullUrl);
   if (!res.ok) {
+    if (res.status >= 500) notifyApiUnavailable();
     const text = await res.text();
     throw new Error(res.status === 401 ? "Unauthorized" : text || `HTTP ${res.status}`);
   }
@@ -446,6 +448,7 @@ export async function createCreditsOrder(
   const token = authStorage.getAccessToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  const returnBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const res = await fetch(getApiUrl("/api/v1/admin/credits/create-order"), {
     method: "POST",
     headers,
@@ -455,6 +458,7 @@ export async function createCreditsOrder(
       currency: packageDetails.currency ?? "USD",
       credits: packageDetails.credits,
       userId: packageDetails.userId,
+      returnBaseUrl: returnBaseUrl || undefined,
     }),
     credentials: "include",
   });
@@ -567,7 +571,10 @@ export async function deleteAdminBillingPlan(id: string): Promise<boolean> {
   }
 }
 
-export async function assignPlanToCustomer(userId: number, planId: string): Promise<boolean> {
+export async function assignPlanToCustomer(
+  userId: number,
+  planId: string
+): Promise<{ success: boolean; message?: string }> {
   try {
     const token = authStorage.getAccessToken();
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -578,9 +585,12 @@ export async function assignPlanToCustomer(userId: number, planId: string): Prom
       body: JSON.stringify({ userId, planId }),
       credentials: "include",
     });
-    return res.ok;
-  } catch {
-    return false;
+    const data = await res.json().catch(() => ({}));
+    const message = typeof data?.message === "string" ? data.message : undefined;
+    if (res.ok) return { success: true, message };
+    return { success: false, message: message || `Request failed (${res.status})` };
+  } catch (e) {
+    return { success: false, message: e instanceof Error ? e.message : "Network error" };
   }
 }
 

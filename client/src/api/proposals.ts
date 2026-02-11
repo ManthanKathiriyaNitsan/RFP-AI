@@ -361,7 +361,14 @@ export async function submitPublicAnswers(body: PublicAnswerSubmitInput): Promis
   return res.json();
 }
 
-// AI generate (optional body)
+// AI generate (optional body). Returns content + creditsUsed for this generation.
+export interface GenerateProposalContentResponse {
+  proposalId?: number;
+  content?: Record<string, unknown>;
+  fullDocument?: string;
+  message?: string;
+  creditsUsed?: number;
+}
 export async function generateProposalContent(
   proposalId: number,
   body?: {
@@ -370,8 +377,10 @@ export async function generateProposalContent(
     clientName?: string | null;
     clientContact?: string | null;
     clientEmail?: string | null;
+    /** Current user id (for collaborator/customer so backend charges the right account and sends notifications). */
+    userId?: number;
   }
-): Promise<Record<string, unknown>> {
+): Promise<GenerateProposalContentResponse & Record<string, unknown>> {
   const res = await apiRequest("POST", `/api/v1/ai/proposals/${proposalId}/generate`, body ?? {});
   return res.json();
 }

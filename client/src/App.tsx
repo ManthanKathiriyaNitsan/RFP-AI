@@ -54,7 +54,6 @@ import AdminAuditLogs from "@/pages/admin/admin-audit-logs";
 import CustomerDashboard from "@/pages/customer/customer-dashboard";
 import CollaboratorView from "@/pages/collaborator/collaborator-view";
 import CollaboratorAnalytics from "@/pages/collaborator/collaborator-analytics";
-import CreditPurchase from "@/pages/customer/credit-purchase";
 import ProposalBuilder from "@/pages/customer/proposal-builder";
 import ProposalQuestions from "@/pages/customer/proposal-questions";
 import ProposalGenerate from "@/pages/customer/proposal-generate";
@@ -64,6 +63,8 @@ import CollaboratorManagement from "@/pages/customer/collaborator-management";
 import RFPDetail from "@/pages/customer/rfp-detail";
 import RFPReview from "@/pages/customer/rfp-review";
 import PublicProposalAnswer from "@/pages/customer/public-proposal-answer";
+import CustomerCreditUsage from "@/pages/customer/credit-usage";
+import CollaboratorCreditUsage from "@/pages/collaborator/credit-usage";
 
 /** True if user can access the admin panel (admin or super_admin). */
 function isAdminPanelRole(role: string) {
@@ -245,6 +246,7 @@ function Router() {
       {/* Collaborator routes (dedicated panel – only collaborators) */}
       <Route path="/collaborator" component={() => <CollaboratorRoute component={CollaboratorView} />} />
       <Route path="/collaborator/analytics" component={() => <CollaboratorRoute component={CollaboratorAnalytics} />} />
+      <Route path="/collaborator/credits-usage" component={() => <CollaboratorRoute component={CollaboratorCreditUsage} />} />
       <Route path="/collaborator/rfp/:id" component={() => <CollaboratorRoute component={RFPDetail} />} />
       <Route path="/collaborator/rfp/:id/questions" component={() => <CollaboratorRoute component={ProposalQuestions} />} />
       <Route path="/collaborator/rfp/:id/generate" component={() => <CollaboratorRoute component={ProposalGenerate} />} />
@@ -252,7 +254,10 @@ function Router() {
 
       {/* Customer routes (redirect collaborators to /collaborator) */}
       <Route path="/dashboard" component={() => <CustomerRoute component={CustomerDashboard} />} />
-      <Route path="/credits" component={() => <CustomerRoute component={CreditPurchase} />} />
+      <Route path="/credits-usage" component={() => <CustomerRoute component={CustomerCreditUsage} />} />
+      <Route path="/credits">
+        <Redirect to="/dashboard" />
+      </Route>
       <Route path="/proposals/new" component={() => <CustomerRoute component={ProposalBuilder} />} />
       <Route path="/rfp-projects" component={() => <CustomerRoute component={RFPProjects} />} />
       <Route path="/knowledge-base" component={() => <CustomerRoute component={KnowledgeBase} />} />

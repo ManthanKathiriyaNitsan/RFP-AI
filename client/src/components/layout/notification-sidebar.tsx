@@ -30,6 +30,7 @@ const getNotificationIcon = (type: NotificationType) => {
       return CheckCircle2;
     case "warning":
     case "error":
+    case "credit_alert":
       return AlertCircle;
     case "mention":
       return AtSign;
@@ -38,7 +39,14 @@ const getNotificationIcon = (type: NotificationType) => {
     case "chat":
       return MessageCircle;
     case "credit_added":
+    case "credit_assigned":
+    case "credit_allocated":
+    case "credit_purchase":
+    case "credit_plan_assigned":
       return Coins;
+    case "credit_removed":
+    case "credit_deducted":
+      return AlertCircle;
     case "organization_created":
       return Building2;
     case "collaboration_invite":
@@ -57,6 +65,7 @@ const getNotificationColor = (type: NotificationType) => {
     case "success":
       return "text-green-500";
     case "warning":
+    case "credit_alert":
       return "text-yellow-500";
     case "error":
       return "text-red-500";
@@ -66,7 +75,14 @@ const getNotificationColor = (type: NotificationType) => {
     case "chat":
       return "text-blue-500";
     case "credit_added":
+    case "credit_assigned":
+    case "credit_allocated":
+    case "credit_purchase":
+    case "credit_plan_assigned":
       return "text-emerald-500";
+    case "credit_removed":
+    case "credit_deducted":
+      return "text-amber-500";
     case "organization_created":
       return "text-violet-500";
     case "collaboration_invite":

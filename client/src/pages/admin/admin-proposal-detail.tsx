@@ -37,6 +37,7 @@ import {
   Eye,
   Send,
   Sparkles,
+  Coins,
   FileEdit,
   MessageSquare,
   MoreHorizontal,
@@ -157,6 +158,7 @@ export default function AdminProposalDetail() {
   const [oldContent, setOldContent] = useState<any>(null);
   const [newContent, setNewContent] = useState<any>(null);
   const [generationProgress, setGenerationProgress] = useState(0);
+  const [lastGenerationCreditsUsed, setLastGenerationCreditsUsed] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -389,6 +391,7 @@ export default function AdminProposalDetail() {
       const response = await apiRequest("POST", `/api/v1/ai/proposals/${id}/generate`, {
         requirements,
         aiContext: `Generate comprehensive proposal content for ${proposal.title || 'this proposal'} in the ${proposal.industry || 'general'} industry.`,
+        userId: user?.id,
       });
       const content = await response.json();
       return content;
@@ -398,26 +401,52 @@ export default function AdminProposalDetail() {
         setNewContent(content.fullDocument != null ? content : content.content);
         setGenerationProgress(100);
         setIsGenerating(false);
+        const creditsUsed = typeof content.creditsUsed === "number" ? content.creditsUsed : null;
+        if (creditsUsed != null) setLastGenerationCreditsUsed(creditsUsed);
         toast({
-          title: "AI Content Generated",
+          title: creditsUsed != null ? `AI content ready • ${creditsUsed} credit(s) used` : "AI content ready",
           description: "New AI-generated content is ready for review.",
         });
       }
+      queryClient.invalidateQueries({ queryKey: ["admin", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
       queryClient.invalidateQueries({ queryKey: [`/api/proposals/${id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: () => {
+    onError: (e) => {
       setIsGenerating(false);
       setGenerationProgress(0);
+      const message = e instanceof Error ? e.message : "Failed to generate AI content. Please try again.";
+      const is402 = e instanceof Error && /^402:/.test(e.message);
       toast({
-        title: "Generation Failed",
-        description: "Failed to generate AI content. Please try again.",
+        title: is402 ? "Insufficient credits" : "Generation Failed",
+        description: is402 ? "Buy new credits to generate content." : message,
         variant: "destructive",
+        action: is402 ? (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/admin/credits"}>
+            Buy new credits
+          </Button>
+        ) : undefined,
       });
     },
   });
 
   const handleGenerateAiContent = () => {
+    const credits = user?.credits ?? 0;
+    if (credits <= 0) {
+      toast({
+        title: "No credits",
+        description: "Buy new credits to generate content. Go to Credits to purchase.",
+        variant: "destructive",
+        action: (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/admin/credits"}>
+            Buy new credits
+          </Button>
+        ),
+      });
+      return;
+    }
     // Save current content as old content
     const currentContent = proposal.content || contentData || {};
     setOldContent(currentContent);
@@ -1011,13 +1040,19 @@ export default function AdminProposalDetail() {
               )}
               <Button
                 onClick={handleGenerateAiContent}
-                disabled={isGenerating || (oldContent && newContent)}
+                disabled={isGenerating || (oldContent && newContent) || (user?.credits ?? 0) <= 0}
                 className="theme-gradient-bg text-white shadow-lg shadow-primary/20 transition-all duration-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={(user?.credits ?? 0) <= 0 ? "Buy new credits to generate content" : undefined}
               >
                 {isGenerating ? (
                   <>
                     <Clock className="w-4 h-4 mr-2 animate-spin" />
                     Generating...
+                  </>
+                ) : (user?.credits ?? 0) <= 0 ? (
+                  <>
+                    <Coins className="w-4 h-4 mr-2" />
+                    No credits — buy credits
                   </>
                 ) : (
                   <>
@@ -1296,17 +1331,25 @@ export default function AdminProposalDetail() {
                     {isGenerating ? "Generating new AI content..." : "AI-generated proposal content"}
                   </CardDescription>
                 </div>
-                {isGenerating ? (
-                  <Badge variant="outline" className="bg-primary text-white border-primary/20 shrink-0">
-                    <Clock className="w-3 h-3 mr-1 animate-spin" />
-                    Generating {generationProgress}%
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="bg-primary text-white border-primary/20 shrink-0">
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    AI Generated
-                  </Badge>
-                )}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {isGenerating ? (
+                    <Badge variant="outline" className="bg-primary text-white border-primary/20">
+                      <Clock className="w-3 h-3 mr-1 animate-spin" />
+                      Generating {generationProgress}%
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-primary text-white border-primary/20">
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      AI Generated
+                    </Badge>
+                  )}
+                  {!isGenerating && lastGenerationCreditsUsed != null && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/12 dark:bg-primary/20 text-primary px-3 py-1.5 text-sm font-medium border border-primary/20 shadow-sm">
+                      <Coins className="w-4 h-4 shrink-0" />
+                      This generation: {lastGenerationCreditsUsed} credit{lastGenerationCreditsUsed !== 1 ? "s" : ""} used
+                    </span>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>

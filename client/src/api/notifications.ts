@@ -7,8 +7,10 @@ import { authStorage } from "@/lib/auth";
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const token = authStorage.getAccessToken();
+  const auth = authStorage.getAuth();
   const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (auth?.user?.id != null) headers["x-user-id"] = String(auth.user.id);
   return fetch(url, { credentials: "include", ...options, headers });
 }
 
@@ -24,6 +26,13 @@ export type NotificationType =
   | "status_change"
   | "proposal_assigned"
   | "credit_added"
+  | "credit_alert"
+  | "credit_assigned"
+  | "credit_allocated"
+  | "credit_removed"
+  | "credit_deducted"
+  | "credit_purchase"
+  | "credit_plan_assigned"
   | "organization_created"
   | "collaboration_invite";
 

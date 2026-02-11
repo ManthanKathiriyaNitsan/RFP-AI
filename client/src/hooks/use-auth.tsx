@@ -94,6 +94,20 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/** Default value when useAuth is used outside AuthProvider (e.g. 404 route or router timing). */
+const DEFAULT_AUTH_CONTEXT: AuthContextType = {
+  user: null,
+  currentRole: "customer",
+  access_token: null,
+  refresh_token: null,
+  access_token_expires_at: null,
+  isInitializing: false,
+  login: () => Promise.reject(new Error("Not within AuthProvider")),
+  logout: () => {},
+  switchRole: () => {},
+  updateUser: () => {},
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const initialAuth = authStorage.getAuth();
   const [auth, setAuth] = useState<AuthState>(() => initialAuth);
@@ -210,8 +224,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return context;
+  return context ?? DEFAULT_AUTH_CONTEXT;
 }

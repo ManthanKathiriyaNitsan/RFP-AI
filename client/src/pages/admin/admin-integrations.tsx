@@ -150,10 +150,10 @@ export default function AdminIntegrations() {
       <Tabs defaultValue="connected" className="w-full">
         <TabsList className="bg-muted/50 overflow-x-auto overflow-y-hidden w-full sm:w-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           <TabsTrigger value="connected" className="data-[state=active]:bg-background text-xs sm:text-sm">
-            Connected <Badge variant="secondary" className="ml-2 text-[10px]">{connectedIntegrations.length}</Badge>
+            Connected <Badge variant="secondary" className="ml-2 text-[10px] text-white">{connectedIntegrations.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="available" className="data-[state=active]:bg-background text-xs sm:text-sm">
-            Available <Badge variant="secondary" className="ml-2 text-[10px]">{availableIntegrations.length}</Badge>
+            Available <Badge variant="secondary" className="ml-2 text-[10px] text-white">{availableIntegrations.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="api" className="data-[state=active]:bg-background text-xs sm:text-sm">
             API Keys

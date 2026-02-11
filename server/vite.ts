@@ -34,7 +34,7 @@ export async function setupVite(app: Express, server: Server) {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
+        // Do not exit: keep dev server running so you can fix errors and use HMR
       },
     },
     server: serverOptions,

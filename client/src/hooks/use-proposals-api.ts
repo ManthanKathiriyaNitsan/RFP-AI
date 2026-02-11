@@ -236,6 +236,7 @@ export function useGenerateProposalContent(proposalId: number) {
       apiGenerateProposalContent(proposalId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

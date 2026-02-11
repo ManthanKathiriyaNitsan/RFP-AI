@@ -172,24 +172,36 @@ export default function AdminProposalsNew() {
         clientName: formData.clientName,
         clientContact: formData.clientContact,
         clientEmail: formData.clientEmail,
+        userId: user?.id,
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      const creditsUsed = data && typeof (data as { creditsUsed?: number }).creditsUsed === "number" ? (data as { creditsUsed: number }).creditsUsed : null;
       toast({
-        title: "Proposal generated!",
-        description: "Your proposal has been created and AI content has been generated successfully.",
+        title: creditsUsed != null ? `Proposal generated • ${creditsUsed} credit(s) used` : "Proposal generated",
+        description: "Your proposal has been created and AI content has been generated.",
       });
       setIsGenerating(false);
       setIsSubmitting(false);
       setLocation("/admin/proposals");
     },
-    onError: () => {
+    onError: (e) => {
+      const message = e instanceof Error ? e.message : "Proposal was created but failed to generate content. You can generate it later.";
+      const is402 = e instanceof Error && /^402:/.test(e.message);
       toast({
-        title: "Error",
-        description: "Proposal was created but failed to generate content. You can generate it later.",
+        title: is402 ? "Insufficient credits" : "Error",
+        description: is402 ? "Buy new credits to generate content." : message,
         variant: "destructive",
+        action: is402 ? (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/admin/credits"}>
+            Buy new credits
+          </Button>
+        ) : undefined,
       });
       setIsGenerating(false);
       setIsSubmitting(false);
@@ -203,6 +215,21 @@ export default function AdminProposalsNew() {
         title: "Error",
         description: "You must be logged in to create a proposal.",
         variant: "destructive",
+      });
+      return;
+    }
+
+    const credits = user.credits ?? 0;
+    if (credits <= 0) {
+      toast({
+        title: "No credits",
+        description: "Buy new credits to generate proposals.",
+        variant: "destructive",
+        action: (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/admin/credits"}>
+            Buy new credits
+          </Button>
+        ),
       });
       return;
     }
@@ -625,15 +652,18 @@ export default function AdminProposalsNew() {
         ) : (
           <Button 
             onClick={handleSubmit}
-            disabled={isSubmitting || isGenerating || createProposalMutation.isPending || generateProposalMutation.isPending}
+            disabled={isSubmitting || isGenerating || createProposalMutation.isPending || generateProposalMutation.isPending || (user?.credits ?? 0) <= 0}
             className="gap-2 theme-gradient-bg text-white hover:opacity-95 w-full sm:w-auto"
             data-testid="button-create"
+            title={(user?.credits ?? 0) <= 0 ? "Buy new credits to create and generate proposals" : undefined}
           >
             <Sparkles className="w-4 h-4" />
             {isGenerating || generateProposalMutation.isPending 
               ? "Generating Proposal..." 
               : isSubmitting || createProposalMutation.isPending 
               ? "Creating..." 
+              : (user?.credits ?? 0) <= 0 
+              ? "No credits — buy credits" 
               : "Create Proposal"}
           </Button>
         )}

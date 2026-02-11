@@ -19,6 +19,9 @@ import {
   AlertCircle,
   FileText,
   ArrowUpDown,
+  ArrowLeft,
+  Users,
+  ChevronRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,8 +56,10 @@ import {
   downloadProposalXlsx,
   downloadProposalJson,
 } from "@/lib/export-proposal";
-import { fetchAdminOptions } from "@/api/admin-data";
+import { fetchAdminOptions, fetchAdminUsersList } from "@/api/admin-data";
 import { getProposalStatusBadgeClass, getAiScoreBadgeClass } from "@/lib/badge-classes";
+
+type AdminUser = { id: number; email?: string; firstName?: string; lastName?: string; first_name?: string; last_name?: string; role?: string };
 
 export default function AdminProposals() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -64,13 +69,20 @@ export default function AdminProposals() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [exportDialogProposal, setExportDialogProposal] = useState<any>(null);
+  const [selectedAdminId, setSelectedAdminId] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const p = new URLSearchParams(window.location.search);
+    const id = p.get("adminId");
+    return id != null && /^\d+$/.test(id) ? parseInt(id, 10) : null;
+  });
   const itemsPerPage = 10;
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
-  const { user } = useAuth();
+  const { user, currentRole } = useAuth();
   const queryClient = useQueryClient();
-  const [, navigate] = useLocation();
+  const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
+  const isSuperAdmin = (currentRole || "").toLowerCase() === "super_admin";
 
   const { data: optionsData } = useQuery({
     queryKey: ["admin", "options"],
@@ -79,11 +91,28 @@ export default function AdminProposals() {
   const pageTitles = (optionsData as { pageTitles?: Record<string, string> })?.pageTitles ?? {};
   const proposalsTitle = pageTitles.proposals ?? "Proposals";
 
-  // Fetch real proposals from API (admin sees all proposals); refetch periodically for real-time updates
+  // Super Admin: list of admins (users with role admin)
+  const { data: adminUsersRaw = [] } = useQuery({
+    queryKey: ["/api/v1/users"],
+    queryFn: fetchAdminUsersList,
+    enabled: isSuperAdmin,
+  });
+  const adminUsers = (adminUsersRaw as AdminUser[]).filter(
+    (u) => (u.role || "").toLowerCase() === "admin"
+  );
+
+  // Fetch proposals: for super_admin with selected admin = that admin's proposals; for admin or super_admin without selection = all (or none when super_admin list view)
   const { data: apiProposals = [], isLoading: isLoadingProposals, isError: proposalsError, error: proposalsErrorObj, refetch: refetchProposals } = useQuery<any[]>({
-    queryKey: ["/api/proposals", { userId: user?.id, userRole: user?.role }],
-    enabled: !!user?.id,
-    refetchInterval: 20000, // Refetch every 20s so list stays in sync
+    queryKey: [
+      "/api/proposals",
+      {
+        userId: user?.id,
+        userRole: user?.role,
+        ...(isSuperAdmin && selectedAdminId != null ? { adminId: selectedAdminId } : {}),
+      },
+    ],
+    enabled: !!user?.id && (!isSuperAdmin || selectedAdminId != null),
+    refetchInterval: 20000,
   });
 
   // Transform API proposals for display
@@ -188,11 +217,11 @@ export default function AdminProposals() {
   const paginatedProposals = sortedProposals.slice(startIndex, startIndex + itemsPerPage);
 
   const handleView = (proposalId: number) => {
-    navigate(`/admin/proposals/${proposalId}`);
+    setLocation(`/admin/proposals/${proposalId}`);
   };
 
   const handleEdit = (proposalId: number) => {
-    navigate(`/admin/proposals/${proposalId}`);
+    setLocation(`/admin/proposals/${proposalId}`);
   };
 
   const handleDuplicate = async (proposalId: number) => {
@@ -290,13 +319,92 @@ export default function AdminProposals() {
     }
   };
 
+  const handleSelectAdmin = (adminId: number) => {
+    setSelectedAdminId(adminId);
+    setLocation(`/admin/proposals?adminId=${adminId}`);
+  };
+
+  const handleBackToAdmins = () => {
+    setSelectedAdminId(null);
+    setLocation("/admin/proposals");
+  };
+
+  const selectedAdmin = selectedAdminId != null ? adminUsers.find((a) => a.id === selectedAdminId) : null;
+
+  // Super Admin: show list of admins first; when one is selected, show that admin's proposals
+  if (isSuperAdmin && selectedAdminId == null) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <ConfirmDialog />
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-proposals-title">{proposalsTitle}</h1>
+          <p className="text-muted-foreground text-sm mt-1">Select an admin to view their proposals.</p>
+        </div>
+        <Card className="border shadow-sm overflow-hidden">
+          <CardContent className={adminUsers.length === 0 ? "p-4 sm:p-6" : "p-0"}>
+            {adminUsers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Users className="w-12 h-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No admins found</h3>
+                <p className="text-muted-foreground">There are no users with the Administrator role yet.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {adminUsers.map((admin, index) => {
+                  const name = [admin.firstName ?? admin.first_name, admin.lastName ?? admin.last_name].filter(Boolean).join(" ") || admin.email || `Admin #${admin.id}`;
+                  const initials = name.slice(0, 2).toUpperCase();
+                  return (
+                    <button
+                      key={admin.id}
+                      type="button"
+                      onClick={() => handleSelectAdmin(admin.id)}
+                      className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${index % 2 === 1 ? "bg-muted/20" : ""}`}
+                    >
+                      <Avatar className="h-9 w-9 shrink-0 rounded-full border border-border">
+                        <AvatarFallback className="rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                          {initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm text-foreground truncate">{name}</p>
+                        {admin.email && (
+                          <p className="text-xs text-muted-foreground truncate">{admin.email}</p>
+                        )}
+                      </div>
+                      <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <ConfirmDialog />
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-proposals-title">{proposalsTitle}</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage and track all RFP proposals in one place.</p>
+        <div className="min-w-0">
+          {isSuperAdmin && selectedAdminId != null && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mb-2 -ml-2 text-muted-foreground hover:text-foreground"
+              onClick={handleBackToAdmins}
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              All admins
+            </Button>
+          )}
+          <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-proposals-title">
+            {isSuperAdmin && selectedAdmin ? `${proposalsTitle} · ${[selectedAdmin.firstName ?? selectedAdmin.first_name, selectedAdmin.lastName ?? selectedAdmin.last_name].filter(Boolean).join(" ") || selectedAdmin.email}` : proposalsTitle}
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {isSuperAdmin && selectedAdminId != null ? "Proposals owned by this admin." : "Manage and track all RFP proposals in one place."}
+          </p>
         </div>
         {/* Admin and super_admin cannot create proposals; only view, edit, delete */}
       </div>
@@ -313,19 +421,19 @@ export default function AdminProposals() {
           <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             <TabsList className="bg-muted/50 w-max sm:w-auto">
               <TabsTrigger value="all" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                All <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.all}</Badge>
+                All <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.all}</Badge>
               </TabsTrigger>
               <TabsTrigger value="in_progress" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                In Progress <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.in_progress}</Badge>
+                In Progress <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.in_progress}</Badge>
               </TabsTrigger>
               <TabsTrigger value="review" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                Review <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.review}</Badge>
+                Review <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.review}</Badge>
               </TabsTrigger>
               <TabsTrigger value="won" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                Won <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.won}</Badge>
+                Won <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.won}</Badge>
               </TabsTrigger>
               <TabsTrigger value="lost" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                Lost <Badge variant="secondary" className="ml-2 text-[10px]">{statusCounts.lost}</Badge>
+                Lost <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.lost}</Badge>
               </TabsTrigger>
             </TabsList>
           </div>

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useParams, useLocation, Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useProposal, useProposalQuestions, useGenerateProposalContent, useUpdateProposal, useMyCollaboration } from "@/hooks/use-proposals-api";
 import { QueryErrorState } from "@/components/shared/query-error-state";
-import { ArrowLeft, FileText, Sparkles, CheckCircle, ExternalLink } from "lucide-react";
+import { ArrowLeft, FileText, Sparkles, Coins, CheckCircle, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProposalStepper } from "@/components/customer/proposal-stepper";
@@ -18,10 +19,18 @@ export default function ProposalGenerate() {
   const id = params?.id ? parseInt(params.id, 10) : null;
   const fromAdmin = location.startsWith("/admin/proposals");
   const isCollaborator = location.startsWith("/collaborator");
-  const { currentRole } = useAuth();
+  const { currentRole, user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const rfpBase = fromAdmin ? "/admin/proposals" : isCollaborator ? "/collaborator/rfp" : "/rfp";
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
+  const [lastCreditsUsed, setLastCreditsUsed] = useState<number | null>(null);
+
+  const credits = user?.credits ?? 0;
+  const noCredits = credits <= 0;
+  const isAdmin = (currentRole || "").toLowerCase() === "admin" || (currentRole || "").toLowerCase() === "super_admin";
+  const noCreditsMessage = noCredits ? (isAdmin ? "Buy new credits to generate content." : "Contact your admin for more credits.") : null;
+  const noCreditsHref = isAdmin ? "/admin/credits" : (currentRole === "collaborator" ? "/collaborator" : "/rfp-projects");
 
   const { data: proposal, isLoading: proposalLoading, isError: proposalError, error: proposalErrorObj, refetch: refetchProposal } = useProposal(id);
   const { data: myCollaboration } = useMyCollaboration(isCollaborator ? id : null);
@@ -39,20 +48,49 @@ export default function ProposalGenerate() {
 
   const handleGenerateDocument = () => {
     if (!id || !proposal) return;
+    if (noCredits) {
+      toast({
+        title: "No credits",
+        description: noCreditsMessage ?? "You need credits to generate content.",
+        variant: "destructive",
+        action: (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = noCreditsHref}>
+            {isAdmin ? "Buy new credits" : "Go to Dashboard"}
+          </Button>
+        ),
+      });
+      return;
+    }
     setGeneratedContent(null);
-    generateMutation.mutate(undefined, {
+    generateMutation.mutate({ userId: user?.id }, {
       onSuccess: (data) => {
         const content =
           data && typeof data === "object" && (data as { content?: unknown }).content != null
             ? (data as { content: Record<string, unknown> }).content
             : (data as Record<string, unknown>);
+        const creditsUsed = data && typeof (data as { creditsUsed?: number }).creditsUsed === "number" ? (data as { creditsUsed: number }).creditsUsed : null;
         if (content && typeof content === "object") {
+          if (creditsUsed != null) setLastCreditsUsed(creditsUsed);
+          toast({
+            title: creditsUsed != null ? `AI document generated • ${creditsUsed} credit(s) used` : "AI document generated",
+            description: "Your document is ready. Saving to proposal...",
+          });
+          queryClient.invalidateQueries({ queryKey: ["customer", "sidebar"] });
+          queryClient.invalidateQueries({ queryKey: ["collaborator", "sidebar"] });
+          queryClient.invalidateQueries({ queryKey: ["admin", "sidebar"] });
+          queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
+          queryClient.invalidateQueries({ queryKey: ["customer", "credits", "usage"] });
+          queryClient.invalidateQueries({ queryKey: ["collaborator", "credits", "usage"] });
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
           setGeneratedContent(content);
           updateProposalMutation.mutate(
             { content },
             {
               onSuccess: () => {
-                toast({ title: "Document saved", description: "Click View Document to open it in the Content tab." });
+                const desc = creditsUsed != null
+                  ? `${creditsUsed} credit(s) used for this generation. Click View Document to open it in the Content tab.`
+                  : "Click View Document to open it in the Content tab.";
+                toast({ title: "Document saved", description: desc });
               },
               onError: () => {
                 toast({ title: "Document generated", description: "Saving to proposal failed. You can copy from below.", variant: "destructive" });
@@ -62,7 +100,19 @@ export default function ProposalGenerate() {
         }
       },
       onError: (e) => {
-        toast({ title: "Error", description: e instanceof Error ? e.message : "Generation failed", variant: "destructive" });
+        const message = e instanceof Error ? e.message : "Generation failed";
+        const is402 = e instanceof Error && /^402:/.test(e.message);
+        const creditMsg = isAdmin ? "Buy new credits to continue." : "Contact your admin for more credits.";
+        toast({
+          title: is402 ? "Insufficient credits" : "Error",
+          description: is402 ? (message ? `${message} ${creditMsg}` : creditMsg) : message,
+          variant: "destructive",
+          action: is402 ? (
+            <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = noCreditsHref}>
+              {isAdmin ? "Buy new credits" : "Go to Dashboard"}
+            </Button>
+          ) : undefined,
+        });
       },
     });
   };
@@ -134,13 +184,19 @@ export default function ProposalGenerate() {
             {canGenerateAi ? (
               <Button
                 onClick={handleGenerateDocument}
-                disabled={generatingDoc}
+                disabled={generatingDoc || noCredits}
                 className="theme-gradient-bg text-white hover:opacity-95 gap-2 shrink-0"
+                title={noCredits ? (noCreditsMessage ?? undefined) : undefined}
               >
                 {generatingDoc ? (
                   <>
                     <Sparkles className="w-4 h-4 animate-pulse" />
                     Generating...
+                  </>
+                ) : noCredits ? (
+                  <>
+                    <Coins className="w-4 h-4" />
+                    {isAdmin ? "No credits — buy credits" : "No credits — contact admin"}
                   </>
                 ) : (
                   <>
@@ -189,25 +245,24 @@ export default function ProposalGenerate() {
         </div>
       )}
 
-      {/* Document reveal: content appears line-by-line as if being written */}
+      {/* Document content shown all at once (no line-by-line animation) */}
       {!generatingDoc && generatedContent && fullDocument && documentLines.length > 0 && (
         <Card className="border shadow-sm mb-4 sm:mb-6 overflow-hidden animate-fade-in">
-          <div className="bg-gradient-to-b from-emerald-50/80 to-background dark:from-emerald-950/20 dark:to-background border-b px-4 py-3 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <div className="bg-gradient-to-b from-emerald-50/80 to-background dark:from-emerald-950/20 dark:to-background border-b px-4 py-3 flex flex-wrap items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="font-medium text-emerald-800 dark:text-emerald-200">Your document is ready</span>
+            {lastCreditsUsed != null && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/12 dark:bg-primary/20 text-primary px-2.5 py-1 text-sm font-medium border border-primary/20 ml-auto">
+                <Coins className="w-3.5 h-3.5 shrink-0" />
+                {lastCreditsUsed} credit{lastCreditsUsed !== 1 ? "s" : ""} used
+              </span>
+            )}
           </div>
           <CardContent className="p-4 sm:p-6">
             <div className="prose prose-sm sm:prose-base max-w-none text-foreground dark:prose-invert">
               <div className="space-y-0.5 font-normal text-[15px] leading-relaxed">
                 {documentLines.map((line, i) => (
-                  <div
-                    key={i}
-                    className="animate-content-line-reveal opacity-0 whitespace-pre-wrap"
-                    style={{
-                      animationDelay: `${Math.min(i * 0.035, 2)}s`,
-                      animationFillMode: "forwards",
-                    }}
-                  >
+                  <div key={i} className="whitespace-pre-wrap">
                     {line || "\u00A0"}
                   </div>
                 ))}
@@ -220,9 +275,15 @@ export default function ProposalGenerate() {
       {/* Fallback when content is structured (no fullDocument) */}
       {!generatingDoc && generatedContent && !fullDocument && (
         <Card className="border shadow-sm mb-4 sm:mb-6 overflow-hidden animate-fade-in">
-          <div className="bg-gradient-to-b from-emerald-50/80 to-background dark:from-emerald-950/20 dark:to-background border-b px-4 py-3 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <div className="bg-gradient-to-b from-emerald-50/80 to-background dark:from-emerald-950/20 dark:to-background border-b px-4 py-3 flex flex-wrap items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="font-medium text-emerald-800 dark:text-emerald-200">Document generated</span>
+            {lastCreditsUsed != null && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/12 dark:bg-primary/20 text-primary px-2.5 py-1 text-sm font-medium border border-primary/20 ml-auto">
+                <Coins className="w-3.5 h-3.5 shrink-0" />
+                {lastCreditsUsed} credit{lastCreditsUsed !== 1 ? "s" : ""} used
+              </span>
+            )}
           </div>
           <CardContent className="p-4 sm:p-6">
             <p className="text-muted-foreground text-sm">View and edit your proposal in the Content tab.</p>

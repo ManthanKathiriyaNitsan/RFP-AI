@@ -1,14 +1,16 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { FolderOpen, BarChart3, Brain, ChevronRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useBranding } from "@/contexts/BrandingContext";
+import { useAuth } from "@/hooks/use-auth";
+import { fetchCollaboratorSidebar } from "@/api/collaborator-data";
 
 const WORK_ITEMS = [
   { href: "/collaborator", label: "Assigned RFPs", icon: FolderOpen },
   { href: "/collaborator/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/credits", label: "My Credits", icon: Sparkles },
 ] as const;
 
 interface CollaboratorSidebarProps {
@@ -20,7 +22,22 @@ export function CollaboratorSidebar({ open = false, onOpenChange }: Collaborator
   const [location] = useLocation();
   const isMobile = useIsMobile();
   const branding = useBranding();
+  const { user } = useAuth();
   const primaryLogoUrl = "primaryLogoUrl" in branding ? (branding as { primaryLogoUrl?: string | null }).primaryLogoUrl : null;
+
+  const { data: sidebarData } = useQuery({
+    queryKey: ["collaborator", "sidebar"],
+    queryFn: fetchCollaboratorSidebar,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
+  });
+  const widget = sidebarData?.sidebarWidget;
+  const credits = (widget as { credits?: number } | undefined)?.credits ?? user?.credits ?? 0;
+  const creditsLabel = (widget as { creditsLabel?: string } | undefined)?.creditsLabel ?? "available";
+  const creditsTitle = (widget as { title?: string } | undefined)?.title ?? "AI Credits";
+  const usedThisMonth = (widget as { usedThisMonth?: number } | undefined)?.usedThisMonth ?? 0;
+  const usageDetailHref = (widget as { usageDetailHref?: string } | undefined)?.usageDetailHref ?? "/collaborator/credits-usage";
 
   const isActive = (href: string) => {
     if (href === "/collaborator") return location === "/collaborator" || location.startsWith("/collaborator/rfp/");
@@ -79,6 +96,28 @@ export function CollaboratorSidebar({ open = false, onOpenChange }: Collaborator
               })}
             </nav>
           </div>
+        </div>
+      </div>
+
+      <div className="p-4 border-t border-border">
+        <div className="rounded-xl p-4 sidebar-widget-bg">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 rounded-lg sidebar-widget-icon-bg">
+              <Sparkles className="w-3.5 h-3.5 sidebar-widget-icon" />
+            </div>
+            <span className="text-sm font-semibold text-foreground">{creditsTitle}</span>
+          </div>
+          <div className="flex items-baseline gap-1.5 mb-2">
+            <span className="text-2xl font-bold text-foreground tabular-nums">{typeof credits === "number" ? credits.toLocaleString() : credits}</span>
+            <span className="text-xs text-muted-foreground">{creditsLabel}</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">Used this month: {(typeof usedThisMonth === "number" ? usedThisMonth : 0).toLocaleString()}</p>
+          {usageDetailHref && (
+            <Link href={usageDetailHref} onClick={handleLinkClick} className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
+              See where credits are used
+              <ChevronRight className="w-3 h-3" />
+            </Link>
+          )}
         </div>
       </div>
     </>

@@ -38,10 +38,10 @@ export interface CustomerSidebarData {
   navGroups: CustomerSidebarNavGroup[];
   sidebarWidget?: {
     title: string;
-    usedLabel: string;
-    usedValue: string;
-    percentage: number;
-    percentageLabel: string;
+    credits?: number;
+    creditsLabel?: string;
+    usedThisMonth?: number;
+    usageDetailHref?: string;
   };
   newProposalLabel?: string;
   portalSubtitle?: string;
@@ -52,6 +52,44 @@ export async function fetchCustomerSidebar(): Promise<CustomerSidebarData> {
   const res = await fetchWithAuth(url);
   if (!res.ok) throw new Error(`Customer sidebar: ${res.status}`);
   return res.json() as Promise<CustomerSidebarData>;
+}
+
+// --- Credit usage (GET /api/v1/customer/credits/usage) – where credits came from and where they were spent ---
+export type CreditReceivedItem = {
+  id: number;
+  date: string;
+  amount: number;
+  source: "purchase" | "allocation" | "refund";
+  sourceDetail: string | null;
+  description: string | null;
+};
+export type CreditUsedItem = {
+  id: number;
+  date: string;
+  amount: number;
+  description: string | null;
+  proposalId: number | null;
+  proposalTitle: string | null;
+};
+export type CreditReducedItem = {
+  id: number;
+  date: string;
+  amount: number;
+  takenBy: string | null;
+  roleLabel: string | null;
+  description: string | null;
+};
+export interface CustomerCreditUsageData {
+  creditsReceived: CreditReceivedItem[];
+  creditsUsed: CreditUsedItem[];
+  creditsReduced: CreditReducedItem[];
+}
+
+export async function fetchCustomerCreditUsage(): Promise<CustomerCreditUsageData> {
+  const url = getApiUrl("/api/v1/customer/credits/usage");
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Credit usage: ${res.status}`);
+  return res.json() as Promise<CustomerCreditUsageData>;
 }
 
 // --- Customer dashboard (GET /api/v1/customer/dashboard) ---
@@ -177,12 +215,12 @@ export async function validateCoupon(code: string): Promise<{ valid: boolean; di
   return res.json();
 }
 
-export async function purchaseCredits(plan: string, amount: number, couponCode?: string): Promise<{ credits: number }> {
+export async function purchaseCredits(planId: string, couponCode?: string): Promise<{ credits: number }> {
   const url = getApiUrl("/api/v1/customer/credits/purchase");
   const res = await fetchWithAuth(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ plan, amount, couponCode }),
+    body: JSON.stringify({ plan_id: planId, coupon_code: couponCode || null }),
   });
   if (!res.ok) throw new Error(`Purchase credits: ${res.status}`);
   return res.json();

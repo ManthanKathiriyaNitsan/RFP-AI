@@ -18,6 +18,8 @@ import {
   Search,
   ShoppingCart,
   UserPlus,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function AdminCredits() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [transactionPage, setTransactionPage] = useState(1);
+  const TRANSACTION_PAGE_SIZE = 15;
   const [allocateOpen, setAllocateOpen] = useState(false);
   const [allocateUserId, setAllocateUserId] = useState<string>("");
   const [allocateAmount, setAllocateAmount] = useState("");
@@ -56,12 +60,15 @@ export default function AdminCredits() {
     queryKey: ["admin", "credits", "activity"],
     queryFn: fetchAdminCreditsActivity,
     enabled: isSuperAdmin,
+    refetchInterval: 10_000,
   });
   const hasSessionIdInUrl = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("session_id") != null;
   const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "credits"],
     queryFn: fetchAdminCredits,
     enabled: !isSuperAdmin || hasSessionIdInUrl,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
   });
   const { data: usersList = [] } = useQuery({
     queryKey: ["/api/v1/users"],
@@ -74,6 +81,13 @@ export default function AdminCredits() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "credits", "activity"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["customer", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["collaborator", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["customer", "credits", "usage"] });
+      queryClient.invalidateQueries({ queryKey: ["collaborator", "credits", "usage"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/users"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
       setAllocateOpen(false);
       setAllocateUserId("");
       setAllocateAmount("");
@@ -88,6 +102,22 @@ export default function AdminCredits() {
   });
   const creditPackages = data?.creditPackages ?? [];
   const transactions = data?.transactions ?? [];
+  const searchLower = searchTerm.trim().toLowerCase();
+  const filteredTransactions = searchLower
+    ? transactions.filter(
+        (tx) =>
+          (tx.description ?? "").toLowerCase().includes(searchLower) ||
+          (tx.user ?? "").toLowerCase().includes(searchLower) ||
+          (tx.date ?? "").toLowerCase().includes(searchLower) ||
+          String(tx.amount ?? "").includes(searchTerm.trim())
+      )
+    : transactions;
+  const transactionTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / TRANSACTION_PAGE_SIZE));
+  const effectivePage = Math.min(transactionPage, transactionTotalPages);
+  const paginatedTransactions = filteredTransactions.slice(
+    (effectivePage - 1) * TRANSACTION_PAGE_SIZE,
+    effectivePage * TRANSACTION_PAGE_SIZE
+  );
   const userAllocations = data?.userAllocations ?? [];
   const totalCredits = data?.totalCredits ?? 25000;
   const usedCredits = data?.usedCredits ?? 18750;
@@ -114,6 +144,8 @@ export default function AdminCredits() {
         if (cancelled) return;
         queryClient.invalidateQueries({ queryKey: ["admin", "credits"] });
         queryClient.invalidateQueries({ queryKey: ["admin", "credits", "activity"] });
+        queryClient.invalidateQueries({ queryKey: ["admin", "sidebar"] });
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
         const url = new URL(window.location.href);
         url.searchParams.delete("session_id");
         window.history.replaceState({}, "", url.pathname + url.search);
@@ -202,38 +234,68 @@ export default function AdminCredits() {
     }
     const purchasesByAdmin = activityData?.purchasesByAdmin ?? [];
     const allocationsByAdmin = activityData?.allocationsByAdmin ?? [];
+    const formatPurchaseDesc = (d: string | null) => {
+      if (!d) return "Purchase";
+      const stripeMatch = d.match(/Stripe (cs_\w+)/);
+      if (stripeMatch) return `Stripe ${stripeMatch[1].slice(0, 20)}…`;
+      return d.length > 50 ? d.slice(0, 50) + "…" : d;
+    };
     return (
-      <div className="space-y-4 sm:space-y-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-credits-title">Credit activity</h1>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1">See which admins bought credits and how much they allocated to customers and collaborators.</p>
+      <div className="space-y-6 sm:space-y-8">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid="text-credits-title">Credit activity</h1>
+          <p className="text-muted-foreground text-sm sm:text-base max-w-2xl">See which admins bought credits and how much they allocated to customers and collaborators.</p>
         </div>
 
-        <Card className="border shadow-sm">
-          <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4" />
-              Credits purchased by admin
-            </CardTitle>
-            <CardDescription className="text-xs sm:text-sm">Total credits each admin has bought (payment flow).</CardDescription>
+        <Card className="border shadow-sm overflow-hidden rounded-2xl">
+          <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/60 bg-muted/20">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-primary/10 shrink-0">
+                <ShoppingCart className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base sm:text-lg font-semibold tracking-tight">Credits purchased by admin</CardTitle>
+                <CardDescription className="mt-1 text-sm">Total credits each admin has bought (payment flow).</CardDescription>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6 pt-0">
+          <CardContent className="p-5 sm:p-6">
             {purchasesByAdmin.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No purchase records yet.</p>
+              <div className="py-10 text-center rounded-xl border border-dashed border-border bg-muted/20">
+                <ShoppingCart className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-sm font-medium text-foreground">No purchase records yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Purchases made via Stripe will appear here.</p>
+              </div>
             ) : (
               <div className="space-y-4">
                 {purchasesByAdmin.map((row) => (
-                  <div key={row.adminId} className="rounded-lg border p-4 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium">{row.adminName}</p>
-                      <Badge variant="secondary">{row.totalCredits.toLocaleString()} credits total</Badge>
+                  <div key={row.adminId} className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4 hover:bg-muted/20 transition-colors">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 rounded-lg bg-primary/10 text-primary font-semibold">
+                          <AvatarFallback className="rounded-lg text-xs">{(row.adminName || "A").slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold text-foreground">{row.adminName}</p>
+                          <p className="text-xs text-muted-foreground">{row.count} purchase{row.count !== 1 ? "s" : ""}</p>
+                        </div>
+                      </div>
+                      <Badge className="rounded-lg px-3 py-1 font-semibold bg-primary/10 text-primary border-0">
+                        {row.totalCredits.toLocaleString()} credits
+                      </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">{row.count} purchase(s)</p>
-                    <ul className="text-sm space-y-1">
+                    <ul className="space-y-2">
                       {row.transactions.slice(0, 5).map((tx, i) => (
-                        <li key={i}>+{tx.amount.toLocaleString()} — {tx.description || "Purchase"} — {tx.date ? new Date(tx.date).toLocaleDateString() : ""}</li>
+                        <li key={i} className="flex flex-wrap items-center gap-2 text-sm py-2 px-3 rounded-lg bg-muted/50">
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">+{tx.amount.toLocaleString()}</span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground truncate">{formatPurchaseDesc(tx.description)}</span>
+                          <span className="text-muted-foreground text-xs shrink-0 ml-auto">{tx.date ? new Date(tx.date).toLocaleDateString() : ""}</span>
+                        </li>
                       ))}
-                      {row.transactions.length > 5 && <li className="text-muted-foreground">+{row.transactions.length - 5} more</li>}
+                      {row.transactions.length > 5 && (
+                        <li className="text-xs text-muted-foreground py-2 px-3">+{row.transactions.length - 5} more</li>
+                      )}
                     </ul>
                   </div>
                 ))}
@@ -242,29 +304,52 @@ export default function AdminCredits() {
           </CardContent>
         </Card>
 
-        <Card className="border shadow-sm">
-          <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-              <UserPlus className="w-4 h-4" />
-              Credits allocated by admin
-            </CardTitle>
-            <CardDescription className="text-xs sm:text-sm">How much each admin gave to customers and collaborators.</CardDescription>
+        <Card className="border shadow-sm overflow-hidden rounded-2xl">
+          <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/60 bg-muted/20">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-primary/10 shrink-0">
+                <UserPlus className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base sm:text-lg font-semibold tracking-tight">Credits allocated by admin</CardTitle>
+                <CardDescription className="mt-1 text-sm">How much each admin gave to customers and collaborators.</CardDescription>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6 pt-0">
+          <CardContent className="p-5 sm:p-6">
             {allocationsByAdmin.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No allocation records yet. Allocations made via this server will appear here.</p>
+              <div className="py-10 text-center rounded-xl border border-dashed border-border bg-muted/20">
+                <UserPlus className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-sm font-medium text-foreground">No allocation records yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Allocations made via this server will appear here.</p>
+              </div>
             ) : (
               <div className="space-y-4">
                 {allocationsByAdmin.map((row) => (
-                  <div key={row.adminId} className="rounded-lg border p-4 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium">{row.adminName}</p>
-                      <span className="text-xs text-muted-foreground">{row.allocations.length} allocation(s)</span>
+                  <div key={row.adminId} className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-4 hover:bg-muted/20 transition-colors">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 rounded-lg bg-primary/10 text-primary font-semibold">
+                          <AvatarFallback className="rounded-lg text-xs">{(row.adminName || "A").slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold text-foreground">{row.adminName}</p>
+                          <p className="text-xs text-muted-foreground">{row.allocations.length} allocation{row.allocations.length !== 1 ? "s" : ""}</p>
+                        </div>
+                      </div>
                     </div>
-                    <ul className="text-sm space-y-1">
+                    <ul className="space-y-2">
                       {row.allocations.map((a, i) => (
-                        <li key={i}>
-                          → <span className="font-medium">{a.targetUserName}</span>: {a.amount >= 0 ? "+" : ""}{a.amount.toLocaleString()} credits ({a.date ? new Date(a.date).toLocaleDateString() : ""})
+                        <li key={i} className="flex flex-wrap items-center gap-2 text-sm py-2.5 px-3 rounded-lg bg-muted/50 border border-transparent hover:border-border/50 transition-colors">
+                          <ArrowDownLeft className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium text-foreground">{a.targetUserName}</span>
+                          {a.targetUserRole && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium capitalize">
+                              {a.targetUserRole.replace(/_/g, " ")}
+                            </Badge>
+                          )}
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">{a.amount >= 0 ? "+" : ""}{a.amount.toLocaleString()}</span>
+                          <span className="text-muted-foreground text-xs shrink-0 ml-auto">{a.date ? new Date(a.date).toLocaleDateString() : ""}</span>
                         </li>
                       ))}
                     </ul>
@@ -303,11 +388,12 @@ export default function AdminCredits() {
                   <SelectValue placeholder="Select user" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(usersList as { id: number; email?: string; first_name?: string; last_name?: string; firstName?: string; lastName?: string }[]).map((u) => {
+                  {(usersList as { id: number; email?: string; first_name?: string; last_name?: string; firstName?: string; lastName?: string; credits?: number }[]).map((u) => {
                     const name = [u.first_name ?? u.firstName, u.last_name ?? u.lastName].filter(Boolean).join(" ") || u.email || `User ${u.id}`;
+                    const credits = Number(u.credits) || 0;
                     return (
                       <SelectItem key={u.id} value={String(u.id)}>
-                        {name}{u.email ? ` (${u.email})` : ""}
+                        {name}{u.email ? ` (${u.email})` : ""} — {credits.toLocaleString()} credits
                       </SelectItem>
                     );
                   })}
@@ -361,10 +447,6 @@ export default function AdminCredits() {
             </div>
             <p className="text-3xl sm:text-4xl font-bold mt-4 tracking-tight">{remainingCredits.toLocaleString()}</p>
             <p className="text-sm font-medium text-muted-foreground mt-1">Available Credits</p>
-            <div className="mt-4 space-y-1.5">
-              <Progress value={(usedCredits / totalCredits) * 100} className="h-2.5 rounded-full" />
-              <p className="text-xs text-muted-foreground">{usedCredits.toLocaleString()} of {totalCredits.toLocaleString()} used</p>
-            </div>
           </CardContent>
         </Card>
 
@@ -485,7 +567,23 @@ export default function AdminCredits() {
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <div className="space-y-3">
-                {userAllocations.map((user) => (
+                {(() => {
+                  const allocations = userAllocations.filter((u) => u.id !== 0);
+                  if (allocations.length === 0) {
+                    return (
+                      <div className="py-10 text-center rounded-xl border border-dashed border-border bg-muted/20">
+                        <Users className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+                        <p className="text-sm font-medium text-foreground">No user allocations yet</p>
+                        <p className="text-xs text-muted-foreground mt-1">Allocate credits to customers and collaborators above.</p>
+                      </div>
+                    );
+                  }
+                  return allocations.map((user) => {
+                  // Allocated = total they have; use remaining when backend sends 0 so display is always correct
+                  const allocated = Math.max(Number(user.allocated) || 0, Number(user.remaining) || 0);
+                  const used = Math.max(0, Number(user.used) || 0);
+                  const remaining = Number(user.remaining) ?? allocated - used;
+                  return (
                   <div
                     key={user.id}
                     className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40 hover:border-primary/20"
@@ -501,17 +599,18 @@ export default function AdminCredits() {
                         <p className="font-semibold text-sm truncate">{user.name}</p>
                         <div className="flex items-center gap-3">
                           <Progress
-                            value={user.allocated ? Math.min(100, (user.used / user.allocated) * 100) : 0}
+                            value={allocated ? Math.min(100, (used / allocated) * 100) : 0}
                             className="h-2 flex-1 max-w-[200px] rounded-full"
                           />
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">{user.remaining} remaining</span>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{remaining.toLocaleString()} remaining</span>
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 sm:gap-6">
                       <div className="text-right">
-                        <p className="text-sm font-semibold tabular-nums">{user.used.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">of {user.allocated.toLocaleString()}</p>
+                        <p className="text-sm font-semibold tabular-nums">{allocated.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">allocated</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{used.toLocaleString()} used</p>
                       </div>
                       <Button
                         variant="outline"
@@ -520,13 +619,13 @@ export default function AdminCredits() {
                         onClick={async () => {
                           const newAmountStr = await prompt({
                             title: "Update allocation",
-                            description: `Enter new credit allocation for ${user.name} (current: ${user.allocated})`,
+                            description: `Enter new credit allocation for ${user.name} (current: ${allocated})`,
                             placeholder: "e.g. 1500",
                             type: "number",
                           });
                           const newAmount = newAmountStr ? parseInt(newAmountStr, 10) : NaN;
                           if (!isNaN(newAmount) && newAmount >= 0) {
-                            const delta = newAmount - user.allocated;
+                            const delta = newAmount - allocated;
                             if (delta !== 0) {
                               allocateMutation.mutate({ userId: user.id, amount: delta });
                             }
@@ -537,7 +636,9 @@ export default function AdminCredits() {
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                  });
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -556,14 +657,22 @@ export default function AdminCredits() {
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <div className="search-box flex-1 sm:flex-initial w-full sm:w-48">
                     <Search className="search-box-icon" />
-                    <Input placeholder="Search…" data-testid="input-search-transactions" />
+                    <Input
+                      placeholder="Search…"
+                      data-testid="input-search-transactions"
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setTransactionPage(1);
+                      }}
+                    />
                   </div>
                   <Button
                     variant="outline"
                     size="icon"
                     className="shrink-0 rounded-lg"
                     onClick={() => {
-                      const dataStr = JSON.stringify(transactions, null, 2);
+                      const dataStr = JSON.stringify(filteredTransactions, null, 2);
                       const dataBlob = new Blob([dataStr], { type: "application/json" });
                       const url = URL.createObjectURL(dataBlob);
                       const link = document.createElement("a");
@@ -583,7 +692,7 @@ export default function AdminCredits() {
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <div className="space-y-2">
-                {transactions.map((tx) => (
+                {paginatedTransactions.map((tx) => (
                   <div
                     key={tx.id}
                     className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40"
@@ -604,6 +713,38 @@ export default function AdminCredits() {
                   </div>
                 ))}
               </div>
+              {filteredTransactions.length > TRANSACTION_PAGE_SIZE && (
+                <div className="mt-4 pt-4 border-t flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(effectivePage - 1) * TRANSACTION_PAGE_SIZE + 1}–{Math.min(effectivePage * TRANSACTION_PAGE_SIZE, filteredTransactions.length)} of {filteredTransactions.length} transactions
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-lg"
+                      disabled={effectivePage <= 1}
+                      onClick={() => setTransactionPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground px-2">
+                      Page {effectivePage} of {transactionTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-lg"
+                      disabled={effectivePage >= transactionTotalPages}
+                      onClick={() => setTransactionPage((p) => Math.min(transactionTotalPages, p + 1))}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

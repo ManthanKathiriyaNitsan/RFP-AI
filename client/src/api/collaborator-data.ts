@@ -34,6 +34,7 @@ const DEFAULT_SIDEBAR = {
   navItems: [{ href: "/collaborator", label: "Assigned RFPs", icon: "FolderOpen" }],
   sectionTitle: "Work",
   portalSubtitle: "Collaborator Portal",
+  sidebarWidget: { title: "AI Credits", credits: 0, creditsLabel: "available", usedThisMonth: 0, usageDetailHref: "/collaborator/credits-usage" },
 } as const;
 
 export type CollaboratorOptionsData = typeof DEFAULT_OPTIONS & Record<string, unknown>;
@@ -80,4 +81,42 @@ export async function fetchCollaboratorAnalytics(
   const res = await fetchWithAuth(url);
   if (!res.ok) throw new Error(`Collaborator analytics: ${res.status}`);
   return res.json();
+}
+
+// --- Credit usage (GET /api/v1/collaborator/credits/usage) – where credits came from and where they were spent ---
+export type CollaboratorCreditReceivedItem = {
+  id: number;
+  date: string;
+  amount: number;
+  source: "purchase" | "allocation" | "refund";
+  sourceDetail: string | null;
+  description: string | null;
+};
+export type CollaboratorCreditUsedItem = {
+  id: number;
+  date: string;
+  amount: number;
+  description: string | null;
+  proposalId: number | null;
+  proposalTitle: string | null;
+};
+export type CollaboratorCreditReducedItem = {
+  id: number;
+  date: string;
+  amount: number;
+  takenBy: string | null;
+  roleLabel: string | null;
+  description: string | null;
+};
+export interface CollaboratorCreditUsageData {
+  creditsReceived: CollaboratorCreditReceivedItem[];
+  creditsUsed: CollaboratorCreditUsedItem[];
+  creditsReduced: CollaboratorCreditReducedItem[];
+}
+
+export async function fetchCollaboratorCreditUsage(): Promise<CollaboratorCreditUsageData> {
+  const url = getApiUrl("/api/v1/collaborator/credits/usage");
+  const res = await fetchWithAuth(url);
+  if (!res.ok) throw new Error(`Credit usage: ${res.status}`);
+  return res.json() as Promise<CollaboratorCreditUsageData>;
 }

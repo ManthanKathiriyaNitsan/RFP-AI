@@ -8,6 +8,7 @@ import {
   updateAdminBillingPlan,
   deleteAdminBillingPlan,
   assignPlanToCustomer,
+  fetchAdminUsersList,
   fetchAdminInvoices,
   fetchAdminApiQuota,
   updateAdminApiQuota,
@@ -54,9 +55,16 @@ export default function AdminSubscriptionBilling() {
 
   const { data: plansData, isError, error, refetch } = useQuery({ queryKey: ["admin", "billing-plans"], queryFn: fetchAdminBillingPlans });
   const { data: invoicesData } = useQuery({ queryKey: ["admin", "billing-invoices"], queryFn: fetchAdminInvoices });
-  const { data: apiUsers = [] } = useQuery<{ id: number; email?: string; firstName?: string; lastName?: string }[]>({
-    queryKey: ["/api/v1/users"],
+  const { data: apiUsersRaw = [] } = useQuery({
+    queryKey: ["admin", "users-list"],
+    queryFn: fetchAdminUsersList,
   });
+  const apiUsers = apiUsersRaw.map((u) => ({
+    id: u.id,
+    email: u.email,
+    firstName: (u as { firstName?: string; first_name?: string }).firstName ?? (u as { first_name?: string }).first_name,
+    lastName: (u as { lastName?: string; last_name?: string }).lastName ?? (u as { last_name?: string }).last_name,
+  }));
   const { data: quotaData } = useQuery({ queryKey: ["admin", "api-quota"], queryFn: fetchAdminApiQuota });
 
   const plans = plansData?.plans ?? [];
@@ -164,14 +172,22 @@ export default function AdminSubscriptionBilling() {
       return;
     }
     setAssigning(true);
-    const success = await assignPlanToCustomer(userId, assignPlanId);
+    const result = await assignPlanToCustomer(userId, assignPlanId);
     setAssigning(false);
-    if (success) {
-      toast({ title: "Plan assigned", description: "Customer plan updated." });
+    if (result.success) {
+      toast({
+        title: "Plan assigned",
+        description: result.message ?? "Customer now has the plan's credits and API quota.",
+      });
       setAssignUserId("");
       setAssignPlanId("");
+      qc.invalidateQueries({ queryKey: ["admin", "billing-plans"] });
+      qc.invalidateQueries({ queryKey: ["admin", "credits"] });
+      qc.invalidateQueries({ queryKey: ["admin", "users-list"] });
+      qc.invalidateQueries({ queryKey: ["/api/v1/users"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     } else {
-      toast({ title: "Failed to assign plan", variant: "destructive" });
+      toast({ title: "Failed to assign plan", description: result.message, variant: "destructive" });
     }
   };
 

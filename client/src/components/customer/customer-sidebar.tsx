@@ -20,6 +20,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useBranding } from "@/contexts/BrandingContext";
 import { fetchCustomerSidebar } from "@/api/customer-data";
+import { useAuth } from "@/hooks/use-auth";
 
 const SIDEBAR_ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -54,12 +55,15 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
   const [location] = useLocation();
   const isMobile = useIsMobile();
   const { primaryLogoUrl } = useBranding();
+  const { user } = useAuth();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navItemRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
 
   const { data: sidebarData } = useQuery({
     queryKey: ["customer", "sidebar"],
     queryFn: fetchCustomerSidebar,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
   });
   const defaultNavGroups: NavGroup[] = useMemo(
     () => [
@@ -70,7 +74,6 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
           { href: "/rfp-projects", label: "RFP Projects", icon: FolderOpen },
           { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
           { href: "/collaborators", label: "Collaborators", icon: Users },
-          { href: "/credits", label: "Credits", icon: Sparkles },
         ],
       },
     ],
@@ -108,13 +111,12 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
       }),
     }));
   }, [sidebarData?.navGroups, defaultNavGroups]);
-  const sidebarWidget = sidebarData?.sidebarWidget ?? {
-    title: "AI Credits",
-    usedLabel: "Used this month",
-    usedValue: "45,789",
-    percentage: 75,
-    percentageLabel: "75% of monthly allocation",
-  };
+  const widget = sidebarData?.sidebarWidget;
+  const credits = (widget as { credits?: number } | undefined)?.credits ?? user?.credits ?? 0;
+  const creditsLabel = (widget as { creditsLabel?: string } | undefined)?.creditsLabel ?? "available";
+  const creditsTitle = (widget as { title?: string } | undefined)?.title ?? "AI Credits";
+  const usedThisMonth = (widget as { usedThisMonth?: number } | undefined)?.usedThisMonth ?? 0;
+  const usageDetailHref = (widget as { usageDetailHref?: string } | undefined)?.usageDetailHref ?? "/credits-usage";
   const newProposalLabel = sidebarData?.newProposalLabel ?? "New Proposal";
   const portalSubtitle = sidebarData?.portalSubtitle ?? "Customer Portal";
 
@@ -263,29 +265,25 @@ export function CustomerSidebar({ open = false, onOpenChange }: CustomerSidebarP
       </div>
 
       <div className="p-4 border-t border-border">
-        <Link href="/credits">
-          <div className="rounded-xl p-4 sidebar-widget-bg cursor-pointer hover:bg-muted/50 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 rounded-lg sidebar-widget-icon-bg">
-                <Sparkles className="w-3.5 h-3.5 sidebar-widget-icon" />
-              </div>
-              <span className="text-sm font-semibold text-foreground">{sidebarWidget.title}</span>
+        <div className="rounded-xl p-4 sidebar-widget-bg">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 rounded-lg sidebar-widget-icon-bg">
+              <Sparkles className="w-3.5 h-3.5 sidebar-widget-icon" />
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">{sidebarWidget.usedLabel}</span>
-                <span className="font-medium text-foreground">{sidebarWidget.usedValue}</span>
-              </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full theme-gradient-fill rounded-full transition-all"
-                  style={{ width: `${sidebarWidget.percentage ?? 75}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-muted-foreground">{sidebarWidget.percentageLabel}</p>
-            </div>
+            <span className="text-sm font-semibold text-foreground">{creditsTitle}</span>
           </div>
-        </Link>
+          <div className="flex items-baseline gap-1.5 mb-2">
+            <span className="text-2xl font-bold text-foreground tabular-nums">{typeof credits === "number" ? credits.toLocaleString() : credits}</span>
+            <span className="text-xs text-muted-foreground">{creditsLabel}</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">Used this month: {(typeof usedThisMonth === "number" ? usedThisMonth : 0).toLocaleString()}</p>
+          {usageDetailHref && (
+            <Link href={usageDetailHref} onClick={handleLinkClick} className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">
+              See where credits are used
+              <ChevronRight className="w-3 h-3" />
+            </Link>
+          )}
+        </div>
       </div>
     </>
   );

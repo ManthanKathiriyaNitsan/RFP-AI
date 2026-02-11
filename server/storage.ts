@@ -248,6 +248,7 @@ export class MemStorage implements IStorage {
       bio: insertUser.bio || null,
       credits: insertUser.credits || 0,
       avatar: insertUser.avatar || null,
+      createdByUserId: insertUser.createdByUserId ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

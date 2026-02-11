@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Upload, FileText, Tag, Trash2, MoreHorizontal, Search,
-  Filter, Download, File, X, Plus, Edit
+  Filter, Download, File, X, Plus, Edit, RefreshCw
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +65,7 @@ async function fetchKbVersions(): Promise<KbVersion[]> {
 
 export default function KnowledgeBase() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const { prompt, PromptDialog } = usePrompt();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -110,6 +112,25 @@ export default function KnowledgeBase() {
     },
     onError: () => {
       toast({ title: "Upload failed", variant: "destructive" });
+    },
+  });
+
+  const syncFromProposalsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/v1/customer/knowledge-base/sync-from-proposals", { userId: user?.id });
+      return res.json() as Promise<{ synced: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+      if (data.synced > 0) {
+        toast({ title: "Synced from proposals", description: `${data.synced} document(s) added from your proposals.` });
+      } else {
+        toast({ title: "No new documents", description: "All proposal documents are already in your Knowledge Base, or you have no proposal files." });
+      }
+    },
+    onError: () => {
+      toast({ title: "Sync failed", variant: "destructive" });
     },
   });
 
@@ -232,14 +253,26 @@ export default function KnowledgeBase() {
             Upload and manage documents for AI answer generation
           </p>
         </div>
-        <Button
-          size="sm"
-          className="w-full sm:w-auto text-xs sm:text-sm"
-          onClick={() => setIsUploadDialogOpen(true)}
-        >
-          <Upload className="w-4 h-4 mr-2" />
-          Upload Document
-        </Button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs sm:text-sm"
+            onClick={() => syncFromProposalsMutation.mutate()}
+            disabled={syncFromProposalsMutation.isPending}
+          >
+            <RefreshCw className={syncFromProposalsMutation.isPending ? "w-4 h-4 mr-2 animate-spin" : "w-4 h-4 mr-2"} />
+            {syncFromProposalsMutation.isPending ? "Syncing…" : "Sync from proposals"}
+          </Button>
+          <Button
+            size="sm"
+            className="text-xs sm:text-sm"
+            onClick={() => setIsUploadDialogOpen(true)}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Upload Document
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v ?? "documents")} className="w-full">
@@ -296,12 +329,22 @@ export default function KnowledgeBase() {
                 <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg sm:text-xl font-semibold mb-2">No documents found</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Upload your first document to build your knowledge base
+                  Upload a document here or sync documents you already added to a proposal.
                 </p>
-                <Button onClick={() => setIsUploadDialogOpen(true)}>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload Document
-                </Button>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => syncFromProposalsMutation.mutate()}
+                    disabled={syncFromProposalsMutation.isPending}
+                  >
+                    <RefreshCw className={syncFromProposalsMutation.isPending ? "w-4 h-4 mr-2 animate-spin" : "w-4 h-4 mr-2"} />
+                    {syncFromProposalsMutation.isPending ? "Syncing…" : "Sync from proposals"}
+                  </Button>
+                  <Button onClick={() => setIsUploadDialogOpen(true)}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload Document
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ) : (

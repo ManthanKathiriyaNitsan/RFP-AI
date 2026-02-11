@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   bio: text("bio"),
   credits: integer("credits").default(0),
   avatar: text("avatar"),
+  createdByUserId: integer("created_by_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

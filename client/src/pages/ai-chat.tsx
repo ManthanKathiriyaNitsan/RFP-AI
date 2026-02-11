@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { fetchChatMessages } from "@/api/proposals";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
@@ -69,9 +69,18 @@ function initialMessagesFromConfig(config: AiChatConfig): Array<{ id: number; is
 }
 
 export default function AIChat() {
-  const { currentRole, user } = useAuth();
+  const { currentRole, user, updateUser } = useAuth();
   const { toast } = useToast();
   const [proposalId] = useState<number | null>(null);
+  const credits = user?.credits ?? 0;
+  const noCredits = credits <= 0;
+  const isAdmin = (currentRole || "").toLowerCase() === "admin" || (currentRole || "").toLowerCase() === "super_admin";
+  const noCreditsMessage = noCredits
+    ? isAdmin
+      ? "Buy new credits to continue generating content."
+      : "Contact your admin for more credits."
+    : null;
+  const noCreditsActionHref = isAdmin ? "/admin/credits" : "/dashboard";
 
   const { data: configData } = useQuery({
     queryKey: ["ai-chat-config"],
@@ -126,7 +135,7 @@ export default function AIChat() {
       });
       return response.json();
     },
-    onSuccess: (data: { id?: number; message?: string; aiMessage?: { id: number; isAi: boolean; message: string; createdAt?: string } }) => {
+    onSuccess: (data: { id?: number; message?: string; aiMessage?: { id: number; isAi: boolean; message: string; createdAt?: string }; credits?: number }) => {
       const newMessage = {
         id: data.id ?? messages.length + 1,
         isAi: false,
@@ -136,6 +145,12 @@ export default function AIChat() {
       setMessages(prev => [...prev, newMessage]);
       setInputMessage("");
       setIsAiThinking(false);
+      if (typeof data.credits === "number") {
+        updateUser({ credits: data.credits });
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["customer", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["collaborator", "sidebar"] });
       const aiMessage = data.aiMessage;
       if (aiMessage) {
         setMessages(prev => [
@@ -165,13 +180,17 @@ export default function AIChat() {
       setIsAiThinking(false);
       const { message } = parseApiError(error);
       const is402 = error instanceof Error && /^402:/.test(error.message);
+      const creditMsg = isAdmin
+        ? "Buy new credits to continue."
+        : "Contact your admin for more credits.";
+      const creditHref = isAdmin ? "/admin/credits" : "/dashboard";
       toast({
         title: is402 ? "Insufficient credits" : "Error",
-        description: is402 ? `${message} Purchase more credits to continue.` : message || "Failed to send message. Please try again.",
+        description: is402 ? (message ? `${message} ${creditMsg}` : creditMsg) : message || "Failed to send message. Please try again.",
         variant: "destructive",
         action: is402 ? (
-          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/credits"}>
-            Buy Credits
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = creditHref}>
+            {isAdmin ? "Buy credits" : "Go to Dashboard"}
           </Button>
         ) : undefined,
       });
@@ -181,7 +200,23 @@ export default function AIChat() {
   const handleSendMessage = (message?: string) => {
     const messageText = message || inputMessage;
     if (!messageText.trim()) return;
-
+    if (noCredits) {
+      toast({
+        title: "No credits",
+        description: noCreditsMessage ?? "You need credits to generate content.",
+        variant: "destructive",
+        action: isAdmin ? (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/admin/credits"}>
+            Buy credits
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" className="bg-white text-destructive border-white/20 hover:bg-white/90" onClick={() => window.location.href = "/dashboard"}>
+            Dashboard
+          </Button>
+        ),
+      });
+      return;
+    }
     setIsAiThinking(true);
     if (proposalId && user) {
       sendMessageMutation.mutate(messageText);
@@ -290,15 +325,26 @@ export default function AIChat() {
             </div>
 
             <div className="p-3 sm:p-4 border-t">
+              {noCredits && (
+                <p className="text-xs text-amber-600 dark:text-amber-500 mb-2">
+                  {noCreditsMessage}
+                  {noCreditsActionHref && (
+                    <Button variant="link" className="h-auto p-0 ml-1 text-xs underline" onClick={() => window.location.href = noCreditsActionHref}>
+                      {isAdmin ? "Buy credits" : "Go to Dashboard"}
+                    </Button>
+                  )}
+                </p>
+              )}
               <div className="flex gap-2 sm:gap-3">
                 <Input
-                  placeholder={chat.inputPlaceholder}
+                  placeholder={noCredits ? (isAdmin ? "Buy credits to continue" : "Contact your admin for credits") : chat.inputPlaceholder}
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                  onKeyPress={(e) => e.key === "Enter" && !noCredits && handleSendMessage()}
                   className="flex-1 text-xs sm:text-sm"
+                  disabled={noCredits}
                 />
-                <Button onClick={() => handleSendMessage()} size="icon" className="shrink-0">
+                <Button onClick={() => handleSendMessage()} size="icon" className="shrink-0" disabled={noCredits}>
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
@@ -319,6 +365,7 @@ export default function AIChat() {
                   variant="outline"
                   className="w-full text-left p-3 sm:p-4 h-auto flex flex-col items-start space-y-1"
                   onClick={() => handleSendMessage(suggestion.prompt)}
+                  disabled={noCredits}
                 >
                   <div className="font-medium text-xs sm:text-sm">{suggestion.title}</div>
                   <div className="text-[10px] sm:text-xs text-muted-foreground">{suggestion.description}</div>

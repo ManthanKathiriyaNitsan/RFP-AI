@@ -64,7 +64,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -158,11 +157,15 @@ export default function AdminUsers() {
 
   const { data: apiUsers = [], isLoading: isLoadingUsers } = useQuery<any[]>({
     queryKey: ["/api/v1/users"],
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: subUsersList = [], isLoading: subUsersLoading } = useQuery<any[]>({
     queryKey: ["/api/v1/users", { created_by: subUsersAdmin?.id }],
     enabled: !!subUsersAdmin?.id,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: apiProposals = [] } = useQuery<any[]>({
@@ -231,6 +234,7 @@ export default function AdminUsers() {
       name: `${firstName} ${lastName}`.trim() || u.email,
       email: u.email,
       role: u.role,
+      createdByUserId: u.createdByUserId ?? u.created_by_user_id ?? null,
       isActive,
       status: !isActive ? "deactivated" : (u.status ?? "inactive"),
       avatar: u.avatar || initials.toUpperCase() || "U",
@@ -242,6 +246,27 @@ export default function AdminUsers() {
       joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—",
     };
   });
+
+  /** For an admin, sum credits of users they created (createdByUserId === admin.id), by role. */
+  const getCreditDistributionForAdmin = (adminId: number) => {
+    const subUsers = (apiUsers as any[]).filter(
+      (u: any) => (u.createdByUserId ?? u.created_by_user_id) === adminId
+    );
+    let adminCredits = 0;
+    let userCredits = 0;
+    let collabCredits = 0;
+    subUsers.forEach((u: any) => {
+      const c = Number(u.credits) || 0;
+      const r = (u.role || "").toLowerCase();
+      if (r === "admin" || r === "super_admin") adminCredits += c;
+      else if (r === "customer" || r === "user") userCredits += c;
+      else collabCredits += c;
+    });
+    const total = adminCredits + userCredits + collabCredits;
+    return { total, admin: adminCredits, user: userCredits, collaborator: collabCredits };
+  };
+
+  const isSuperAdmin = (currentRole || "").toLowerCase() === "super_admin";
 
   const filteredUsers = allUsers.filter((user: any) =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -525,7 +550,26 @@ export default function AdminUsers() {
             {subUsersLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : Array.isArray(subUsersList) && subUsersList.length > 0 ? (
-              <ul className="space-y-3">
+              <>
+                {(() => {
+                  const list = subUsersList as any[];
+                  let adminCredits = 0, userCredits = 0, collabCredits = 0;
+                  list.forEach((u: any) => {
+                    const c = Number(u.credits) || 0;
+                    const r = (u.role || "").toLowerCase();
+                    if (r === "admin" || r === "super_admin") adminCredits += c;
+                    else if (r === "customer" || r === "user") userCredits += c;
+                    else collabCredits += c;
+                  });
+                  const totalCredits = adminCredits + userCredits + collabCredits;
+                  return (
+                    <div className="mb-4 p-3 rounded-lg bg-muted/50 text-xs">
+                      <p className="font-semibold text-foreground mb-1">Credits in this group</p>
+                      <p className="text-muted-foreground">Total: {totalCredits.toLocaleString()} — Admin: {adminCredits.toLocaleString()}, User: {userCredits.toLocaleString()}, Collaborator: {collabCredits.toLocaleString()}</p>
+                    </div>
+                  );
+                })()}
+                <ul className="space-y-3">
                 {(subUsersList as any[]).map((u: any) => {
                   const fn = u.firstName ?? u.first_name ?? u.email?.split("@")[0] ?? "";
                   const ln = u.lastName ?? u.last_name ?? "";
@@ -533,12 +577,14 @@ export default function AdminUsers() {
                   const roleConfig = getRoleConfig(u.role);
                   const RoleIcon = roleConfig.icon;
                   const userForActions = subUserToUser(u);
+                  const credits = Number(u.credits) || 0;
                   return (
                     <li key={u.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate">{name}</p>
                         <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                       </div>
+                      <span className="text-xs font-medium tabular-nums shrink-0" title="Credits">{credits.toLocaleString()}</span>
                       <Badge variant="outline" className={`${roleConfig.className} text-[10px] font-medium shrink-0`}>
                         <RoleIcon className="w-3 h-3 mr-1" />
                         {roleConfig.label}
@@ -585,6 +631,7 @@ export default function AdminUsers() {
                   );
                 })}
               </ul>
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">No users or collaborators under this admin.</p>
             )}
@@ -766,12 +813,15 @@ export default function AdminUsers() {
                               </div>
                             </td>
                             <td className="py-3 px-4">
-                              <div className="w-24">
-                                <div className="flex items-center justify-between text-xs mb-1">
-                                  <span className="text-muted-foreground">{user.creditsUsed}</span>
-                                  <span className="font-medium">{user.credits}</span>
-                                </div>
-                                <Progress value={user.credits > 0 ? (user.creditsUsed / user.credits) * 100 : 0} className="h-1.5" />
+                              <div className="min-w-[140px] text-xs">
+                                {isSuperAdmin && (user.role || "").toLowerCase() === "admin" ? (
+                                  <div className="font-medium text-foreground">Pool: {user.credits.toLocaleString()}</div>
+                                ) : (
+                                  <div className="flex items-baseline gap-1.5">
+                                    <span className="text-muted-foreground">Used: {user.creditsUsed}</span>
+                                    <span className="font-medium">{user.credits.toLocaleString()} total</span>
+                                  </div>
+                                )}
                               </div>
                             </td>
                             <td className="py-3 px-4">
@@ -921,12 +971,13 @@ export default function AdminUsers() {
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Credits</span>
-                            <span className="font-medium">{user.creditsUsed} / {user.credits}</span>
-                          </div>
-                          <Progress value={user.credits > 0 ? (user.creditsUsed / user.credits) * 100 : 0} className="h-1.5" />
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Credits</p>
+                          {isSuperAdmin && (user.role || "").toLowerCase() === "admin" ? (
+                            <div className="text-xs font-medium">Pool: {user.credits.toLocaleString()}</div>
+                          ) : (
+                            <p className="text-sm font-medium">Used: {user.creditsUsed} / {user.credits.toLocaleString()} total</p>
+                          )}
                         </div>
                       </div>
                     );

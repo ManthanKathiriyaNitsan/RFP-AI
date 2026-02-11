@@ -97,6 +97,17 @@
     @apply w-full;
   }
 
+  /* Search box – icon inside input */
+  .search-box {
+    @apply relative;
+  }
+  .search-box .search-box-icon {
+    @apply absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none;
+  }
+  .search-box input {
+    @apply pl-9;
+  }
+
   /* Form inputs */
   .modern-input {
     @apply border-border transition-all duration-300;

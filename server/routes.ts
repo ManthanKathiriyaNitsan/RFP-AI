@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { ZodError } from "zod";
@@ -50,6 +50,17 @@ function withoutPassword<T extends { password?: string }>(user: T): Omit<T, "pas
   return rest;
 }
 
+function getAdminUserId(req: Request): number | undefined {
+  const fromUser = (req as any).user?.id;
+  if (fromUser != null && Number.isInteger(fromUser)) return Number(fromUser);
+  const header = req.headers["x-user-id"];
+  if (header != null) {
+    const n = parseInt(String(header), 10);
+    if (!Number.isNaN(n)) return n;
+  }
+  return undefined;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // User routes (RFPSuite storage) – also used when same-origin; client may call /api/users or /api/v1/users
   app.get("/api/users", async (req, res) => {
@@ -62,7 +73,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.get("/api/v1/users", async (req, res) => {
     try {
-      const users = await storage.getAllUsers();
+      let users = await storage.getAllUsers();
+      const createdBy = req.query.created_by;
+      if (createdBy != null) {
+        const createdById = parseInt(String(createdBy), 10);
+        if (Number.isFinite(createdById)) {
+          users = users.filter((u) => (u as { createdByUserId?: number | null }).createdByUserId === createdById);
+        }
+      }
       res.json(users.map((u) => withoutPassword(u)));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch users" });
@@ -132,10 +150,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
       const userRole = req.query.userRole as string | undefined;
+      const adminId = req.query.adminId != null ? parseInt(req.query.adminId as string) : undefined;
       
       let proposals;
-      if (userRole === "admin" || userRole === "super_admin") {
-        // Admin and super_admin see all proposals (same list)
+      if (userRole === "super_admin" && adminId != null && !Number.isNaN(adminId)) {
+        // Super admin viewing a specific admin's proposals (proposals owned by that admin)
+        proposals = await storage.getProposalsByUserId(adminId);
+      } else if (userRole === "admin" || userRole === "super_admin") {
+        // Admin sees all; super_admin with no adminId sees all (e.g. for sidebar count)
         proposals = await storage.getAllProposals();
       } else if (userId) {
         // Regular users see only their proposals
@@ -221,8 +243,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
       const userRole = req.query.userRole as string | undefined;
+      const adminId = req.query.adminId != null ? parseInt(req.query.adminId as string) : undefined;
       let proposals;
-      if (userRole === "admin" || userRole === "super_admin") {
+      if (userRole === "super_admin" && adminId != null && !Number.isNaN(adminId)) {
+        proposals = await storage.getProposalsByUserId(adminId);
+      } else if (userRole === "admin" || userRole === "super_admin") {
         proposals = await storage.getAllProposals();
       } else if (userId) {
         proposals = await storage.getProposalsByUserId(userId);
@@ -336,91 +361,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const CREDITS_PER_GENERATION = 1;
+
+  /** Resolve the user ID of the caller (for credit deduction and notifications). Uses req.user, x-user-id, body.userId, then proposal.ownerId so collaborator/customer are charged correctly. */
+  function getGenerateCallerUserId(
+    req: import("express").Request,
+    proposal: { ownerId?: number },
+    body: { userId?: number }
+  ): number | null {
+    const fromUser = (req as any).user?.id;
+    if (fromUser != null && Number.isInteger(fromUser)) return Number(fromUser);
+    const header = req.headers["x-user-id"];
+    if (header != null) {
+      const n = parseInt(String(header), 10);
+      if (!Number.isNaN(n)) return n;
+    }
+    if (body?.userId != null && Number.isInteger(Number(body.userId))) return Number(body.userId);
+    if (proposal.ownerId != null && Number.isInteger(proposal.ownerId)) return proposal.ownerId;
+    return null;
+  }
+
+  function buildGeneratedProposalContent(
+    proposal: { title: string; description?: string | null; industry?: string | null; timeline?: string | null; budgetRange?: string | null },
+    body: { requirements?: string[] | string; aiContext?: string; clientName?: string; clientContact?: string; clientEmail?: string }
+  ) {
+    const requirementsList = body.requirements
+      ? (typeof body.requirements === "string" ? body.requirements.split(",").map((r: string) => r.trim()).filter(Boolean) : body.requirements)
+      : [];
+    const { aiContext, clientName, clientContact, clientEmail } = body;
+    return {
+      executiveSummary: `This proposal outlines our comprehensive solution for ${proposal.title}. Based on the requirements and industry standards, we have developed a tailored approach that addresses all key aspects of your project.${aiContext ? `\n\nAdditional context: ${aiContext}` : ""}`,
+      introduction: `We are pleased to submit this proposal for ${proposal.title}. Our team has carefully reviewed your requirements and is excited to present a solution that aligns with your objectives and budget considerations.${clientName ? ` We look forward to partnering with ${clientName} on this initiative.` : ""}`,
+      projectOverview: {
+        title: proposal.title,
+        description: proposal.description || "A comprehensive solution tailored to your needs",
+        industry: proposal.industry || "General",
+        timeline: proposal.timeline || "To be determined",
+        budget: proposal.budgetRange || "To be discussed",
+        client: clientName || null,
+        contact: clientContact || null,
+        email: clientEmail || null,
+      },
+      requirements: requirementsList.length > 0 ? requirementsList : ["Comprehensive analysis and planning phase", "Agile development methodology", "Quality assurance and testing protocols"],
+      solutionApproach: `Our approach combines industry best practices with innovative solutions to deliver exceptional results. We will leverage our expertise in ${proposal.industry || "your industry"} to ensure successful project delivery.${aiContext ? `\n\nSpecial considerations: ${aiContext}` : ""}`,
+      technicalSpecifications: ["Comprehensive analysis and planning phase", "Agile development methodology", "Quality assurance and testing protocols", "Deployment and integration support", "Ongoing maintenance and support services"],
+      deliverables: ["Complete project documentation", "Source code and technical assets", "Training materials and sessions", "Post-deployment support plan", "Regular progress reports and updates"],
+      timeline: { phase1: "Planning and Analysis (Weeks 1-2)", phase2: "Design and Development (Weeks 3-8)", phase3: "Testing and Quality Assurance (Weeks 9-10)", phase4: "Deployment and Training (Weeks 11-12)" },
+      team: { projectManager: "Dedicated project manager for coordination", technicalLead: "Experienced technical lead for architecture", developers: "Skilled development team", qa: "Quality assurance specialists" },
+      pricing: { base: proposal.budgetRange || "Custom pricing available", paymentTerms: "Milestone-based payments", additionalServices: "Available upon request" },
+      nextSteps: ["Schedule a detailed discussion meeting", "Review and refine proposal details", "Finalize contract terms", "Begin project kickoff"],
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   app.post("/api/proposals/:id/generate", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const proposal = await storage.getProposal(id);
-      
-      if (!proposal) {
-        return res.status(404).json({ message: "Proposal not found" });
+      if (!proposal) return res.status(404).json({ message: "Proposal not found" });
+
+      const body = req.body || {};
+      const userId = getGenerateCallerUserId(req, proposal as { ownerId?: number }, body);
+      if (userId == null) {
+        return res.status(401).json({ message: "Authentication required to generate" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const currentCredits = user.credits ?? 0;
+      if (currentCredits < CREDITS_PER_GENERATION) {
+        return res.status(402).json({ message: "Insufficient credits to generate" });
       }
 
-      // Get additional context from request body (requirements, AI context, etc.)
-      const { requirements, aiContext, clientName, clientContact, clientEmail } = req.body;
-      
-      // Parse requirements if provided as string
-      const requirementsList = requirements 
-        ? (typeof requirements === 'string' ? requirements.split(',').map(r => r.trim()).filter(r => r) : requirements)
-        : [];
-
-      // Simulate AI generation (in a real app, you'd call an AI service)
-      // Generate comprehensive proposal content based on the proposal data
-      const generatedContent = {
-        executiveSummary: `This proposal outlines our comprehensive solution for ${proposal.title}. Based on the requirements and industry standards, we have developed a tailored approach that addresses all key aspects of your project.${aiContext ? `\n\nAdditional context: ${aiContext}` : ''}`,
-        introduction: `We are pleased to submit this proposal for ${proposal.title}. Our team has carefully reviewed your requirements and is excited to present a solution that aligns with your objectives and budget considerations.${clientName ? ` We look forward to partnering with ${clientName} on this initiative.` : ''}`,
-        projectOverview: {
-          title: proposal.title,
-          description: proposal.description || "A comprehensive solution tailored to your needs",
-          industry: proposal.industry || "General",
-          timeline: proposal.timeline || "To be determined",
-          budget: proposal.budgetRange || "To be discussed",
-          client: clientName || null,
-          contact: clientContact || null,
-          email: clientEmail || null,
-        },
-        requirements: requirementsList.length > 0 ? requirementsList : [
-          "Comprehensive analysis and planning phase",
-          "Agile development methodology",
-          "Quality assurance and testing protocols",
-        ],
-        solutionApproach: `Our approach combines industry best practices with innovative solutions to deliver exceptional results. We will leverage our expertise in ${proposal.industry || "your industry"} to ensure successful project delivery.${aiContext ? `\n\nSpecial considerations: ${aiContext}` : ''}`,
-        technicalSpecifications: [
-          "Comprehensive analysis and planning phase",
-          "Agile development methodology",
-          "Quality assurance and testing protocols",
-          "Deployment and integration support",
-          "Ongoing maintenance and support services",
-        ],
-        deliverables: [
-          "Complete project documentation",
-          "Source code and technical assets",
-          "Training materials and sessions",
-          "Post-deployment support plan",
-          "Regular progress reports and updates",
-        ],
-        timeline: {
-          phase1: "Planning and Analysis (Weeks 1-2)",
-          phase2: "Design and Development (Weeks 3-8)",
-          phase3: "Testing and Quality Assurance (Weeks 9-10)",
-          phase4: "Deployment and Training (Weeks 11-12)",
-        },
-        team: {
-          projectManager: "Dedicated project manager for coordination",
-          technicalLead: "Experienced technical lead for architecture",
-          developers: "Skilled development team",
-          qa: "Quality assurance specialists",
-        },
-        pricing: {
-          base: proposal.budgetRange || "Custom pricing available",
-          paymentTerms: "Milestone-based payments",
-          additionalServices: "Available upon request",
-        },
-        nextSteps: [
-          "Schedule a detailed discussion meeting",
-          "Review and refine proposal details",
-          "Finalize contract terms",
-          "Begin project kickoff",
-        ],
-        generatedAt: new Date().toISOString(),
-      };
-
-      // Update proposal with generated content and change status to in_progress
-      const updatedProposal = await storage.updateProposal(id, {
-        content: generatedContent,
-        status: "in_progress",
+      const generatedContent = buildGeneratedProposalContent(proposal, req.body || {});
+      const newBalance = currentCredits - CREDITS_PER_GENERATION;
+      await storage.updateUser(userId, { credits: newBalance });
+      await storage.createCreditTransaction({
+        userId,
+        amount: -CREDITS_PER_GENERATION,
+        type: "usage",
+        description: `AI generation: proposal ${id}`,
       });
 
-      res.json(updatedProposal);
+      await storage.updateProposal(id, { content: generatedContent, status: "in_progress" });
+
+      const userName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${userId}`;
+      await addLowCreditAlertAfterGeneration(userId, newBalance, userName);
+
+      const updatedProposal = await storage.getProposal(id);
+      res.json({ ...updatedProposal, creditsUsed: CREDITS_PER_GENERATION });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to generate proposal content" });
+    }
+  });
+
+  app.post("/api/v1/ai/proposals/:id/generate", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const proposal = await storage.getProposal(id);
+      if (!proposal) return res.status(404).json({ message: "Proposal not found" });
+
+      const body = req.body || {};
+      const userId = getGenerateCallerUserId(req, proposal as { ownerId?: number }, body);
+      if (userId == null) {
+        return res.status(401).json({ message: "Authentication required to generate" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const currentCredits = user.credits ?? 0;
+      if (currentCredits < CREDITS_PER_GENERATION) {
+        return res.status(402).json({ message: "Insufficient credits to generate" });
+      }
+
+      const generatedContent = buildGeneratedProposalContent(proposal, req.body || {});
+      const newBalance = currentCredits - CREDITS_PER_GENERATION;
+      await storage.updateUser(userId, { credits: newBalance });
+      await storage.createCreditTransaction({
+        userId,
+        amount: -CREDITS_PER_GENERATION,
+        type: "usage",
+        description: `AI generation: proposal ${id}`,
+      });
+
+      await storage.updateProposal(id, { content: generatedContent, status: "in_progress" });
+
+      const userName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${userId}`;
+      await addLowCreditAlertAfterGeneration(userId, newBalance, userName);
+
+      const fullDocument = [
+        generatedContent.executiveSummary,
+        generatedContent.introduction,
+        typeof generatedContent.solutionApproach === "string" ? generatedContent.solutionApproach : "",
+      ].filter(Boolean).join("\n\n");
+      res.json({ content: generatedContent, fullDocument, creditsUsed: CREDITS_PER_GENERATION });
     } catch (error) {
       res.status(500).json({ message: "Failed to generate proposal content" });
     }
@@ -629,6 +701,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }
 
+  /** Get all user IDs with role admin or super_admin (for credit alerts). */
+  async function getAdminUserIds(): Promise<number[]> {
+    const users = await storage.getAllUsers();
+    return users
+      .filter((u) => { const r = (u.role || "").toLowerCase(); return r === "admin" || r === "super_admin"; })
+      .map((u) => u.id);
+  }
+
+  const LOW_CREDIT_THRESHOLDS = [100, 50, 25, 20, 15, 10] as const;
+
+  /** When a user's credit balance is low (≤100, 50, 25, 20, 15, or 10), add alert notifications for them and for admins. */
+  async function addLowCreditNotificationsIfNeeded(
+    userId: number,
+    newBalance: number,
+    displayName?: string
+  ): Promise<void> {
+    if (newBalance < 0) return;
+    const name = displayName || `User ${userId}`;
+    const creditsLink = "/admin/credits";
+
+    for (const threshold of LOW_CREDIT_THRESHOLDS) {
+      if (newBalance <= threshold) {
+        const label = threshold === 10 ? "under 10" : threshold === 15 ? "very low (15 or fewer)" : threshold === 20 ? "low (20 or fewer)" : threshold === 25 ? "low (25 or fewer)" : threshold === 50 ? "low (50 or fewer)" : "low (100 or fewer)";
+        addNotification(
+          userId,
+          `Credits ${threshold === 10 ? "under 10" : "low"}`,
+          `You have ${newBalance} credit(s) left (${label}). Consider topping up or contacting your admin.`,
+          "credit_alert",
+          creditsLink
+        );
+        const adminIds = await getAdminUserIds();
+        adminIds.forEach((adminId) => {
+          if (adminId === userId) return;
+          addNotification(
+            adminId,
+            `User credits ${label}`,
+            `${name} has ${newBalance} credit(s) left. Consider assigning more credits.`,
+            "credit_alert",
+            creditsLink
+          );
+        });
+        break;
+      }
+    }
+  }
+
+  /** Call after every AI generation: when balance is at or below any threshold (100, 50, 25, 20, 15, 10), send one alert. For all roles (admin, customer, collaborator). */
+  async function addLowCreditAlertAfterGeneration(
+    userId: number,
+    newBalance: number,
+    displayName?: string
+  ): Promise<void> {
+    if (newBalance < 0) return;
+    const name = displayName || `User ${userId}`;
+    const u = await storage.getUser(userId);
+    const role = (u as { role?: string } | null)?.role?.toLowerCase() ?? "";
+    const creditsLink =
+      role === "admin" || role === "super_admin" ? "/admin/credits" : role === "collaborator" ? "/collaborator" : "/rfp-projects";
+
+    if (newBalance > 100) return;
+
+    const threshold = LOW_CREDIT_THRESHOLDS.find((t) => newBalance <= t);
+    if (!threshold) return;
+
+    const message =
+      threshold === 10
+        ? `You have ${newBalance} credit(s) left. This alert appears after every generation until you top up or contact your admin.`
+        : `You have ${newBalance} credit(s) left (${threshold} or fewer). Consider topping up soon.`;
+    addNotification(userId, `Credits low – ${newBalance} left`, message, "credit_alert", creditsLink);
+
+    const adminIds = await getAdminUserIds();
+    adminIds.forEach((adminId) => {
+      if (adminId === userId) return;
+      addNotification(
+        adminId,
+        "User credits low – generation alert",
+        `${name} has ${newBalance} credit(s) left. Alert sent after this generation.`,
+        "credit_alert",
+        "/admin/credits"
+      );
+    });
+  }
+
   /** Collect owner + collaborators + admins/super_admins for a proposal (for broadcasting notifications). */
   async function getProposalNotificationRecipientIds(proposalId: number, excludeUserId?: number): Promise<number[]> {
     const proposal = await storage.getProposal(proposalId);
@@ -685,6 +840,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   function formatContentDate(d: Date): string {
     return d.toISOString().slice(0, 10);
   }
+
+  // Customer knowledge base (in-memory; proposal uploads also add here so docs appear in KB)
+  type CustomerKbDoc = { id: number; name: string; type: string; size: number; uploadedAt: string; tags: string[]; version: number; description: string };
+  type CustomerKbVersion = { id: number; documentId: number; version: number; uploadedAt: string; uploadedBy: string; changes: string };
+  const customerKbDocuments: CustomerKbDoc[] = [];
+  const customerKbVersions: CustomerKbVersion[] = [];
+  let customerKbDocNextId = 1;
+  let customerKbVersionNextId = 1;
 
   // Proposal files (uploaded when creating/editing proposal; visible in all panels)
   type ProposalFileRecord = { id: number; proposalId: number; name: string; type: string; size: number; data: string; createdAt: string };
@@ -755,6 +918,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           attachments: [{ name: record.name, dataUrl: record.data, size: record.size }],
         };
         contentStore.push(contentItem);
+        // Also add to customer Knowledge Base so it appears in /knowledge-base
+        const nowKb = new Date().toISOString();
+        const kbDoc: CustomerKbDoc = {
+          id: customerKbDocNextId++,
+          name: record.name,
+          type: type,
+          size: record.size,
+          uploadedAt: nowKb,
+          tags: ["proposal", String(proposalId)],
+          version: 1,
+          description: "",
+        };
+        customerKbDocuments.push(kbDoc);
+        customerKbVersions.push({
+          id: customerKbVersionNextId++,
+          documentId: kbDoc.id,
+          version: 1,
+          uploadedAt: nowKb,
+          uploadedBy: "Proposal",
+          changes: "Uploaded from proposal",
+        });
       }
       res.status(201).json(created);
     } catch (error) {
@@ -818,6 +1002,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         contentStore.push(contentItem);
         synced++;
+        // Also add to customer Knowledge Base
+        const nowKb = new Date().toISOString();
+        const kbDoc: CustomerKbDoc = {
+          id: customerKbDocNextId++,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          uploadedAt: nowKb,
+          tags: ["proposal", String(proposalId)],
+          version: 1,
+          description: "",
+        };
+        customerKbDocuments.push(kbDoc);
+        customerKbVersions.push({
+          id: customerKbVersionNextId++,
+          documentId: kbDoc.id,
+          version: 1,
+          uploadedAt: nowKb,
+          uploadedBy: "Proposal",
+          changes: "Synced from proposal",
+        });
       }
       res.json({ success: true, synced, total: files.length });
     } catch (error) {
@@ -1269,9 +1474,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /** Resolve current user ID for notification endpoints (req.user set by auth middleware, or x-user-id when using proxy). */
+  function getNotificationUserId(req: import("express").Request): number | null {
+    const fromUser = (req as any).user?.id;
+    if (fromUser != null && Number.isInteger(fromUser)) return Number(fromUser);
+    const header = req.headers["x-user-id"];
+    if (header != null) {
+      const n = parseInt(String(header), 10);
+      if (!Number.isNaN(n)) return n;
+    }
+    return null;
+  }
+
   app.get("/api/v1/notifications", async (req, res) => {
     try {
-      const userId = (req as any).user?.id ?? null;
+      const userId = getNotificationUserId(req);
       if (userId == null) return res.json([]);
       const list = notificationStore.filter((n) => n.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       res.json(list.map((n) => ({ id: n.id, title: n.title, message: n.message, type: n.type, time: n.createdAt, read: n.read, link: n.link ?? null, createdAt: n.createdAt })));
@@ -1304,7 +1521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/v1/notifications/read-all", async (req, res) => {
     try {
-      const userId = (req as any).user?.id ?? null;
+      const userId = getNotificationUserId(req);
       if (userId != null) notificationStore.filter((n) => n.userId === userId).forEach((n) => { n.read = true; });
       res.json({ ok: true });
     } catch (error) {
@@ -1314,7 +1531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/v1/notifications", async (req, res) => {
     try {
-      const userId = (req as any).user?.id ?? null;
+      const userId = getNotificationUserId(req);
       if (userId != null) {
         for (let i = notificationStore.length - 1; i >= 0; i--) {
           if (notificationStore[i].userId === userId) notificationStore.splice(i, 1);
@@ -1419,6 +1636,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: "purchase",
         description: `Purchased ${plan} plan`,
       });
+
+      const purchaserName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${userId}`;
+      addNotification(
+        userId,
+        "Credits purchased",
+        `You purchased ${amount.toLocaleString()} credit(s) (${plan} plan). Your new balance: ${(updatedUser.credits ?? 0).toLocaleString()}.`,
+        "credit_purchase",
+        "/rfp-projects"
+      );
+      await addLowCreditNotificationsIfNeeded(userId, updatedUser.credits ?? 0, purchaserName);
       
       res.json({ success: true, credits: updatedUser.credits });
     } catch (error) {
@@ -1426,14 +1653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Customer: knowledge base documents (in-memory; replace with DB in production)
-  type CustomerKbDoc = { id: number; name: string; type: string; size: number; uploadedAt: string; tags: string[]; version: number; description: string };
-  type CustomerKbVersion = { id: number; documentId: number; version: number; uploadedAt: string; uploadedBy: string; changes: string };
-  const customerKbDocuments: CustomerKbDoc[] = [];
-  const customerKbVersions: CustomerKbVersion[] = [];
-  let customerKbDocNextId = 1;
-  let customerKbVersionNextId = 1;
-
+  // Customer: knowledge base documents (store declared earlier with Content Library)
   app.get("/api/v1/customer/knowledge-base/documents", async (_req, res) => {
     try {
       res.json(customerKbDocuments);
@@ -1533,6 +1753,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(list);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch version history" });
+    }
+  });
+
+  // Sync proposal documents into Knowledge Base (for docs added before auto-sync or after server restart)
+  app.post("/api/v1/customer/knowledge-base/sync-from-proposals", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const userId = (req as any).user?.id ?? (req.headers["x-user-id"] ? parseInt(String(req.headers["x-user-id"]), 10) : undefined) ?? (body.userId != null ? parseInt(String(body.userId), 10) : undefined);
+      if (userId == null || !Number.isFinite(userId)) {
+        return res.status(401).json({ message: "Sign in to sync from proposals" });
+      }
+      const proposals = await storage.getProposalsByUserId(userId);
+      let synced = 0;
+      for (const proposal of proposals) {
+        const files = proposalFilesStore.filter((f) => f.proposalId === proposal.id);
+        for (const file of files) {
+          const alreadyInKb = customerKbDocuments.some(
+            (d) => d.name === file.name && Array.isArray(d.tags) && d.tags.includes("proposal") && d.tags.includes(String(proposal.id))
+          );
+          if (alreadyInKb) continue;
+          const nowKb = new Date().toISOString();
+          const kbDoc: CustomerKbDoc = {
+            id: customerKbDocNextId++,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            uploadedAt: nowKb,
+            tags: ["proposal", String(proposal.id)],
+            version: 1,
+            description: "",
+          };
+          customerKbDocuments.push(kbDoc);
+          customerKbVersions.push({
+            id: customerKbVersionNextId++,
+            documentId: kbDoc.id,
+            version: 1,
+            uploadedAt: nowKb,
+            uploadedBy: "Proposal",
+            changes: "Synced from proposal",
+          });
+          synced++;
+        }
+      }
+      res.json({ synced });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to sync from proposals" });
     }
   });
 
@@ -1794,9 +2060,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin sidebar: full nav so all admin pages are reachable from the UI
-  app.get("/api/v1/admin/sidebar", async (_req, res) => {
+  // Admin sidebar: full nav so all admin pages are reachable from the UI (sidebar credits = admin's pool; usedThisMonth = real usage this month)
+  app.get("/api/v1/admin/sidebar", async (req, res) => {
     try {
+      const adminId = getAdminUserId(req);
+      let sidebarCredits = 0;
+      let usedThisMonth = 0;
+      let creditsDistributed: number | undefined;
+      if (adminId != null) {
+        const adminUser = await storage.getUser(adminId);
+        const role = (adminUser as { role?: string } | undefined)?.role?.toLowerCase();
+        if (role === "super_admin") {
+          const allUsers = await storage.getAllUsers();
+          let total = 0;
+          let distributed = 0;
+          for (const u of allUsers) {
+            const cred = (u as { credits?: number }).credits ?? 0;
+            total += cred;
+            if ((u as { role?: string }).role?.toLowerCase() !== "super_admin") distributed += cred;
+          }
+          sidebarCredits = total;
+          creditsDistributed = distributed;
+        } else {
+          if (adminUser?.credits != null) sidebarCredits = adminUser.credits;
+        }
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const txList = await storage.getCreditTransactionsByUserId(adminId);
+        let refundedThisMonth = 0;
+        for (const t of txList) {
+          if (!t.createdAt || t.createdAt < startOfMonth) continue;
+          if (t.amount < 0) usedThisMonth += Math.abs(t.amount);
+          else if (t.type === "allocation_refund" || t.type === "refund") refundedThisMonth += t.amount;
+        }
+        usedThisMonth = Math.max(0, usedThisMonth - refundedThisMonth);
+      }
       res.json({
         navGroups: [
           {
@@ -1839,10 +2137,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ],
         sidebarWidget: {
           title: "AI Credits",
-          usedLabel: "Used this month",
-          usedValue: "45,789",
-          percentage: 75,
-          percentageLabel: "75% of monthly allocation",
+          credits: sidebarCredits,
+          creditsLabel: "available",
+          usedThisMonth,
+          usageDetailHref: "/admin/usage",
+          ...(creditsDistributed !== undefined && { creditsDistributed }),
         },
       });
     } catch (error) {
@@ -2293,13 +2592,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/v1/admin/billing/assign", async (req, res) => {
     try {
       const { userId, planId } = req.body || {};
-      if (userId == null || !planId) return res.status(400).json({ message: "userId and planId required" });
+      const uid = userId != null ? Number(userId) : NaN;
+      if (!Number.isInteger(uid) || uid < 1 || !planId || typeof planId !== "string") {
+        return res.status(400).json({ message: "Valid userId and planId are required" });
+      }
       const plan = billingPlansStore.find((p) => p.id === planId);
       if (!plan) return res.status(404).json({ message: "Plan not found" });
-      userPlanAssignments[Number(userId)] = planId;
-      res.json({ success: true, userId: Number(userId), planId });
+      const user = await storage.getUser(uid);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      userPlanAssignments[uid] = planId;
+      const creditsToSet = plan.creditsIncluded ?? 0;
+      await storage.updateUser(uid, { credits: creditsToSet });
+      const assignedUserName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${uid}`;
+      addNotification(
+        uid,
+        "Plan assigned",
+        `Subscription plan "${plan.name}" was assigned to you. You now have ${creditsToSet.toLocaleString()} credit(s).`,
+        "credit_plan_assigned",
+        "/rfp-projects"
+      );
+      await addLowCreditNotificationsIfNeeded(uid, creditsToSet, assignedUserName);
+      res.json({
+        success: true,
+        userId: uid,
+        planId,
+        message: `Plan "${plan.name}" assigned. User now has ${creditsToSet.toLocaleString()} credits.`,
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to assign plan" });
+      const message = error instanceof Error ? error.message : "Failed to assign plan";
+      res.status(500).json({ message });
     }
   });
 
@@ -2435,6 +2756,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: "purchase",
         description: `Credits purchase: ${packageId} (Stripe ${sessionId})`,
       });
+      const buyerName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${userId}`;
+      addNotification(
+        userId,
+        "Credits purchased",
+        `You bought ${credits.toLocaleString()} credit(s). Your new balance: ${(updatedUser.credits ?? 0).toLocaleString()}.`,
+        "credit_purchase",
+        "/admin/credits"
+      );
+      await addLowCreditNotificationsIfNeeded(userId, updatedUser.credits ?? 0, buyerName);
       res.json({ success: true, credits: updatedUser.credits });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to confirm payment";
@@ -2443,48 +2773,285 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // In-memory log of who allocated credits to whom (for super-admin activity view)
-  type AllocationLogEntry = { allocatedByUserId: number; allocatedByName: string; targetUserId: number; targetUserName: string; amount: number; date: string };
+  type AllocationLogEntry = { allocatedByUserId: number; allocatedByName: string; targetUserId: number; targetUserName: string; targetUserRole?: string; amount: number; date: string };
   const allocationLog: AllocationLogEntry[] = [];
 
-  // Admin: credits – allocate credits to a user (and record who allocated, for super-admin view)
+  // Admin: credits – get credit pool (admin's available credits) and user allocations (for Credit Management page)
+  app.get("/api/v1/admin/credits", async (req, res) => {
+    try {
+      const adminId = getAdminUserId(req);
+      if (adminId == null) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const adminUser = await storage.getUser(adminId);
+      if (!adminUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const poolCredits = adminUser.credits ?? 0;
+      const users = await storage.getAllUsers();
+      const userById = new Map(users.map((u) => [u.id, u]));
+      const userName = (u: { firstName?: string | null; lastName?: string | null; email?: string | null; id: number }) =>
+        [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || `User ${u.id}`;
+      const initials = (u: { firstName?: string | null; lastName?: string | null; email?: string | null }) => {
+        const first = (u.firstName ?? "").trim().slice(0, 1).toUpperCase();
+        const last = (u.lastName ?? "").trim().slice(0, 1).toUpperCase();
+        if (first || last) return (first + last).slice(0, 2);
+        return (u.email ?? "?").slice(0, 2).toUpperCase();
+      };
+      const userAllocations = users.map((u) => ({
+        id: u.id,
+        name: userName(u),
+        avatar: initials(u),
+        allocated: u.credits ?? 0,
+        used: 0,
+        remaining: u.credits ?? 0,
+      }));
+      const allTx = await storage.getAllCreditTransactions();
+      const transactions = allTx.map((t) => {
+        const u = t.userId != null ? userById.get(t.userId) : null;
+        return {
+          id: t.id,
+          type: t.type,
+          description: t.description ?? "",
+          amount: t.amount,
+          date: t.createdAt ? new Date(t.createdAt).toISOString().slice(0, 10) : "",
+          user: u ? userName(u) : `User ${t.userId}`,
+          status: "completed",
+        };
+      });
+      const creditPackages = [
+        { id: "plan-1", name: "Starter", credits: 1000, price: 29, popular: false, perCredit: 0.029 },
+        { id: "plan-2", name: "Growth", credits: 5000, price: 99, popular: true, perCredit: 0.0198 },
+        { id: "plan-3", name: "Scale", credits: 15000, price: 249, popular: false, perCredit: 0.0166 },
+      ];
+      res.json({
+        totalCredits: poolCredits,
+        usedCredits: 0,
+        remainingCredits: poolCredits,
+        creditPackages,
+        transactions,
+        userAllocations,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch credits";
+      res.status(500).json({ message });
+    }
+  });
+
+  // Admin: credits – allocate credits to a user. Credits move to/from the allocator's pool.
   app.post("/api/v1/admin/credits/allocate", async (req, res) => {
     try {
       const body = req.body || {};
       const targetUserId = body.userId != null ? Number(body.userId) : NaN;
       const amount = typeof body.amount === "number" ? body.amount : Number(body.amount);
-      const allocatedByUserId = body.allocatedBy != null ? Number(body.allocatedBy) : null;
+      const allocatedByUserId = body.allocatedBy != null ? Number(body.allocatedBy) : getAdminUserId(req) ?? null;
       if (!Number.isInteger(targetUserId) || targetUserId <= 0 || !Number.isFinite(amount)) {
         return res.status(400).json({ message: "userId and amount required" });
       }
       const user = await storage.getUser(targetUserId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      const newCredits = (user.credits || 0) + amount;
-      await storage.updateUser(targetUserId, { credits: newCredits });
+      const currentTarget = user.credits ?? 0;
+      const newTargetCredits = currentTarget + amount;
+
+      if (newTargetCredits < 0) {
+        return res.status(400).json({ message: "Insufficient credits: user would go below zero" });
+      }
+
+      let allocatorName: string | null = null;
+      const allocator = allocatedByUserId != null && Number.isInteger(allocatedByUserId) ? await storage.getUser(allocatedByUserId) : null;
+      if (allocator) {
+        allocatorName = [allocator.firstName, allocator.lastName].filter(Boolean).join(" ").trim() || allocator.email || `User ${allocatedByUserId}`;
+      }
+
+      if (amount > 0) {
+        if (!allocator) {
+          return res.status(400).json({ message: "Allocator (admin) required when giving credits" });
+        }
+        const allocatorPool = allocator.credits ?? 0;
+        if (allocatorPool < amount) {
+          return res.status(400).json({ message: "Insufficient credits in your pool to allocate" });
+        }
+        await storage.updateUser(allocatedByUserId!, { credits: allocatorPool - amount });
+      } else if (amount < 0) {
+        if (allocator) {
+          await storage.updateUser(allocatedByUserId!, { credits: (allocator.credits ?? 0) + Math.abs(amount) });
+        }
+      }
+
+      await storage.updateUser(targetUserId, { credits: newTargetCredits });
+
+      const allocationDescription =
+        body.description ||
+        (allocatorName
+          ? (amount >= 0 ? `Allocated by ${allocatorName}: +${amount}` : `Deducted by ${allocatorName}: ${amount}`)
+          : amount >= 0
+            ? `Allocated +${amount}`
+            : `Deducted ${amount}`);
       await storage.createCreditTransaction({
         userId: targetUserId,
         amount,
         type: "allocation",
-        description: body.description || (amount >= 0 ? `Allocated +${amount}` : `Deducted ${amount}`),
+        description: allocationDescription,
       });
       const targetName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${targetUserId}`;
-      if (allocatedByUserId != null && Number.isInteger(allocatedByUserId)) {
-        const allocator = await storage.getUser(allocatedByUserId);
-        const allocatorName = allocator ? ([allocator.firstName, allocator.lastName].filter(Boolean).join(" ").trim() || allocator.email || `User ${allocatedByUserId}`) : `User ${allocatedByUserId}`;
+      if (allocatedByUserId != null && Number.isInteger(allocatedByUserId) && allocatorName && amount > 0) {
+        const targetRole = (user as { role?: string }).role ?? undefined;
         allocationLog.push({
           allocatedByUserId,
           allocatedByName: allocatorName,
           targetUserId,
           targetUserName: targetName,
+          targetUserRole: targetRole,
           amount,
           date: new Date().toISOString(),
         });
       }
-      res.json({ userId: targetUserId, previousCredits: user.credits || 0, newCredits, amount });
+
+      // Notifications: tell target user and allocator (admin)
+      if (amount > 0) {
+        addNotification(
+          targetUserId,
+          "Credits assigned to you",
+          `${allocatorName || "Admin"} assigned ${amount.toLocaleString()} credit(s) to you. Your new balance: ${newTargetCredits.toLocaleString()}.`,
+          "credit_assigned",
+          "/rfp-projects"
+        );
+        if (allocatedByUserId && allocatedByUserId !== targetUserId) {
+          addNotification(
+            allocatedByUserId,
+            "Credits allocated",
+            `You assigned ${amount.toLocaleString()} credit(s) to ${targetName}. Their new balance: ${newTargetCredits.toLocaleString()}.`,
+            "credit_allocated",
+            "/admin/credits"
+          );
+        }
+      } else {
+        const deducted = Math.abs(amount);
+        addNotification(
+          targetUserId,
+          "Credits removed by admin",
+          `${allocatorName || "Admin"} removed ${deducted.toLocaleString()} credit(s) from your account. Your new balance: ${newTargetCredits.toLocaleString()}.`,
+          "credit_removed",
+          "/rfp-projects"
+        );
+        if (allocatedByUserId && allocatedByUserId !== targetUserId) {
+          addNotification(
+            allocatedByUserId,
+            "Credits removed from user",
+            `You removed ${deducted.toLocaleString()} credit(s) from ${targetName}. Their new balance: ${newTargetCredits.toLocaleString()}.`,
+            "credit_deducted",
+            "/admin/credits"
+          );
+        }
+      }
+
+      await addLowCreditNotificationsIfNeeded(targetUserId, newTargetCredits, targetName);
+      if (allocatedByUserId && allocator) {
+        const allocatorNewBalance = amount > 0
+          ? (allocator.credits ?? 0) - amount
+          : (allocator.credits ?? 0) + Math.abs(amount);
+        await addLowCreditNotificationsIfNeeded(allocatedByUserId, allocatorNewBalance, allocatorName || undefined);
+      }
+
+      res.json({ userId: targetUserId, previousCredits: currentTarget, newCredits: newTargetCredits, amount });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to allocate";
       res.status(500).json({ message });
     }
   });
+
+  // Customer & collaborator: credit usage – where they received credits and where they spent (read-only, scoped to current user)
+  function getCreditUsageUserId(req: import("express").Request): number | undefined {
+    const fromUser = (req as any).user?.id;
+    if (fromUser != null && Number.isInteger(fromUser)) return Number(fromUser);
+    const header = req.headers["x-user-id"];
+    if (header != null) {
+      const n = parseInt(String(header), 10);
+      if (!Number.isNaN(n)) return n;
+    }
+    return undefined;
+  }
+  type CreditReceivedItem = { id: number; date: string; amount: number; source: "purchase" | "allocation"; sourceDetail: string | null; description: string | null };
+  type CreditUsedItem = { id: number; date: string; amount: number; description: string | null; proposalId: number | null; proposalTitle: string | null };
+  type CreditReducedItem = { id: number; date: string; amount: number; takenBy: string | null; roleLabel: string | null; description: string | null };
+  async function handleCreditUsage(req: import("express").Request, res: import("express").Response): Promise<void> {
+    try {
+      const userId = getCreditUsageUserId(req);
+      if (userId == null) {
+        res.status(401).json({ message: "Authentication required" });
+        return;
+      }
+      const transactions = await storage.getCreditTransactionsByUserId(userId);
+      const creditsReceived: CreditReceivedItem[] = [];
+      const creditsUsed: CreditUsedItem[] = [];
+      const creditsReduced: CreditReducedItem[] = [];
+      const proposalsCache = new Map<number, { title: string }>();
+      for (const t of transactions) {
+        const date = t.createdAt ? new Date(t.createdAt).toISOString() : "";
+        if (t.type === "allocation" && t.amount < 0) {
+          creditsReduced.push({
+            id: t.id,
+            date,
+            amount: Math.abs(t.amount),
+            takenBy: "Admin",
+            roleLabel: "Admin",
+            description: t.description,
+          });
+        } else if (t.type === "purchase" || (t.type === "allocation" && t.amount > 0)) {
+          const source = t.type === "purchase" ? "purchase" : "allocation";
+          let sourceDetail: string | null = null;
+          if (t.type === "allocation" && t.description) {
+            const byMatch = /(?:Allocated|Deducted) by ([^:]+)/i.exec(t.description);
+            if (byMatch) sourceDetail = byMatch[1].trim();
+            else sourceDetail = t.description;
+          } else if (t.type === "purchase" && t.description) sourceDetail = t.description;
+          creditsReceived.push({
+            id: t.id,
+            date,
+            amount: t.amount,
+            source,
+            sourceDetail,
+            description: t.description,
+          });
+        } else if (t.type === "usage") {
+          let proposalId: number | null = null;
+          let proposalTitle: string | null = null;
+          if (t.description) {
+            const proposalMatch = /proposal\s*#?(\d+)/i.exec(t.description);
+            if (proposalMatch) {
+              proposalId = parseInt(proposalMatch[1], 10);
+              if (!proposalsCache.has(proposalId)) {
+                try {
+                  const p = await storage.getProposal(proposalId);
+                  proposalsCache.set(proposalId, { title: p?.title ?? `Proposal #${proposalId}` });
+                } catch {
+                  proposalsCache.set(proposalId, { title: `Proposal #${proposalId}` });
+                }
+              }
+              proposalTitle = proposalsCache.get(proposalId)?.title ?? null;
+            }
+          }
+          creditsUsed.push({
+            id: t.id,
+            date,
+            amount: Math.abs(t.amount),
+            description: t.description,
+            proposalId,
+            proposalTitle,
+          });
+        }
+      }
+      creditsReceived.sort((a, b) => (b.date > a.date ? 1 : -1));
+      creditsUsed.sort((a, b) => (b.date > a.date ? 1 : -1));
+      creditsReduced.sort((a, b) => (b.date > a.date ? 1 : -1));
+      res.json({ creditsReceived, creditsUsed, creditsReduced });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch credit usage";
+      res.status(500).json({ message });
+    }
+  }
+  app.get("/api/v1/customer/credits/usage", (req, res) => handleCreditUsage(req, res));
+  app.get("/api/v1/collaborator/credits/usage", (req, res) => handleCreditUsage(req, res));
 
   // Super-admin: credit activity – who bought credits and who allocated how much to whom
   app.get("/api/v1/admin/credits/activity", async (_req, res) => {
@@ -2510,12 +3077,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const purchasesByAdmin = Array.from(byAdmin.values()).sort((a, b) => b.totalCredits - a.totalCredits);
 
-      const byAllocator = new Map<number, { adminId: number; adminName: string; allocations: { targetUserId: number; targetUserName: string; amount: number; date: string }[] }>();
+      const byAllocator = new Map<number, { adminId: number; adminName: string; allocations: { targetUserId: number; targetUserName: string; targetUserRole?: string; amount: number; date: string }[] }>();
       for (const e of allocationLog) {
         if (!byAllocator.has(e.allocatedByUserId)) byAllocator.set(e.allocatedByUserId, { adminId: e.allocatedByUserId, adminName: e.allocatedByName, allocations: [] });
+        const targetUserRole = e.targetUserRole ?? userById.get(e.targetUserId)?.role;
         byAllocator.get(e.allocatedByUserId)!.allocations.push({
           targetUserId: e.targetUserId,
           targetUserName: e.targetUserName,
+          ...(targetUserRole != null && { targetUserRole: String(targetUserRole) }),
           amount: e.amount,
           date: e.date,
         });
@@ -2665,10 +3234,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: audit logs (stub – returns sample data; filter by type/date in real backend)
+  // Admin: audit logs (stub – returns sample data; supports pagination via limit/offset)
   app.get("/api/v1/admin/audit-logs", async (req, res) => {
     try {
       const type = (req.query.type as string) || "login";
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || 50), 10) || 50));
+      const offset = Math.max(0, parseInt(String(req.query.offset || 0), 10) || 0);
       const now = new Date();
       const ts = (d: Date) => d.toISOString();
       const sample: { id: string; type: string; action: string; user: string; ip?: string; location?: string; resource?: string; details?: string; timestamp: string; status: string }[] = [];
@@ -2676,30 +3247,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { user: "admin@example.com", ip: "192.168.1.1", location: "San Francisco, US" },
         { user: "jane@example.com", ip: "10.0.0.5", location: "New York, US" },
         { user: "john@example.com", ip: "172.16.0.2", location: "London, UK" },
+        { user: "Nitsan Admin", ip: "10.0.0.1", location: "Tel Aviv, IL" },
+        { user: "Admin DEMO", ip: "10.0.0.2", location: "London, UK" },
+        { user: "manthan kathiriya", ip: "192.168.0.1", location: "Mumbai, IN" },
       ];
       if (type === "login") {
-        sample.push(
-          { id: "1", type: "login", action: "Login successful", ...base[0], timestamp: ts(now), status: "success" },
-          { id: "2", type: "login", action: "Login successful", ...base[1], timestamp: ts(new Date(now.getTime() - 3600000)), status: "success" },
-          { id: "3", type: "login", action: "Failed login attempt", ...base[2], timestamp: ts(new Date(now.getTime() - 7200000)), status: "failure" }
-        );
+        for (let i = 0; i < 25; i++) {
+          const b = base[i % base.length];
+          sample.push({
+            id: String(i + 1),
+            type: "login",
+            action: i % 10 === 2 ? "Failed login attempt" : "User logged in",
+            user: b.user,
+            ip: b.ip,
+            location: b.location,
+            timestamp: ts(new Date(now.getTime() - i * 3600000)),
+            status: i % 10 === 2 ? "failure" : "success",
+          });
+        }
       } else if (type === "data_access") {
-        sample.push(
-          { id: "4", type: "data_access", action: "Viewed proposal", ...base[0], resource: "Proposal #101", timestamp: ts(now), status: "success" },
-          { id: "5", type: "data_access", action: "Exported proposal PDF", ...base[1], resource: "Proposal #102", timestamp: ts(new Date(now.getTime() - 1800000)), status: "success" }
-        );
+        for (let i = 0; i < 20; i++) {
+          const b = base[i % base.length];
+          sample.push({
+            id: String(100 + i),
+            type: "data_access",
+            action: i % 2 === 0 ? "Viewed proposal" : "Exported proposal PDF",
+            user: b.user,
+            resource: `Proposal #${101 + i}`,
+            timestamp: ts(new Date(now.getTime() - i * 1800000)),
+            status: "success",
+          });
+        }
       } else if (type === "file") {
-        sample.push(
-          { id: "6", type: "file", action: "Uploaded document", ...base[0], resource: "RFP-spec.pdf", details: "Content Library", timestamp: ts(now), status: "success" },
-          { id: "7", type: "file", action: "Downloaded proposal", ...base[1], resource: "Proposal #101", timestamp: ts(new Date(now.getTime() - 3600000)), status: "success" }
-        );
+        for (let i = 0; i < 15; i++) {
+          const b = base[i % base.length];
+          sample.push({
+            id: String(200 + i),
+            type: "file",
+            action: i % 2 === 0 ? "Uploaded document" : "Downloaded proposal",
+            user: b.user,
+            resource: i % 2 === 0 ? "RFP-spec.pdf" : "Proposal #101",
+            details: i % 2 === 0 ? "Content Library" : undefined,
+            timestamp: ts(new Date(now.getTime() - i * 3600000)),
+            status: "success",
+          });
+        }
       } else if (type === "ai_usage") {
-        sample.push(
-          { id: "8", type: "ai_usage", action: "AI generation", ...base[0], resource: "Proposal #101", details: "GPT-4, ~1.2k tokens", timestamp: ts(now), status: "success" },
-          { id: "9", type: "ai_usage", action: "AI generation", ...base[2], resource: "Proposal #103", details: "GPT-4, ~800 tokens", timestamp: ts(new Date(now.getTime() - 5400000)), status: "success" }
-        );
+        for (let i = 0; i < 15; i++) {
+          const b = base[i % base.length];
+          sample.push({
+            id: String(300 + i),
+            type: "ai_usage",
+            action: "AI generation",
+            user: b.user,
+            resource: `Proposal #${101 + i}`,
+            details: "GPT-4, ~1.2k tokens",
+            timestamp: ts(new Date(now.getTime() - i * 5400000)),
+            status: "success",
+          });
+        }
       }
-      res.json({ entries: sample, total: sample.length });
+      const total = sample.length;
+      const entries = sample.slice(offset, offset + limit);
+      res.json({ entries, total });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch audit logs" });
     }

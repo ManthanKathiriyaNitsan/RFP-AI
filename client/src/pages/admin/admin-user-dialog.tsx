@@ -95,15 +95,27 @@ export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
         const bootstrapRes = await fetch(getApiUrl("/api/v1/users/bootstrap-allowed"), {
           credentials: "include",
         });
-        const { bootstrapAllowed } = (await bootstrapRes.json()) as { bootstrapAllowed: boolean };
+        let bootstrapAllowed = false;
+        try {
+          const json = (await bootstrapRes.json()) as { bootstrapAllowed?: boolean };
+          bootstrapAllowed = json.bootstrapAllowed === true;
+        } catch {
+          // If bootstrap check fails, assume authenticated flow
+          bootstrapAllowed = false;
+        }
+        const password = (data.password || "").trim();
+        if (password.length < 6) {
+          throw new Error("Password must be at least 6 characters");
+        }
         const payload = {
-          email: data.email,
-          password: data.password,
-          confirmPassword: data.password,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          companyName: data.company || undefined,
-          jobTitle: data.jobTitle || undefined,
+          email: (data.email || "").trim().toLowerCase(),
+          password,
+          confirmPassword: password,
+          firstName: (data.firstName || "").trim() || "First",
+          lastName: (data.lastName || "").trim() || "Last",
+          companyName: (data.company || "").trim() || undefined,
+          jobTitle: (data.jobTitle || "").trim() || undefined,
+          role: data.role || "customer",
         };
         const response = bootstrapAllowed
           ? await apiRequest("POST", "/api/v1/users/register-by-admin", payload, { skipAuth: true })

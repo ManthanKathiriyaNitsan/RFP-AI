@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Coins, Loader2, Check, ExternalLink } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 export default function MyCredits() {
   const { user, updateUser } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [plans, setPlans] = useState<CreditPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -70,11 +72,15 @@ export default function MyCredits() {
   const handlePurchase = async (plan: CreditPlan) => {
     setPurchasingPlanId(plan.id);
     try {
-      // In a real app, this would redirect to Stripe/payment provider.
-      // Here we simulate a successful purchase via the API.
-      const res = await purchaseCredits(plan.name, plan.credits, couponDiscount ? couponCode : undefined);
+      const res = await purchaseCredits(plan.id, couponDiscount ? couponCode : undefined);
 
       updateUser({ credits: res.credits });
+      queryClient.invalidateQueries({ queryKey: ["customer", "dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["customer", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["customer", "credits", "usage"] });
+      queryClient.invalidateQueries({ queryKey: ["collaborator", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "sidebar"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
 
       toast({
         title: "Purchase successful!",

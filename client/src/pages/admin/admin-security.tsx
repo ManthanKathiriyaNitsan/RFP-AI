@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -18,7 +19,9 @@ import {
   X,
   Save,
   Timer,
-  Network
+  Network,
+  ScrollText,
+  LogIn
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -561,66 +564,116 @@ export default function AdminSecurity() {
         </TabsContent>
 
         <TabsContent value="activity" className="mt-4 sm:mt-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
+          <Card className="border border-border/80 shadow-sm overflow-hidden bg-card">
+            <CardHeader className="p-4 sm:p-6 border-b border-border/60 bg-muted/30">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="text-sm sm:text-base">Recent Activity</CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">Monitor user actions and access logs</CardDescription>
+                  <CardTitle className="text-base sm:text-lg font-semibold text-foreground">Recent Activity</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                    Monitor user actions and access logs across your organization.
+                  </CardDescription>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  onClick={() => {
-                    const dataStr = JSON.stringify(recentActivity, null, 2);
-                    const dataBlob = new Blob([dataStr], { type: "application/json" });
-                    const url = URL.createObjectURL(dataBlob);
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.download = `security_logs_${new Date().toISOString().split('T')[0]}.json`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                    toast({
-                      title: "Exported",
-                      description: "Security logs have been exported.",
-                    });
-                  }}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Export Logs
-                </Button>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Link href="/admin/audit-logs">
+                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-1.5 w-full sm:w-auto">
+                      <ScrollText className="w-4 h-4 shrink-0" />
+                      Full Audit Logs
+                    </Button>
+                  </Link>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="border-border/80 hover:bg-muted/50 gap-2 w-full sm:w-auto"
+                    onClick={() => {
+                      const dataStr = JSON.stringify(recentActivity, null, 2);
+                      const dataBlob = new Blob([dataStr], { type: "application/json" });
+                      const url = URL.createObjectURL(dataBlob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = `security_logs_${new Date().toISOString().split("T")[0]}.json`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                      toast({
+                        title: "Exported",
+                        description: "Security logs have been exported.",
+                      });
+                    }}
+                  >
+                    <Download className="w-4 h-4 shrink-0" />
+                    Export Logs
+                  </Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="space-y-2 sm:space-y-3">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-3 sm:gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors`} data-testid={`row-activity-${activity.id}`}>
-                    <div className={`flex items-center gap-3 sm:gap-4 flex-1 min-w-0`}>
-                      <div className={`w-2 h-2 rounded-full ${activity.status === 'success' ? 'bg-emerald-500' : 'bg-red-500'} shrink-0`} />
-                      <div className="flex-1 min-w-0">
-                        <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-2`}>
-                          <span className="font-medium text-xs sm:text-sm">{activity.action}</span>
-                          <Badge variant="outline" className="text-[10px] shrink-0">{activity.user}</Badge>
-                        </div>
-                        <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-2 sm:gap-3 mt-1 text-[10px] sm:text-xs text-muted-foreground`}>
-                          <span className="flex items-center gap-1">
-                            <Globe className="w-3 h-3 shrink-0" /> {activity.location}
-                          </span>
-                          {!isMobile && <span>•</span>}
-                          <span>IP: {activity.ip}</span>
+            <CardContent className="p-0">
+              {recentActivity.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 text-center" data-testid="activity-empty">
+                  <div className="w-12 h-12 rounded-full bg-muted/80 flex items-center justify-center mb-3">
+                    <LogIn className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">No recent activity</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    Login and access events will appear here. Check Audit Logs for full history.
+                  </p>
+                  <Link href="/admin/audit-logs">
+                    <Button variant="outline" size="sm" className="mt-4 gap-2">
+                      <ScrollText className="w-4 h-4" />
+                      View Audit Logs
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {recentActivity.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className={`flex ${isMobile ? "flex-col" : "items-center"} gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 hover:bg-muted/30 transition-colors`}
+                      data-testid={`row-activity-${activity.id}`}
+                    >
+                      <div className={`flex items-start sm:items-center gap-3 sm:gap-4 flex-1 min-w-0 w-full`}>
+                        <div
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 sm:mt-0 ${
+                            activity.status === "success" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+                          }`}
+                          aria-hidden
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className={`flex ${isMobile ? "flex-col" : "items-center"} gap-2 flex-wrap`}>
+                            <span className="font-medium text-sm text-foreground capitalize">{activity.action}</span>
+                            <Badge variant="secondary" className="text-[11px] font-normal px-2 py-0 border border-border/60 bg-muted/50 text-foreground/90 shrink-0">
+                              {activity.user}
+                            </Badge>
+                          </div>
+                          <div className={`flex ${isMobile ? "flex-col" : "items-center"} gap-1.5 sm:gap-3 mt-1.5 text-xs text-muted-foreground`}>
+                            <span className="flex items-center gap-1.5">
+                              <Globe className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                              {activity.location || "—"}
+                            </span>
+                            {!isMobile && <span className="text-border">·</span>}
+                            <span>IP: {activity.ip && String(activity.ip).trim() ? activity.ip : "—"}</span>
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 pl-5 sm:pl-0">
+                        <Clock className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                        {activity.time}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground shrink-0">
-                      <Clock className="w-3 h-3 shrink-0" />
-                      {activity.time}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
+              {recentActivity.length > 0 && (
+                <div className="px-4 sm:px-6 py-3 border-t border-border/60 bg-muted/20">
+                  <Link href="/admin/audit-logs">
+                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-2 -ml-2">
+                      <ScrollText className="w-4 h-4" />
+                      View full Audit Logs for more history
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
