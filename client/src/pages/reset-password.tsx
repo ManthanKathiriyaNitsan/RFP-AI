@@ -7,58 +7,61 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useBranding } from "@/contexts/BrandingContext";
-import { getApiUrl } from "@/lib/api";
-import { API_PATHS } from "@/lib/api-paths";
+import { resetPassword, isValidNewPassword, PASSWORD_MIN_LENGTH } from "@/api/auth";
+import { parseApiError } from "@/lib/utils";
+
+/** Read reset token from URL; backend may send ?token=... or ?reset_token=... or ?key=... */
+function getResetTokenFromUrl(): string {
+  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  return (params.get("token") ?? params.get("reset_token") ?? params.get("key") ?? "").trim();
+}
 
 export default function ResetPassword() {
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmError, setConfirmError] = useState("");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { primaryLogoUrl } = useBranding();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get("token") ?? "";
-    setToken(t);
+    setToken(getResetTokenFromUrl());
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token.trim()) {
+    setPasswordError("");
+    setConfirmError("");
+    if (!token) {
       toast({ title: "Missing reset link", description: "Use the link from your password reset email.", variant: "destructive" });
       return;
     }
-    if (password.length < 6) {
-      toast({ title: "Password too short", description: "Use at least 6 characters.", variant: "destructive" });
+    if (!isValidNewPassword(password)) {
+      setPasswordError(`Use at least ${PASSWORD_MIN_LENGTH} characters.`);
       return;
     }
     if (password !== confirmPassword) {
-      toast({ title: "Passwords don't match", description: "Please re-enter your new password.", variant: "destructive" });
+      setConfirmError("Passwords don't match.");
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch(getApiUrl(API_PATHS.auth.resetPassword), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: token.trim(), newPassword: password }),
-        credentials: "include",
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = (data.detail ?? res.statusText) || "Request failed";
-        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
-      }
+      await resetPassword({ token, newPassword: password });
       setSuccess(true);
       toast({ title: "Password reset", description: "You can now sign in with your new password." });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      const { message, isNetworkError } = parseApiError(err);
+      toast({
+        title: isNetworkError ? "Cannot reach server" : "Error",
+        description: message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -140,12 +143,18 @@ export default function ResetPassword() {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="At least 6 characters"
+                    placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (passwordError) setPasswordError("");
+                    }}
                     required
-                    minLength={6}
-                    className="pr-10"
+                    minLength={PASSWORD_MIN_LENGTH}
+                    autoComplete="new-password"
+                    className={`pr-10 ${passwordError ? "border-destructive" : ""}`}
+                    aria-invalid={!!passwordError}
+                    aria-describedby={passwordError ? "password-error" : undefined}
                   />
                   <Button
                     type="button"
@@ -157,18 +166,46 @@ export default function ResetPassword() {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </Button>
                 </div>
+                {passwordError && (
+                  <p id="password-error" className="text-sm text-destructive" role="alert">
+                    {passwordError}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm">Confirm new password</Label>
-                <Input
-                  id="confirm"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Confirm new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  minLength={6}
-                />
+                <div className="relative">
+                  <Input
+                    id="confirm"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (confirmError) setConfirmError("");
+                    }}
+                    required
+                    minLength={PASSWORD_MIN_LENGTH}
+                    autoComplete="new-password"
+                    className={`pr-10 ${confirmError ? "border-destructive" : ""}`}
+                    aria-invalid={!!confirmError}
+                    aria-describedby={confirmError ? "confirm-error" : undefined}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowConfirmPassword((p) => !p)}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
+                </div>
+                {confirmError && (
+                  <p id="confirm-error" className="text-sm text-destructive" role="alert">
+                    {confirmError}
+                  </p>
+                )}
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Resetting…" : "Reset password"}

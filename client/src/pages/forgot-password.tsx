@@ -7,42 +7,43 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useBranding } from "@/contexts/BrandingContext";
-import { getApiUrl } from "@/lib/api";
-import { API_PATHS } from "@/lib/api-paths";
+import { forgotPassword, isValidEmail } from "@/api/auth";
+import { parseApiError } from "@/lib/utils";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { primaryLogoUrl } = useBranding();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    const trimmed = email.trim();
+    setEmailError("");
+    if (!trimmed) {
+      setEmailError("Email is required.");
+      return;
+    }
+    if (!isValidEmail(trimmed)) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(getApiUrl(API_PATHS.auth.forgotPassword), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`${res.status}: ${text || res.statusText}`);
-      }
+      await forgotPassword({ email: trimmed });
       setSubmitted(true);
       toast({
         title: "Check your email",
         description: "If an account exists for this email, you will receive a password reset link.",
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Request failed";
+      const { message, isNetworkError } = parseApiError(err);
       toast({
-        title: "Error",
-        description: msg.startsWith("4") || msg.startsWith("5") ? "Something went wrong. Please try again later." : msg,
+        title: isNetworkError ? "Cannot reach server" : "Error",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -99,9 +100,21 @@ export default function ForgotPassword() {
                     type="email"
                     placeholder="Enter your email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (emailError) setEmailError("");
+                    }}
                     required
+                    autoComplete="email"
+                    className={emailError ? "border-destructive" : ""}
+                    aria-invalid={!!emailError}
+                    aria-describedby={emailError ? "email-error" : undefined}
                   />
+                  {emailError && (
+                    <p id="email-error" className="text-sm text-destructive" role="alert">
+                      {emailError}
+                    </p>
+                  )}
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Sending…" : "Send reset link"}

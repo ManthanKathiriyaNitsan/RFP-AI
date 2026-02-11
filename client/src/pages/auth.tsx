@@ -93,27 +93,21 @@ export default function Auth() {
   return (
     <div className="flex h-dvh items-center justify-center hero-gradient px-4 py-8 sm:py-12">
       <div className="w-full max-w-md">
-        {/* Logo and Branding */}
-        <div className="text-center mb-8">
-          {primaryLogoUrl ? (
-            <img src={primaryLogoUrl} alt="Logo" className="w-16 h-16 mx-auto rounded-xl object-contain bg-muted mb-4" />
-          ) : (
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-xl mb-4">
-              <Brain className="w-8 h-8 text-primary-foreground" />
-            </div>
-          )}
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2">RFP AI</h1>
-          <p className="text-muted-foreground">Intelligent Proposal Management</p>
-        </div>
-
         <Card className="glass-card shadow-2xl">
-          <CardHeader className="text-center">
-            <CardTitle className="text-xl sm:text-2xl theme-gradient-text">
-              Welcome back
-            </CardTitle>
-            <CardDescription>
-              Sign in to your account to continue
-            </CardDescription>
+          <CardHeader className="text-center space-y-4">
+            {/* Logo and Branding inside form */}
+            <div className="flex flex-col items-center gap-2">
+              {primaryLogoUrl ? (
+                <img src={primaryLogoUrl} alt="Logo" className="w-16 h-16 rounded-xl object-contain bg-muted" />
+              ) : (
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-xl">
+                  <Brain className="w-8 h-8 text-primary-foreground" />
+                </div>
+              )}
+              <h1 className="text-2xl sm:text-3xl font-bold">RFP AI</h1>
+              <p className="text-muted-foreground text-sm">Intelligent Proposal Management</p>
+            </div>
+           
           </CardHeader>
           
           <CardContent>

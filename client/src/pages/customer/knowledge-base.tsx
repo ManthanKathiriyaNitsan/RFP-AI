@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -79,6 +79,8 @@ export default function KnowledgeBase() {
   const { data: documentsFromApi = [], isLoading: documentsLoading, isError: documentsError, error: documentsErrorObj, refetch: refetchDocuments } = useQuery({
     queryKey: ["customer", "knowledge-base", "documents"],
     queryFn: fetchKbDocuments,
+    staleTime: 0, // always refetch after mutations so list stays in sync
+    refetchOnMount: "always", // refetch when opening Knowledge Base so proposal docs show up
   });
   const { data: versionHistoryFromApi = [] } = useQuery({
     queryKey: ["customer", "knowledge-base", "versions"],
@@ -102,11 +104,18 @@ export default function KnowledgeBase() {
         tags: [],
         description: "",
       });
-      return res.json();
+      return res.json() as Promise<KbDocument>;
     },
-    onSuccess: (_, file) => {
+    onSuccess: (newDoc, file) => {
+      // Optimistic update: show new document in the list immediately
+      queryClient.setQueryData<KbDocument[]>(
+        ["customer", "knowledge-base", "documents"],
+        (old = []) => [...old, { ...newDoc, uploadedAt: newDoc.uploadedAt || new Date().toISOString() }]
+      );
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+      queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+      queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
       toast({ title: "Document uploaded", description: `${file.name} has been uploaded successfully.` });
       setIsUploadDialogOpen(false);
     },
@@ -120,9 +129,11 @@ export default function KnowledgeBase() {
       const res = await apiRequest("POST", "/api/v1/customer/knowledge-base/sync-from-proposals", { userId: user?.id });
       return res.json() as Promise<{ synced: number }>;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+      await queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+      await queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
       if (data.synced > 0) {
         toast({ title: "Synced from proposals", description: `${data.synced} document(s) added from your proposals.` });
       } else {
@@ -139,8 +150,15 @@ export default function KnowledgeBase() {
       await apiRequest("DELETE", `/api/v1/customer/knowledge-base/documents/${id}`);
     },
     onSuccess: (_, id) => {
+      // Optimistic update: remove document from list immediately
+      queryClient.setQueryData<KbDocument[]>(
+        ["customer", "knowledge-base", "documents"],
+        (old = []) => old.filter((d) => d.id !== id)
+      );
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+      queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+      queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
       const doc = documents.find((d) => d.id === id);
       toast({ title: "Document deleted", description: doc ? `${doc.name} has been deleted.` : "Deleted.", variant: "destructive" });
       setIsDeleteDialogOpen(false);
@@ -156,14 +174,40 @@ export default function KnowledgeBase() {
       const res = await apiRequest("PATCH", `/api/v1/customer/knowledge-base/documents/${documentId}`, { tags });
       return res.json() as Promise<KbDocument>;
     },
-    onSuccess: () => {
+    onSuccess: (updatedDoc) => {
+      // Optimistic update: merge updated doc into list
+      if (updatedDoc) {
+        queryClient.setQueryData<KbDocument[]>(
+          ["customer", "knowledge-base", "documents"],
+          (old = []) => old.map((d) => (d.id === updatedDoc.id ? { ...updatedDoc, uploadedAt: updatedDoc.uploadedAt || d.uploadedAt } : d))
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+      queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+      queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
     },
     onError: () => {
       toast({ title: "Failed to update document", variant: "destructive" });
     },
   });
+
+  // On load: sync proposal documents into Knowledge Base so docs added during proposal creation show up
+  useEffect(() => {
+    if (!user?.id) return;
+    apiRequest("POST", "/api/v1/customer/knowledge-base/sync-from-proposals", { userId: user.id })
+      .then((res) => res.json() as Promise<{ synced: number }>)
+      .then((data) => {
+        if (data.synced > 0) {
+          queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+          queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+          queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+          queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+          toast({ title: "Synced from proposals", description: `${data.synced} document(s) added from your proposals.` });
+        }
+      })
+      .catch(() => { /* ignore: user can use Sync from proposals button */ });
+  }, [user?.id, queryClient, toast]);
 
   const allTags = useMemo(() => Array.from(new Set(documents.flatMap((doc) => doc.tags))), [documents]);
 

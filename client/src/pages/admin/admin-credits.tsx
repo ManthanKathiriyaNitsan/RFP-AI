@@ -437,7 +437,7 @@ export default function AdminCredits() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-        <Card className="border-0 shadow-lg shadow-primary/5 bg-gradient-to-br from-primary/8 to-primary/5 overflow-hidden transition-all hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5">
+        <Card className="border shadow-md overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5">
           <CardContent className="p-5 sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">

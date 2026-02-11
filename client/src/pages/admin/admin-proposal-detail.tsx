@@ -90,6 +90,8 @@ import { fetchAdminOptions, fetchAdminUsersListForAssignees } from "@/api/admin-
 import type { CollaboratorPermissions } from "@/api/customer-data";
 import { ProposalDiscussionTab } from "@/components/customer/proposal-discussion";
 import { ProposalQuillEditor } from "@/components/editor/ProposalQuillEditor";
+import { createNotification } from "@/api/notifications";
+import { getLowCreditsToastOptions, LOW_CREDIT_WARNING_THRESHOLD, showCreditAlertBrowserNotification } from "@/lib/utils";
 
 const COLLABORATOR_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   viewer: Eye,
@@ -446,6 +448,16 @@ export default function AdminProposalDetail() {
         ),
       });
       return;
+    }
+    if (credits > 0 && credits <= LOW_CREDIT_WARNING_THRESHOLD) {
+      const lowOpts = getLowCreditsToastOptions(credits, { isAdmin: true });
+      if (lowOpts) {
+        toast({ ...lowOpts, variant: "destructive" });
+        showCreditAlertBrowserNotification(lowOpts.title, lowOpts.description);
+        createNotification({ title: lowOpts.title, message: lowOpts.description, type: "credit_alert", link: lowOpts.actionHref }).catch(() => {}).finally(() => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        });
+      }
     }
     // Save current content as old content
     const currentContent = proposal.content || contentData || {};
@@ -1710,13 +1722,7 @@ export default function AdminProposalDetail() {
               <FileText className="w-4 h-4 mr-2" /> PDF
             </Button>
             <Button variant="outline" className="w-full justify-start" onClick={handleExportDocx} disabled={!exportPayload}>
-              <FileText className="w-4 h-4 mr-2" /> Word (.docx)
-            </Button>
-            <Button variant="outline" className="w-full justify-start" onClick={handleExportXlsx} disabled={!exportPayload}>
-              <FileText className="w-4 h-4 mr-2" /> Excel (.xlsx)
-            </Button>
-            <Button variant="outline" className="w-full justify-start" onClick={handleExportJson} disabled={!proposal}>
-              <FileText className="w-4 h-4 mr-2" /> JSON
+              <FileText className="w-4 h-4 mr-2" /> Docs (.docx)
             </Button>
           </div>
           <DialogFooter>

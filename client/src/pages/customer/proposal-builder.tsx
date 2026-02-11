@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useLocation as useWouterLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useProposal, useDraft, useCreateProposal, useUpdateProposal } from "@/hooks/use-proposals-api";
@@ -39,6 +40,7 @@ import { uploadProposalFiles, type ProposalFileUploadItem } from "@/api/proposal
 export default function ProposalBuilder() {
   const [location] = useWouterLocation();
   const [, navigate] = useWouterLocation();
+  const queryClient = useQueryClient();
   const { user, currentRole } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -235,7 +237,23 @@ export default function ProposalBuilder() {
               })
           )
         );
-        await uploadProposalFiles(id, items);
+        try {
+          await uploadProposalFiles(id, items);
+          // So Knowledge Base shows new docs when user visits it
+          queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+          queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+          queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+          queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
+        } catch {
+          // Proposal was saved; file upload failed. Invalidate KB cache; user can try Sync from proposals or re-add files in KB.
+          queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+          queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
+          toast({
+            title: "Proposal saved; file upload failed",
+            description: "You can add documents later in Knowledge Base, or try \"Sync from proposals\" there.",
+            variant: "destructive",
+          });
+        }
       }
       for (const file of pendingFiles) {
         await store.addProposalFile(id, file);

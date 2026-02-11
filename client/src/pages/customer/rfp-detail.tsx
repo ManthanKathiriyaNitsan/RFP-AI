@@ -90,6 +90,8 @@ import {
   downloadProposalDocx,
   downloadProposalXlsx,
 } from "@/lib/export-proposal";
+import { createNotification } from "@/api/notifications";
+import { getLowCreditsToastOptions, LOW_CREDIT_WARNING_THRESHOLD, showCreditAlertBrowserNotification } from "@/lib/utils";
 import { useCollaboratorRoleOptions } from "@/hooks/use-collaborator-role-options";
 import { ProposalDiscussionTab } from "@/components/customer/proposal-discussion";
 import { fetchProposalFiles, fetchProposalFileBlob, type ProposalFileApi } from "@/api/proposals";
@@ -146,7 +148,7 @@ export default function RFPDetail() {
   const [location] = useLocation();
   const rfpId = params.id;
   const proposalId = rfpId ? parseInt(rfpId, 10) : null;
-  const { user } = useAuth();
+  const { user, currentRole } = useAuth();
   const fromAdmin = location.startsWith("/admin/proposals");
   const isCollaborator = location.startsWith("/collaborator");
   const rfpBase = fromAdmin ? "/admin/proposals" : isCollaborator ? "/collaborator/rfp" : "/rfp";
@@ -542,6 +544,20 @@ export default function RFPDetail() {
         ),
       });
       return;
+    }
+    if (credits > 0 && credits <= LOW_CREDIT_WARNING_THRESHOLD) {
+      const lowOpts = getLowCreditsToastOptions(credits, {
+        isAdmin: false,
+        creditsHref: isCollaborator ? "/collaborator/credits-usage" : "/rfp-projects",
+        actionLabel: isCollaborator ? "See where credits are used" : "Go to Dashboard",
+      });
+      if (lowOpts) {
+        toast({ ...lowOpts, variant: "destructive" });
+        showCreditAlertBrowserNotification(lowOpts.title, lowOpts.description);
+        createNotification({ title: lowOpts.title, message: lowOpts.description, type: "credit_alert", link: lowOpts.actionHref }).catch(() => {}).finally(() => {
+          qc.invalidateQueries({ queryKey: ["notifications"] });
+        });
+      }
     }
     const currentContent = proposal.content || contentData || {};
     setOldContent(currentContent);
@@ -2156,29 +2172,20 @@ export default function RFPDetail() {
             <Button
               variant="outline"
               className="w-full justify-start"
-              onClick={handleExportDocx}
-              disabled={!exportPayload}
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              Export to Word (.docx)
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start"
               onClick={handleExportPdf}
               disabled={!exportPayload}
             >
               <FileText className="w-4 h-4 mr-2" />
-              Export to PDF
+              PDF
             </Button>
             <Button
               variant="outline"
               className="w-full justify-start"
-              onClick={handleExportXlsx}
+              onClick={handleExportDocx}
               disabled={!exportPayload}
             >
               <FileText className="w-4 h-4 mr-2" />
-              Export to Excel (.xlsx)
+              Docs (.docx)
             </Button>
           </div>
           <DialogFooter>

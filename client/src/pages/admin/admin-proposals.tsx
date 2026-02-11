@@ -755,13 +755,7 @@ export default function AdminProposals() {
               <FileText className="w-4 h-4 mr-2" /> PDF
             </Button>
             <Button variant="outline" className="w-full justify-start" onClick={handleExportDocx} disabled={!exportPayload}>
-              <FileText className="w-4 h-4 mr-2" /> Word (.docx)
-            </Button>
-            <Button variant="outline" className="w-full justify-start" onClick={handleExportXlsx} disabled={!exportPayload}>
-              <FileText className="w-4 h-4 mr-2" /> Excel (.xlsx)
-            </Button>
-            <Button variant="outline" className="w-full justify-start" onClick={handleExportJson} disabled={!exportDialogProposal}>
-              <FileText className="w-4 h-4 mr-2" /> JSON
+              <FileText className="w-4 h-4 mr-2" /> Docs (.docx)
             </Button>
           </div>
           <DialogFooter>

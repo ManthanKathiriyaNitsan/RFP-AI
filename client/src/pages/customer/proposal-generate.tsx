@@ -10,6 +10,8 @@ import { ArrowLeft, FileText, Sparkles, Coins, CheckCircle, ExternalLink } from 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProposalStepper } from "@/components/customer/proposal-stepper";
+import { createNotification } from "@/api/notifications";
+import { getLowCreditsToastOptions, LOW_CREDIT_WARNING_THRESHOLD, showCreditAlertBrowserNotification } from "@/lib/utils";
 
 const LOTTIE_WRITING_URL = "https://lottie.host/0e224e47-c1e5-48fb-8185-8f5de15c7dac/FUxEgboKT4.lottie";
 
@@ -60,6 +62,20 @@ export default function ProposalGenerate() {
         ),
       });
       return;
+    }
+    if (credits > 0 && credits <= LOW_CREDIT_WARNING_THRESHOLD) {
+      const lowOpts = getLowCreditsToastOptions(credits, {
+        isAdmin,
+        creditsHref: currentRole === "collaborator" ? "/collaborator/credits-usage" : noCreditsHref,
+        actionLabel: isAdmin ? "Buy credits" : (currentRole === "collaborator" ? "See where credits are used" : "Go to Dashboard"),
+      });
+      if (lowOpts) {
+        toast({ ...lowOpts, variant: "destructive" });
+        showCreditAlertBrowserNotification(lowOpts.title, lowOpts.description);
+        createNotification({ title: lowOpts.title, message: lowOpts.description, type: "credit_alert", link: lowOpts.actionHref }).catch(() => {}).finally(() => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        });
+      }
     }
     setGeneratedContent(null);
     generateMutation.mutate({ userId: user?.id }, {

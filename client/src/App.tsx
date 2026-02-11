@@ -1,7 +1,7 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ui/theme-provider";
@@ -17,6 +17,22 @@ import { Navigation } from "@/components/layout/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { CustomerSidebar } from "@/components/customer/customer-sidebar";
 import { CollaboratorSidebar } from "@/components/collaborator/collaborator-sidebar";
+import { useToast } from "@/hooks/use-toast";
+import { fetchAdminSidebar } from "@/api/admin-data";
+import { fetchCustomerSidebar } from "@/api/customer-data";
+import { fetchCollaboratorSidebar } from "@/api/collaborator-data";
+import { createNotification } from "@/api/notifications";
+import {
+  getLowCreditsToastOptions,
+  getOutOfCreditsToastOptions,
+  getCreditsDeductedToastOptions,
+  getCreditThresholdToAlert,
+  getCreditThresholdAlertOptions,
+  markCreditThresholdNotifiedThisSession,
+  hasShownLowCreditsToastThisSession,
+  setLowCreditsToastShownThisSession,
+  showCreditAlertBrowserNotification,
+} from "@/lib/utils";
 
 // Pages
 import Auth from "@/pages/auth";
@@ -75,7 +91,93 @@ function isAdminPanelRole(role: string) {
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, currentRole } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { toast } = useToast();
   const role = (currentRole || "").toLowerCase();
+
+  const { data: sidebarData } = useQuery({
+    queryKey: ["admin", "sidebar"],
+    queryFn: fetchAdminSidebar,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+  });
+  const widget = sidebarData?.sidebarWidget as { credits?: number } | undefined;
+  const credits = widget?.credits ?? user?.credits ?? 0;
+  const creditsRef = useRef(credits);
+  creditsRef.current = credits;
+  const prevCreditsRef = useRef<number | null>(null);
+  const hasCreatedOutOfCreditsNotifRef = useRef(false);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    const prev = prevCreditsRef.current;
+    if (prev === null) {
+      prevCreditsRef.current = credits;
+      return;
+    }
+    if (credits > 0) hasCreatedOutOfCreditsNotifRef.current = false;
+    if (credits < prev) {
+      const deducted = prev - credits;
+      const opts = getCreditsDeductedToastOptions(deducted, credits, { isAdmin: true });
+      if (opts) {
+        toast({ ...opts, variant: "destructive" });
+        showCreditAlertBrowserNotification(opts.title, opts.description);
+        createNotification({ title: opts.title, message: opts.description, type: "credit_deducted", link: opts.actionHref }).catch(() => {}).finally(() => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        });
+      }
+      if (credits <= 0) {
+        const outOpts = getOutOfCreditsToastOptions(credits, { isAdmin: true });
+        if (outOpts && !hasCreatedOutOfCreditsNotifRef.current) {
+          hasCreatedOutOfCreditsNotifRef.current = true;
+          showCreditAlertBrowserNotification(outOpts.title, outOpts.description);
+          createNotification({ title: outOpts.title, message: outOpts.description, type: "credit_alert", link: outOpts.actionHref }).catch(() => {}).finally(() => {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          });
+        }
+      }
+    }
+    prevCreditsRef.current = credits;
+  }, [sidebarData, user?.credits, credits, toast]);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    if (hasShownLowCreditsToastThisSession("admin")) return;
+    const lowOpts = getLowCreditsToastOptions(credits, { isAdmin: true });
+    if (!lowOpts) return;
+    setLowCreditsToastShownThisSession("admin");
+    toast({ ...lowOpts, variant: "destructive" });
+    showCreditAlertBrowserNotification(lowOpts.title, lowOpts.description);
+    createNotification({ title: lowOpts.title, message: lowOpts.description, type: "credit_alert", link: lowOpts.actionHref }).catch(() => {}).finally(() => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [sidebarData, user?.credits, toast, credits]);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    const threshold = getCreditThresholdToAlert(credits, "admin");
+    if (threshold == null) return;
+    const opts = getCreditThresholdAlertOptions(threshold, credits, { isAdmin: true });
+    markCreditThresholdNotifiedThisSession("admin", threshold);
+    toast({ ...opts, variant: "destructive" });
+    showCreditAlertBrowserNotification(opts.title, opts.description);
+    createNotification({ title: opts.title, message: opts.description, type: "credit_alert", link: opts.actionHref }).catch(() => {}).finally(() => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [sidebarData, user?.credits, credits, toast]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (creditsRef.current > 0) return;
+      const opts = getOutOfCreditsToastOptions(creditsRef.current, { isAdmin: true });
+      if (!opts) return;
+      createNotification({ title: opts.title, message: opts.description, type: "credit_alert", link: opts.actionHref }).catch(() => {}).finally(() => {
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      });
+      showCreditAlertBrowserNotification(opts.title, opts.description);
+      toast({ ...opts, variant: "destructive" });
+    }, 24 * 60 * 60 * 1000); // 24 hours
+    return () => clearInterval(id);
+  }, [toast]);
 
   if (!user) {
     return <Redirect to="/auth" />;
@@ -131,7 +233,93 @@ function PublicRoute({ component: Component }: { component: React.ComponentType 
 function CustomerRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, currentRole } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { toast } = useToast();
   const role = (currentRole || "").toLowerCase();
+
+  const { data: sidebarData } = useQuery({
+    queryKey: ["customer", "sidebar"],
+    queryFn: fetchCustomerSidebar,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+  });
+  const widget = sidebarData?.sidebarWidget as { credits?: number } | undefined;
+  const credits = widget?.credits ?? user?.credits ?? 0;
+  const creditsRef = useRef(credits);
+  creditsRef.current = credits;
+  const prevCreditsRef = useRef<number | null>(null);
+  const hasCreatedOutOfCreditsNotifRef = useRef(false);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    const prev = prevCreditsRef.current;
+    if (prev === null) {
+      prevCreditsRef.current = credits;
+      return;
+    }
+    if (credits > 0) hasCreatedOutOfCreditsNotifRef.current = false;
+    if (credits < prev) {
+      const deducted = prev - credits;
+      const opts = getCreditsDeductedToastOptions(deducted, credits, { isAdmin: false });
+      if (opts) {
+        toast({ ...opts, variant: "destructive" });
+        showCreditAlertBrowserNotification(opts.title, opts.description);
+        createNotification({ title: opts.title, message: opts.description, type: "credit_deducted", link: opts.actionHref }).catch(() => {}).finally(() => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        });
+      }
+      if (credits <= 0) {
+        const outOpts = getOutOfCreditsToastOptions(credits, { isAdmin: false });
+        if (outOpts && !hasCreatedOutOfCreditsNotifRef.current) {
+          hasCreatedOutOfCreditsNotifRef.current = true;
+          showCreditAlertBrowserNotification(outOpts.title, outOpts.description);
+          createNotification({ title: outOpts.title, message: outOpts.description, type: "credit_alert", link: outOpts.actionHref }).catch(() => {}).finally(() => {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          });
+        }
+      }
+    }
+    prevCreditsRef.current = credits;
+  }, [sidebarData, user?.credits, credits, toast]);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    if (hasShownLowCreditsToastThisSession("customer")) return;
+    const lowOpts = getLowCreditsToastOptions(credits, { isAdmin: false });
+    if (!lowOpts) return;
+    setLowCreditsToastShownThisSession("customer");
+    toast({ ...lowOpts, variant: "destructive" });
+    showCreditAlertBrowserNotification(lowOpts.title, lowOpts.description);
+    createNotification({ title: lowOpts.title, message: lowOpts.description, type: "credit_alert", link: lowOpts.actionHref }).catch(() => {}).finally(() => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [sidebarData, user?.credits, toast, credits]);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    const threshold = getCreditThresholdToAlert(credits, "customer");
+    if (threshold == null) return;
+    const opts = getCreditThresholdAlertOptions(threshold, credits, { isAdmin: false });
+    markCreditThresholdNotifiedThisSession("customer", threshold);
+    toast({ ...opts, variant: "destructive" });
+    showCreditAlertBrowserNotification(opts.title, opts.description);
+    createNotification({ title: opts.title, message: opts.description, type: "credit_alert", link: opts.actionHref }).catch(() => {}).finally(() => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [sidebarData, user?.credits, credits, toast]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (creditsRef.current > 0) return;
+      const opts = getOutOfCreditsToastOptions(creditsRef.current, { isAdmin: false });
+      if (!opts) return;
+      createNotification({ title: opts.title, message: opts.description, type: "credit_alert", link: opts.actionHref }).catch(() => {}).finally(() => {
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      });
+      showCreditAlertBrowserNotification(opts.title, opts.description);
+      toast({ ...opts, variant: "destructive" });
+    }, 24 * 60 * 60 * 1000); // 24 hours
+    return () => clearInterval(id);
+  }, [toast]);
 
   if (!user) {
     return <Redirect to="/auth" />;
@@ -159,7 +347,112 @@ function CustomerRoute({ component: Component }: { component: React.ComponentTyp
 function CollaboratorRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, currentRole } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { toast } = useToast();
   const role = (currentRole || "").toLowerCase();
+
+  const { data: sidebarData } = useQuery({
+    queryKey: ["collaborator", "sidebar"],
+    queryFn: fetchCollaboratorSidebar,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+  });
+  const widget = sidebarData?.sidebarWidget as { credits?: number } | undefined;
+  const credits = widget?.credits ?? user?.credits ?? 0;
+  const creditsRef = useRef(credits);
+  creditsRef.current = credits;
+  const prevCreditsRef = useRef<number | null>(null);
+  const hasCreatedOutOfCreditsNotifRef = useRef(false);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    const prev = prevCreditsRef.current;
+    if (prev === null) {
+      prevCreditsRef.current = credits;
+      return;
+    }
+    if (credits > 0) hasCreatedOutOfCreditsNotifRef.current = false;
+    if (credits < prev) {
+      const deducted = prev - credits;
+      const opts = getCreditsDeductedToastOptions(deducted, credits, {
+        isAdmin: false,
+        creditsHref: "/collaborator/credits-usage",
+        actionLabel: "See where credits are used",
+      });
+      if (opts) {
+        toast({ ...opts, variant: "destructive" });
+        showCreditAlertBrowserNotification(opts.title, opts.description);
+        createNotification({ title: opts.title, message: opts.description, type: "credit_deducted", link: opts.actionHref }).catch(() => {}).finally(() => {
+          queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        });
+      }
+      if (credits <= 0) {
+        const outOpts = getOutOfCreditsToastOptions(credits, {
+          isAdmin: false,
+          creditsHref: "/collaborator/credits-usage",
+          actionLabel: "See where credits are used",
+        });
+        if (outOpts && !hasCreatedOutOfCreditsNotifRef.current) {
+          hasCreatedOutOfCreditsNotifRef.current = true;
+          showCreditAlertBrowserNotification(outOpts.title, outOpts.description);
+          createNotification({ title: outOpts.title, message: outOpts.description, type: "credit_alert", link: outOpts.actionHref }).catch(() => {}).finally(() => {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          });
+        }
+      }
+    }
+    prevCreditsRef.current = credits;
+  }, [sidebarData, user?.credits, credits, toast]);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    if (hasShownLowCreditsToastThisSession("collaborator")) return;
+    const lowOpts = getLowCreditsToastOptions(credits, {
+      isAdmin: false,
+      creditsHref: "/collaborator/credits-usage",
+      actionLabel: "See where credits are used",
+    });
+    if (!lowOpts) return;
+    setLowCreditsToastShownThisSession("collaborator");
+    toast({ ...lowOpts, variant: "destructive" });
+    showCreditAlertBrowserNotification(lowOpts.title, lowOpts.description);
+    createNotification({ title: lowOpts.title, message: lowOpts.description, type: "credit_alert", link: lowOpts.actionHref }).catch(() => {}).finally(() => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [sidebarData, user?.credits, toast, credits]);
+
+  useEffect(() => {
+    if (!sidebarData?.sidebarWidget) return;
+    const threshold = getCreditThresholdToAlert(credits, "collaborator");
+    if (threshold == null) return;
+    const opts = getCreditThresholdAlertOptions(threshold, credits, {
+      isAdmin: false,
+      creditsHref: "/collaborator/credits-usage",
+    });
+    markCreditThresholdNotifiedThisSession("collaborator", threshold);
+    toast({ ...opts, variant: "destructive" });
+    showCreditAlertBrowserNotification(opts.title, opts.description);
+    createNotification({ title: opts.title, message: opts.description, type: "credit_alert", link: opts.actionHref }).catch(() => {}).finally(() => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [sidebarData, user?.credits, credits, toast]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (creditsRef.current > 0) return;
+      const opts = getOutOfCreditsToastOptions(creditsRef.current, {
+        isAdmin: false,
+        creditsHref: "/collaborator/credits-usage",
+        actionLabel: "See where credits are used",
+      });
+      if (!opts) return;
+      createNotification({ title: opts.title, message: opts.description, type: "credit_alert", link: opts.actionHref }).catch(() => {}).finally(() => {
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      });
+      showCreditAlertBrowserNotification(opts.title, opts.description);
+      toast({ ...opts, variant: "destructive" });
+    }, 24 * 60 * 60 * 1000); // 24 hours
+    return () => clearInterval(id);
+  }, [toast]);
 
   if (!user) {
     return <Redirect to="/auth" />;

@@ -58,6 +58,30 @@ export async function fetchNotifications(): Promise<NotificationsData> {
   return res.json() as Promise<NotificationsData>;
 }
 
+export type CreateNotificationPayload = {
+  title: string;
+  message: string;
+  type?: NotificationType;
+  link?: string;
+};
+
+/** Create a notification for the current user (appears in the bell). Used e.g. when showing credit toasts. */
+export async function createNotification(payload: CreateNotificationPayload): Promise<{ ok: boolean }> {
+  const url = getApiUrl("/api/v1/notifications");
+  const res = await fetchWithAuth(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: payload.title,
+      message: payload.message,
+      type: payload.type ?? "credit_alert",
+      link: payload.link,
+    }),
+  });
+  if (!res.ok) throw new Error(`createNotification: ${res.status}`);
+  return res.json() as Promise<{ ok: boolean }>;
+}
+
 export async function markNotificationRead(notificationId: string): Promise<{ ok: boolean }> {
   const url = getApiUrl(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`);
   const res = await fetchWithAuth(url, { method: "PATCH" });

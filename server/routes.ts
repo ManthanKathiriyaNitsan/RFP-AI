@@ -448,7 +448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await addLowCreditAlertAfterGeneration(userId, newBalance, userName);
 
       const updatedProposal = await storage.getProposal(id);
-      res.json({ ...updatedProposal, creditsUsed: CREDITS_PER_GENERATION });
+      res.json({ ...updatedProposal, creditsUsed: CREDITS_PER_GENERATION, creditsRemaining: newBalance });
     } catch (error) {
       res.status(500).json({ message: "Failed to generate proposal content" });
     }
@@ -492,7 +492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         generatedContent.introduction,
         typeof generatedContent.solutionApproach === "string" ? generatedContent.solutionApproach : "",
       ].filter(Boolean).join("\n\n");
-      res.json({ content: generatedContent, fullDocument, creditsUsed: CREDITS_PER_GENERATION });
+      res.json({ content: generatedContent, fullDocument, creditsUsed: CREDITS_PER_GENERATION, creditsRemaining: newBalance });
     } catch (error) {
       res.status(500).json({ message: "Failed to generate proposal content" });
     }
@@ -709,66 +709,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       .map((u) => u.id);
   }
 
-  const LOW_CREDIT_THRESHOLDS = [100, 50, 25, 20, 15, 10] as const;
+  /** Credit levels at which we send a low-credit alert (aligned with frontend CREDIT_ALERT_THRESHOLDS). */
+  const LOW_CREDIT_THRESHOLDS = [100, 50, 25, 20, 15, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1] as const;
 
-  /** When a user's credit balance is low (≤100, 50, 25, 20, 15, or 10), add alert notifications for them and for admins. */
+  /** Smallest threshold >= balance, or null if balance > 100. */
+  function getLowCreditThresholdForBalance(balance: number): number | null {
+    const ascending = [...LOW_CREDIT_THRESHOLDS].sort((a, b) => a - b);
+    for (const t of ascending) {
+      if (t >= balance) return t;
+    }
+    return null;
+  }
+
+  /** When a user's credit balance is low (at or below 100, 50, 25, 20, 15, 10, 9, 8, …), add one alert notification for that level (user + admins). */
   async function addLowCreditNotificationsIfNeeded(
     userId: number,
     newBalance: number,
     displayName?: string
   ): Promise<void> {
     if (newBalance < 0) return;
+    const threshold = getLowCreditThresholdForBalance(newBalance);
+    if (threshold == null) return;
     const name = displayName || `User ${userId}`;
     const creditsLink = "/admin/credits";
-
-    for (const threshold of LOW_CREDIT_THRESHOLDS) {
-      if (newBalance <= threshold) {
-        const label = threshold === 10 ? "under 10" : threshold === 15 ? "very low (15 or fewer)" : threshold === 20 ? "low (20 or fewer)" : threshold === 25 ? "low (25 or fewer)" : threshold === 50 ? "low (50 or fewer)" : "low (100 or fewer)";
-        addNotification(
-          userId,
-          `Credits ${threshold === 10 ? "under 10" : "low"}`,
-          `You have ${newBalance} credit(s) left (${label}). Consider topping up or contacting your admin.`,
-          "credit_alert",
-          creditsLink
-        );
-        const adminIds = await getAdminUserIds();
-        adminIds.forEach((adminId) => {
-          if (adminId === userId) return;
-          addNotification(
-            adminId,
-            `User credits ${label}`,
-            `${name} has ${newBalance} credit(s) left. Consider assigning more credits.`,
-            "credit_alert",
-            creditsLink
-          );
-        });
-        break;
-      }
-    }
+    const label = threshold <= 10 ? `${threshold} or fewer` : `low (${threshold} or fewer)`;
+    addNotification(
+      userId,
+      "Credits alert",
+      `You have ${newBalance} credit(s) left (at ${threshold} or below). Consider topping up or contacting your admin.`,
+      "credit_alert",
+      creditsLink
+    );
+    const adminIds = await getAdminUserIds();
+    adminIds.forEach((adminId) => {
+      if (adminId === userId) return;
+      addNotification(
+        adminId,
+        `User credits ${label}`,
+        `${name} has ${newBalance} credit(s) left. Consider assigning more credits.`,
+        "credit_alert",
+        creditsLink
+      );
+    });
   }
 
-  /** Call after every AI generation: when balance is at or below any threshold (100, 50, 25, 20, 15, 10), send one alert. For all roles (admin, customer, collaborator). */
+  /** Call after every AI generation: when balance is at or below a threshold (100, 50, 25, 20, 15, 10, 9, 8, …), send one alert. For all roles (admin, customer, collaborator). */
   async function addLowCreditAlertAfterGeneration(
     userId: number,
     newBalance: number,
     displayName?: string
   ): Promise<void> {
     if (newBalance < 0) return;
+    const threshold = getLowCreditThresholdForBalance(newBalance);
+    if (threshold == null) return;
     const name = displayName || `User ${userId}`;
     const u = await storage.getUser(userId);
     const role = (u as { role?: string } | null)?.role?.toLowerCase() ?? "";
     const creditsLink =
-      role === "admin" || role === "super_admin" ? "/admin/credits" : role === "collaborator" ? "/collaborator" : "/rfp-projects";
+      role === "admin" || role === "super_admin" ? "/admin/credits" : role === "collaborator" ? "/collaborator/credits-usage" : "/rfp-projects";
 
-    if (newBalance > 100) return;
-
-    const threshold = LOW_CREDIT_THRESHOLDS.find((t) => newBalance <= t);
-    if (!threshold) return;
-
-    const message =
-      threshold === 10
-        ? `You have ${newBalance} credit(s) left. This alert appears after every generation until you top up or contact your admin.`
-        : `You have ${newBalance} credit(s) left (${threshold} or fewer). Consider topping up soon.`;
+    const message = `You have ${newBalance} credit(s) left (at ${threshold} or below). Consider topping up soon.`;
     addNotification(userId, `Credits low – ${newBalance} left`, message, "credit_alert", creditsLink);
 
     const adminIds = await getAdminUserIds();
@@ -1497,11 +1497,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /** Create a notification for the current user (e.g. when showing credit toasts so it appears in the bell). */
+  app.post("/api/v1/notifications", async (req, res) => {
+    try {
+      const userId = getNotificationUserId(req);
+      if (userId == null) return res.status(401).json({ message: "Authentication required" });
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      const message = typeof body.message === "string" ? body.message.trim() : "";
+      if (!title && !message) return res.status(400).json({ message: "title or message required" });
+      const type = typeof body.type === "string" ? body.type : "credit_alert";
+      const link = typeof body.link === "string" ? body.link : undefined;
+      addNotification(userId, title || "Notification", message || title, type, link || undefined);
+      res.status(201).json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create notification" });
+    }
+  });
+
   app.patch("/api/v1/notifications/:notificationId/read", async (req, res) => {
     try {
+      const userId = getNotificationUserId(req);
+      if (userId == null) return res.status(401).json({ message: "Authentication required" });
       const id = req.params.notificationId;
       const n = notificationStore.find((x) => x.id === id);
-      if (n) n.read = true;
+      if (!n) return res.status(404).json({ message: "Notification not found" });
+      if (n.userId !== userId) return res.status(403).json({ message: "Not allowed to update this notification" });
+      n.read = true;
       res.json({ ok: true });
     } catch (error) {
       res.status(500).json({ message: "Failed to mark read" });
@@ -1510,9 +1532,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/v1/notifications/:notificationId", async (req, res) => {
     try {
+      const userId = getNotificationUserId(req);
+      if (userId == null) return res.status(401).json({ message: "Authentication required" });
       const id = req.params.notificationId;
       const idx = notificationStore.findIndex((x) => x.id === id);
-      if (idx !== -1) notificationStore.splice(idx, 1);
+      if (idx === -1) return res.status(404).json({ message: "Notification not found" });
+      if (notificationStore[idx].userId !== userId) return res.status(403).json({ message: "Not allowed to delete this notification" });
+      notificationStore.splice(idx, 1);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to dismiss" });
