@@ -11,7 +11,6 @@ import {
   Sliders,
   Save,
   RotateCcw,
-  AlertTriangle,
   CheckCircle,
   Info,
   Globe,
@@ -28,7 +27,6 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { QueryErrorState } from "@/components/shared/query-error-state";
 
 export default function AdminAIConfig() {
@@ -40,19 +38,43 @@ export default function AdminAIConfig() {
     queryKey: ["admin", "options"],
     queryFn: fetchAdminOptions,
   });
-  const aiModels = data?.aiModels ?? [];
+  const MASKED_KEY = "••••••••••••••••";
+  const providers = data?.providers ?? [];
+  const modelsByProvider = data?.modelsByProvider ?? {};
+  const apiKeysFromApi = data?.apiKeys ?? {};
+  const selectedProviderFromApi = data?.selectedProvider ?? "openai";
+  const selectedModelFromApi = data?.selectedModel ?? data?.defaultModel;
+  const fallbackAiModels = data?.aiModels ?? [];
   const qualityMetrics = data?.qualityMetrics ?? [];
   const creditsUsed = data?.creditsUsed ?? "0";
   const systemPromptDefault = data?.systemPromptDefault ?? "";
   const defaultTemperature = data?.defaultTemperature ?? 0.7;
   const defaultMaxTokens = data?.defaultMaxTokens ?? 2048;
-  const defaultModel = (data as { defaultModel?: string })?.defaultModel ?? (aiModels[0] as { id?: string })?.id ?? "";
+  const [selectedProvider, setSelectedProvider] = useState(selectedProviderFromApi);
+  const [selectedModel, setSelectedModel] = useState("");
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
+  const providerModels = modelsByProvider[selectedProvider] ?? [];
+  const displayModels =
+    providerModels.length > 0
+      ? providerModels.map((m) => ({
+          id: m.id,
+          name: m.name,
+          provider: providers.find((p) => p.id === selectedProvider)?.name ?? selectedProvider,
+          speed: m.speed ?? "",
+          quality: m.quality ?? "",
+          cost: m.cost ?? "",
+        }))
+      : fallbackAiModels;
+  const defaultModel = selectedModelFromApi ?? displayModels[0]?.id ?? "";
+  const effectiveDefault = displayModels.some((m) => m.id === defaultModel) ? defaultModel : (displayModels[0]?.id ?? defaultModel);
+  const effectiveModel = selectedModel || effectiveDefault;
+  const activeModelDisplayName = displayModels.find((m) => m.id === effectiveModel)?.name ?? effectiveModel ?? "—";
+  const avgAccuracy = qualityMetrics[0] != null ? `${qualityMetrics[0].value}%` : "—";
+  const avgResponseTime = "2.3s";
   const aiToneOptions = optionsData?.aiToneOptions ?? [];
   const aiDetailLevels = optionsData?.aiDetailLevels ?? [];
   const pageTitles = (optionsData as { pageTitles?: Record<string, string> })?.pageTitles ?? {};
   const aiConfigTitle = pageTitles.aiConfig ?? "AI Configuration";
-  const [selectedModel, setSelectedModel] = useState("");
-  const effectiveModel = selectedModel || defaultModel;
   const [temperature, setTemperature] = useState([defaultTemperature]);
   const [maxTokens, setMaxTokens] = useState([defaultMaxTokens]);
   const [systemPrompt, setSystemPrompt] = useState(systemPromptDefault);
@@ -65,6 +87,12 @@ export default function AdminAIConfig() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
 
+  useEffect(() => {
+    if (data?.selectedProvider != null) setSelectedProvider(data.selectedProvider);
+  }, [data?.selectedProvider]);
+  useEffect(() => {
+    if (data?.selectedModel != null || data?.defaultModel != null) setSelectedModel(data.selectedModel ?? data.defaultModel ?? "");
+  }, [data?.selectedModel, data?.defaultModel]);
   useEffect(() => {
     if (data?.systemPromptDefault != null) setSystemPrompt(data.systemPromptDefault);
   }, [data?.systemPromptDefault]);
@@ -106,60 +134,9 @@ export default function AdminAIConfig() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-ai-config-title">{aiConfigTitle}</h1>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1">Configure AI models, parameters, and behavior settings.</p>
-        </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            data-testid="button-reset"
-            className="w-full sm:w-auto"
-            onClick={() => {
-              setSelectedModel(defaultModel || "gpt-4o");
-              setTemperature([defaultTemperature]);
-              setMaxTokens([defaultMaxTokens]);
-              setSystemPrompt(systemPromptDefault || "");
-              const f = data?.features ?? {};
-              setAutoSuggest(f.autoSuggest ?? true);
-              setContentFiltering(f.contentFiltering ?? true);
-              setAllowBulkGenerate(f.allowBulkGenerate ?? true);
-              setAllowToneSelection(f.allowToneSelection ?? true);
-              toast({
-                title: "Reset to defaults",
-                description: "AI configuration has been reset to loaded values. Save to persist.",
-              });
-            }}
-          >
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Reset to Default
-          </Button>
-          <Button 
-            size="sm" 
-            className="theme-gradient-bg text-white w-full sm:w-auto" 
-            data-testid="button-save"
-            disabled={saveMutation.isPending}
-            onClick={() => {
-              saveMutation.mutate({
-                defaultModel: effectiveModel,
-                defaultTemperature: temperature[0],
-                defaultMaxTokens: maxTokens[0],
-                systemPromptDefault: systemPrompt,
-                features: {
-                  autoSuggest,
-                  contentFiltering,
-                  allowBulkGenerate,
-                  allowToneSelection,
-                },
-              });
-            }}
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {saveMutation.isPending ? "Saving…" : "Save Changes"}
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-ai-config-title">{aiConfigTitle}</h1>
+        <p className="text-muted-foreground text-xs sm:text-sm mt-1">Configure AI models, parameters, and behavior settings.</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -170,7 +147,7 @@ export default function AdminAIConfig() {
                 <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               </div>
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold truncate">GPT-4o</p>
+                <p className="text-base sm:text-lg font-bold truncate">{activeModelDisplayName}</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">Active Model</p>
               </div>
             </div>
@@ -183,7 +160,7 @@ export default function AdminAIConfig() {
                 <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 icon-emerald" />
               </div>
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold truncate">94.2%</p>
+                <p className="text-base sm:text-lg font-bold truncate">{avgAccuracy}</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">Avg Accuracy</p>
               </div>
             </div>
@@ -196,7 +173,7 @@ export default function AdminAIConfig() {
                 <Zap className="w-4 h-4 sm:w-5 sm:h-5 icon-blue" />
               </div>
               <div className="min-w-0">
-                <p className="text-base sm:text-lg font-bold truncate">2.3s</p>
+                <p className="text-base sm:text-lg font-bold truncate">{avgResponseTime}</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">Avg Response</p>
               </div>
             </div>
@@ -218,60 +195,144 @@ export default function AdminAIConfig() {
       </div>
 
       <Tabs defaultValue="model" className="w-full">
-        <TabsList className="bg-muted/50 overflow-x-auto overflow-y-hidden w-full sm:w-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-          <TabsTrigger value="model" className="data-[state=active]:bg-background text-xs sm:text-sm">
-            <Brain className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Model Settings</span><span className="sm:hidden">Model</span>
-          </TabsTrigger>
-          <TabsTrigger value="behavior" className="data-[state=active]:bg-background text-xs sm:text-sm">
-            <Sliders className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Behavior
-          </TabsTrigger>
-          <TabsTrigger value="prompts" className="data-[state=active]:bg-background text-xs sm:text-sm">
-            <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">System Prompts</span><span className="sm:hidden">Prompts</span>
-          </TabsTrigger>
-          <TabsTrigger value="quality" className="data-[state=active]:bg-background text-xs sm:text-sm">
-            <Gauge className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Quality Metrics</span><span className="sm:hidden">Quality</span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="bg-muted/50 overflow-x-auto overflow-y-hidden w-full sm:w-auto shrink-0">
+            <TabsTrigger value="model" className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <Brain className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Model Settings</span><span className="sm:hidden">Model</span>
+            </TabsTrigger>
+            <TabsTrigger value="behavior" className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <Sliders className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Behavior
+            </TabsTrigger>
+            <TabsTrigger value="prompts" className="data-[state=active]:bg-background text-xs sm:text-sm">
+              <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">System Prompts</span><span className="sm:hidden">Prompts</span>
+            </TabsTrigger>
+          </TabsList>
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="button-reset"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setSelectedProvider(selectedProviderFromApi);
+                setSelectedModel(selectedModelFromApi ?? defaultModel ?? "");
+                setTemperature([defaultTemperature]);
+                setMaxTokens([defaultMaxTokens]);
+                setSystemPrompt(systemPromptDefault || "");
+                setApiKeyInputs({});
+                const f = data?.features ?? {};
+                setAutoSuggest(f.autoSuggest ?? true);
+                setContentFiltering(f.contentFiltering ?? true);
+                setAllowBulkGenerate(f.allowBulkGenerate ?? true);
+                setAllowToneSelection(f.allowToneSelection ?? true);
+                toast({
+                  title: "Reset to defaults",
+                  description: "AI configuration has been reset to loaded values. Save to persist.",
+                });
+              }}
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset to Default
+            </Button>
+            <Button
+              size="sm"
+              className="theme-gradient-bg text-white w-full sm:w-auto"
+              data-testid="button-save"
+              disabled={saveMutation.isPending}
+              onClick={() => {
+                const apiKeysPayload: Record<string, string> = {};
+                for (const [provider, value] of Object.entries(apiKeyInputs)) {
+                  if (value && value !== MASKED_KEY) apiKeysPayload[provider] = value;
+                }
+                saveMutation.mutate({
+                  selectedProvider,
+                  selectedModel: effectiveModel,
+                  defaultModel: effectiveModel,
+                  defaultTemperature: temperature[0],
+                  defaultMaxTokens: maxTokens[0],
+                  systemPromptDefault: systemPrompt,
+                  ...(Object.keys(apiKeysPayload).length > 0 ? { apiKeys: apiKeysPayload } : {}),
+                  features: {
+                    autoSuggest,
+                    contentFiltering,
+                    allowBulkGenerate,
+                    allowToneSelection,
+                  },
+                });
+              }}
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {saveMutation.isPending ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
+        </div>
 
         <TabsContent value="model" className="space-y-4 sm:space-y-6 mt-4 sm:mt-6">
           <Card className="border shadow-sm">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base">AI Model Selection</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Choose the AI model for generating proposal content</CardDescription>
+              <CardTitle className="text-sm sm:text-base">Model Settings</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Configure AI model provider and model selection.</CardDescription>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                {aiModels.map((model) => (
-                  <div 
-                    key={model.id}
-                    className={`p-3 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      effectiveModel === model.id 
-                        ? 'border-primary bg-primary/5' 
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                    onClick={() => setSelectedModel(model.id)}
-                    data-testid={`model-${model.id}`}
-                  >
-                    <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h4 className="font-semibold text-sm sm:text-base truncate">{model.name}</h4>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{model.provider}</p>
-                      </div>
-                      {effectiveModel === model.id && (
-                        <Badge className="bg-primary text-white text-[10px] sm:text-xs shrink-0">Active</Badge>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
-                      <span className="flex items-center gap-1">
-                        <Zap className="w-3 h-3 shrink-0" /> {model.speed}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3 shrink-0" /> {model.quality}
-                      </span>
-                      <span className="text-muted-foreground">{model.cost}</span>
-                    </div>
-                  </div>
-                ))}
+            <CardContent className="p-4 sm:p-6 pt-0 space-y-5">
+              {/* Provider dropdown – all from backend */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Model Provider</Label>
+                <Select value={selectedProvider} onValueChange={(v) => { setSelectedProvider(v); setSelectedModel(""); }}>
+                  <SelectTrigger className="w-full border-input bg-background">
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providers.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Choose the AI provider for generating content.</p>
+              </div>
+
+              {/* Model dropdown – changes based on selected provider */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Chat Model</Label>
+                <Select value={effectiveModel} onValueChange={setSelectedModel}>
+<SelectTrigger className="w-full border-input bg-background">
+                  <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {displayModels.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">The model used for chat/completion tasks.</p>
+              </div>
+
+              {/* API Key – for Ollama show default (no entry); otherwise manual */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">API Key</Label>
+                {selectedProvider === "ollama" ? (
+                  <>
+                    <Input
+                      type="text"
+                      readOnly
+                      disabled
+                      placeholder="No API key required (local Ollama)"
+                      className="w-full bg-muted/50 text-muted-foreground border-input"
+                    />
+                    <p className="text-xs text-muted-foreground">Ollama runs locally. No API key needed.</p>
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      type="password"
+                      autoComplete="off"
+                      placeholder={apiKeysFromApi[selectedProvider] === MASKED_KEY ? "Key set (leave blank to keep)" : "Enter API key"}
+                      value={apiKeyInputs[selectedProvider] ?? ""}
+                      onChange={(e) => setApiKeyInputs((prev) => ({ ...prev, [selectedProvider]: e.target.value }))}
+                      className="w-full font-mono text-sm border-input bg-background"
+                    />
+                    <p className="text-xs text-muted-foreground">API key for the selected provider.</p>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -451,51 +512,6 @@ export default function AdminAIConfig() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="quality" className="space-y-4 sm:space-y-6 mt-4 sm:mt-6">
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base">Quality Metrics</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Monitor AI response quality against targets</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="space-y-3 sm:space-y-4">
-                {qualityMetrics.map((metric, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs sm:text-sm font-medium truncate">{metric.label}</span>
-                      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                        <span className={`text-xs sm:text-sm font-semibold ${metric.value >= metric.target ? 'text-emerald' : 'text-amber'}`}>
-                          {metric.value}%
-                        </span>
-                        <span className="text-[10px] sm:text-xs text-muted-foreground">/ {metric.target}%</span>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <Progress value={metric.value} className="h-2" />
-                      <div 
-                        className="absolute top-0 bottom-0 w-0.5 bg-foreground/50"
-                        style={{ left: `${metric.target}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="p-3 sm:p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
-            <div className="flex items-start gap-2 sm:gap-3">
-              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 icon-amber shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-amber">Quality Alert</p>
-                <p className="text-[10px] sm:text-sm text-muted-foreground mt-1">
-                  Brand Voice Match is below target. Consider updating the system prompt or providing more training examples.
-                </p>
-              </div>
-            </div>
-          </div>
         </TabsContent>
       </Tabs>
     </div>

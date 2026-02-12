@@ -15,6 +15,9 @@ import {
   FolderPlus,
   Trash2,
   UserCog,
+  LayoutGrid,
+  List,
+  LayoutDashboard,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +56,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import type { Collaboration as ApiCollaboration, CollaboratorUserInfo } from "@/api/proposals";
@@ -63,12 +67,15 @@ type CollaboratorAggregate = {
   assignments: { proposalId: number; title: string; role: string; collaboration: ApiCollaboration }[];
 };
 
+type LayoutMode = "card" | "list" | "grid";
+
 export default function CollaboratorManagement() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const isMobile = useIsMobile();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [layout, setLayout] = useState<LayoutMode>("list");
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
   const [selectedCollaborator, setSelectedCollaborator] = useState<CollaboratorAggregate | null>(null);
@@ -395,7 +402,7 @@ export default function CollaboratorManagement() {
         <TabsContent value="collaborators" className="space-y-4 sm:space-y-6">
           <Card>
             <CardContent className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center">
                 <div className="search-box flex-1">
                   <Search className="search-box-icon" />
                   <Input
@@ -416,6 +423,22 @@ export default function CollaboratorManagement() {
                     <SelectItem value="reviewer">Reviewer</SelectItem>
                   </SelectContent>
                 </Select>
+                <ToggleGroup
+                  type="single"
+                  value={layout}
+                  onValueChange={(v) => v && setLayout(v as LayoutMode)}
+                  className="border rounded-md p-0.5 bg-muted/30 shrink-0"
+                >
+                  <ToggleGroupItem value="card" aria-label="Card layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                    <LayoutDashboard className="w-4 h-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="list" aria-label="List layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                    <List className="w-4 h-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="grid" aria-label="Grid layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                    <LayoutGrid className="w-4 h-4" />
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
             </CardContent>
           </Card>
@@ -434,8 +457,93 @@ export default function CollaboratorManagement() {
                 </Button>
               </CardContent>
             </Card>
+          ) : layout === "list" ? (
+            <div className="rounded-lg border overflow-hidden bg-card shadow-sm overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse text-left">
+                <thead>
+                  <tr className="border-b bg-muted">
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground min-w-0 w-[22%]">Collaborator</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Role</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Status</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground min-w-0 hidden sm:table-cell">Projects</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap">Enable</th>
+                    <th scope="col" className="px-2 py-1.5 pr-4 text-sm font-medium text-muted-foreground text-center whitespace-nowrap w-16 min-w-[4rem]">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-card">
+                  {filteredCollaborators.map((agg) => {
+                    const primaryRole = agg.assignments[0]?.role ?? "viewer";
+                    const roleConfig = getRoleConfig(primaryRole);
+                    const enabled = agg.assignments[0]?.collaboration.enabled !== false;
+                    return (
+                      <tr key={agg.user.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/50 transition-colors">
+                        <td className="px-2 py-1.5 align-middle min-w-0 max-w-0 w-[22%]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Avatar className="w-8 h-8 shrink-0">
+                              <AvatarFallback className="theme-gradient-bg text-white text-[11px] font-semibold">
+                                {agg.user.firstName?.[0] ?? ""}{agg.user.lastName?.[0] ?? ""}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 overflow-hidden">
+                              <p className="font-medium text-sm truncate" title={`${agg.user.firstName ?? ""} ${agg.user.lastName ?? ""}`.trim()}>{agg.user.firstName} {agg.user.lastName}</p>
+                              <p className="text-[13px] text-muted-foreground truncate" title={agg.user.email}>{agg.user.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 align-middle hidden sm:table-cell">
+                          <Badge variant="outline" className="text-[11px] whitespace-nowrap">{roleConfig.label}</Badge>
+                        </td>
+                        <td className="px-2 py-1.5 align-middle hidden sm:table-cell">
+                          <Badge variant={enabled ? "default" : "secondary"} className="text-[11px] whitespace-nowrap">{enabled ? "Active" : "Disabled"}</Badge>
+                        </td>
+                        <td className="px-2 py-1.5 align-middle min-w-0 hidden sm:table-cell">
+                          <div className="flex flex-wrap gap-1 min-w-0">
+                            {agg.assignments.slice(0, 2).map(({ proposalId, title, role }) => (
+                              <Badge key={proposalId} variant="secondary" className="text-[11px] max-w-[8rem] truncate" title={`${title} (${role})`}>{title} ({role})</Badge>
+                            ))}
+                            {agg.assignments.length > 2 && <span className="text-[13px] text-muted-foreground shrink-0">+{agg.assignments.length - 2}</span>}
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                          <Switch
+                            checked={enabled}
+                            onCheckedChange={(checked) => handleToggleEnabled(agg, checked)}
+                          />
+                        </td>
+                        <td className="px-2 py-1.5 pr-4 align-middle text-center whitespace-nowrap w-16 min-w-[4rem]">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 ml-2"><MoreHorizontal className="w-4 h-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuItem onClick={() => openEditDialog(agg)}><FileEdit className="w-4 h-4 mr-2" /> Edit role & permissions</DropdownMenuItem>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger><UserCog className="w-4 h-4 mr-2" /> Change role</DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  {roleOptions.map((r) => (
+                                    <DropdownMenuItem key={r.value} onClick={() => handleChangeRole(agg, r.value)}>
+                                      <r.icon className="w-4 h-4 mr-2" /> {r.label}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuItem onClick={() => openAssignMoreDialog(agg)}><FolderPlus className="w-4 h-4 mr-2" /> Assign to more proposals</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setRemoveFromProposalDialogAgg(agg)}><Trash2 className="w-4 h-4 mr-2" /> Remove from a proposal...</DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => openTasksDialog(agg)}><ListTodo className="w-4 h-4 mr-2" /> View tasks</DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive" onClick={() => handleRemove(agg)}><UserX className="w-4 h-4 mr-2" /> Remove from all proposals</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:gap-6">
+            <div className={layout === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6" : "grid grid-cols-1 gap-4 sm:gap-6"}>
               {filteredCollaborators.map((agg) => {
                 const primaryRole = agg.assignments[0]?.role ?? "viewer";
                 const roleConfig = getRoleConfig(primaryRole);

@@ -24,7 +24,7 @@ export default function CollaboratorView() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
-  const [layout, setLayout] = useState<LayoutMode>("card");
+  const [layout, setLayout] = useState<LayoutMode>("list");
   const isMobile = useIsMobile();
 
   const { data: optionsData } = useQuery({

@@ -2,9 +2,9 @@ import { Switch, Route, Redirect, useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster as HotToaster } from "react-hot-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/components/ui/theme-provider";
+import { ThemeProvider, useTheme } from "@/components/ui/theme-provider";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { AdminSelectedOrgProvider } from "@/contexts/AdminSelectedOrgContext";
@@ -37,6 +37,7 @@ import {
 // Pages
 import Auth from "@/pages/auth";
 import ForgotPassword from "@/pages/forgot-password";
+import Register from "@/pages/register";
 import ResetPassword from "@/pages/reset-password";
 import AccountSettings from "@/pages/account-settings";
 import AIChat from "@/pages/ai-chat";
@@ -65,6 +66,7 @@ import AdminRoles from "@/pages/admin/admin-roles";
 import AdminKnowledgeBase from "@/pages/admin/admin-knowledge-base";
 import AdminSubscriptionBilling from "@/pages/admin/admin-subscription-billing";
 import AdminAuditLogs from "@/pages/admin/admin-audit-logs";
+import AdminProposalOptions from "@/pages/admin/admin-proposal-options";
 
 // Customer Pages
 import CustomerDashboard from "@/pages/customer/customer-dashboard";
@@ -511,6 +513,7 @@ function Router() {
       {/* Public routes */}
       <Route path="/auth" component={() => <PublicRoute component={Auth} />} />
       <Route path="/forgot-password" component={() => <PublicRoute component={ForgotPassword} />} />
+      <Route path="/register" component={() => <PublicRoute component={Register} />} />
       <Route path="/reset-password" component={() => <PublicRoute component={ResetPassword} />} />
 
       {/* Admin routes */}
@@ -538,6 +541,7 @@ function Router() {
       <Route path="/admin/integrations/setup" component={() => <AdminRoute component={AdminIntegrationSetup} />} />
       <Route path="/admin/security" component={() => <AdminRoute component={AdminSecurity} />} />
       <Route path="/admin/audit-logs" component={() => <AdminRoute component={AdminAuditLogs} />} />
+      <Route path="/admin/proposal-options" component={() => <AdminRoute component={AdminProposalOptions} />} />
       <Route path="/admin/settings" component={() => <AdminRoute component={AdminSettings} />} />
       
       {/* Collaborator routes (dedicated panel – only collaborators) */}
@@ -593,9 +597,66 @@ function Router() {
   );
 }
 
+/** Light and dark toast styles so toasts match the current theme. */
+const TOAST_STYLES = {
+  light: {
+    style: {
+      padding: "14px 18px",
+      borderRadius: "12px",
+      boxShadow: "0 4px 20px rgba(0,0,0,0.18), 0 0 1px rgba(0,0,0,0.1)",
+      border: "1px solid #e5e7eb",
+      background: "#ffffff",
+      color: "#111827",
+      fontSize: "14px",
+      maxWidth: "min(90vw, 420px)",
+    },
+    iconTheme: { primary: "hsl(174, 70%, 42%)", secondary: "#f0fdfa" },
+    success: { iconTheme: { primary: "hsl(142, 71%, 45%)", secondary: "#f0fdf4" } },
+    error: { iconTheme: { primary: "#dc2626", secondary: "#fef2f2" } },
+  },
+  dark: {
+    style: {
+      padding: "14px 18px",
+      borderRadius: "12px",
+      boxShadow: "0 4px 20px rgba(0,0,0,0.4), 0 0 1px rgba(255,255,255,0.08)",
+      border: "1px solid #374151",
+      background: "#1f2937",
+      color: "#f9fafb",
+      fontSize: "14px",
+      maxWidth: "min(90vw, 420px)",
+    },
+    iconTheme: { primary: "hsl(174, 70%, 52%)", secondary: "#134e4a" },
+    success: { iconTheme: { primary: "#34d399", secondary: "#064e3b" } },
+    error: { iconTheme: { primary: "#f87171", secondary: "#450a0a" } },
+  },
+};
+
 /** Renders app content or full-page loader while session is initializing (e.g. token refresh on refresh). */
 function AppContent() {
   const { isInitializing } = useAuth();
+  const { theme } = useTheme();
+  const resolvedTheme = (() => {
+    if (theme === "dark" || theme === "light") return theme;
+    if (typeof window === "undefined") return "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  })();
+  const [resolvedDark, setResolvedDark] = useState(resolvedTheme === "dark");
+  useEffect(() => {
+    if (theme === "dark") {
+      setResolvedDark(true);
+      return;
+    }
+    if (theme === "light") {
+      setResolvedDark(false);
+      return;
+    }
+    const m = window.matchMedia("(prefers-color-scheme: dark)");
+    setResolvedDark(m.matches);
+    const fn = () => setResolvedDark(m.matches);
+    m.addEventListener("change", fn);
+    return () => m.removeEventListener("change", fn);
+  }, [theme]);
+  const toastOpts = TOAST_STYLES[resolvedDark ? "dark" : "light"];
   if (isInitializing) {
     return <AppLoader />;
   }
@@ -605,7 +666,14 @@ function AppContent() {
         <StoreProvider>
           <ApiStatusProvider>
             <TooltipProvider>
-              <Toaster />
+              <HotToaster
+                position="top-center"
+                reverseOrder={false}
+                toastOptions={{
+                  duration: 4500,
+                  ...toastOpts,
+                }}
+              />
               <ApiStatusBanner />
               <Router />
             </TooltipProvider>

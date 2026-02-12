@@ -7,8 +7,6 @@ import {
   createAdminBillingPlan,
   updateAdminBillingPlan,
   deleteAdminBillingPlan,
-  assignPlanToCustomer,
-  fetchAdminUsersList,
   fetchAdminInvoices,
   fetchAdminApiQuota,
   updateAdminApiQuota,
@@ -22,7 +20,6 @@ import {
   Save,
   Loader2,
   FileText,
-  Users,
   Gauge,
   Download,
 } from "lucide-react";
@@ -55,16 +52,6 @@ export default function AdminSubscriptionBilling() {
 
   const { data: plansData, isError, error, refetch } = useQuery({ queryKey: ["admin", "billing-plans"], queryFn: fetchAdminBillingPlans });
   const { data: invoicesData } = useQuery({ queryKey: ["admin", "billing-invoices"], queryFn: fetchAdminInvoices });
-  const { data: apiUsersRaw = [] } = useQuery({
-    queryKey: ["admin", "users-list"],
-    queryFn: fetchAdminUsersList,
-  });
-  const apiUsers = apiUsersRaw.map((u) => ({
-    id: u.id,
-    email: u.email,
-    firstName: (u as { firstName?: string; first_name?: string }).firstName ?? (u as { first_name?: string }).first_name,
-    lastName: (u as { lastName?: string; last_name?: string }).lastName ?? (u as { last_name?: string }).last_name,
-  }));
   const { data: quotaData } = useQuery({ queryKey: ["admin", "api-quota"], queryFn: fetchAdminApiQuota });
 
   const plans = plansData?.plans ?? [];
@@ -85,10 +72,6 @@ export default function AdminSubscriptionBilling() {
   const [planApiQuota, setPlanApiQuota] = useState<number | "">("");
   const [planPopular, setPlanPopular] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
-
-  const [assignUserId, setAssignUserId] = useState<string>("");
-  const [assignPlanId, setAssignPlanId] = useState<string>("");
-  const [assigning, setAssigning] = useState(false);
 
   const [quotaLimit, setQuotaLimit] = useState(limitPerMonth);
   const [savingQuota, setSavingQuota] = useState(false);
@@ -165,32 +148,6 @@ export default function AdminSubscriptionBilling() {
     }
   };
 
-  const handleAssign = async () => {
-    const userId = assignUserId ? parseInt(assignUserId, 10) : NaN;
-    if (!assignPlanId || Number.isNaN(userId)) {
-      toast({ title: "Select a user and a plan", variant: "destructive" });
-      return;
-    }
-    setAssigning(true);
-    const result = await assignPlanToCustomer(userId, assignPlanId);
-    setAssigning(false);
-    if (result.success) {
-      toast({
-        title: "Plan assigned",
-        description: result.message ?? "Customer now has the plan's credits and API quota.",
-      });
-      setAssignUserId("");
-      setAssignPlanId("");
-      qc.invalidateQueries({ queryKey: ["admin", "billing-plans"] });
-      qc.invalidateQueries({ queryKey: ["admin", "credits"] });
-      qc.invalidateQueries({ queryKey: ["admin", "users-list"] });
-      qc.invalidateQueries({ queryKey: ["/api/v1/users"] });
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-    } else {
-      toast({ title: "Failed to assign plan", description: result.message, variant: "destructive" });
-    }
-  };
-
   const handleSaveQuota = async () => {
     setSavingQuota(true);
     const updated = await updateAdminApiQuota({ limitPerMonth: quotaLimit });
@@ -202,9 +159,6 @@ export default function AdminSubscriptionBilling() {
       toast({ title: "Failed to update quota", variant: "destructive" });
     }
   };
-
-  const userName = (u: { id?: number; firstName?: string; lastName?: string; email?: string }) =>
-    [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `User ${u.id ?? ""}`;
 
   if (isError) {
     return (
@@ -219,7 +173,7 @@ export default function AdminSubscriptionBilling() {
       <div>
         <h1 className="text-xl sm:text-2xl font-bold">Subscription & Billing</h1>
         <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-          Create plans, assign to customers, view invoices, and set API quota.
+          Create plans, view invoices, and set API quota.
         </p>
       </div>
 
@@ -273,46 +227,6 @@ export default function AdminSubscriptionBilling() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Assign plan to customer
-          </CardTitle>
-          <CardDescription>Assign a subscription plan to a user. They will get the plan&apos;s credits and API quota.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-3">
-          <Select value={assignUserId} onValueChange={setAssignUserId}>
-            <SelectTrigger className="w-full sm:max-w-[240px]">
-              <SelectValue placeholder="Select user" />
-            </SelectTrigger>
-            <SelectContent>
-              {apiUsers.map((u) => (
-                <SelectItem key={u.id} value={String(u.id)}>
-                  {userName(u)} {u.email ? `(${u.email})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={assignPlanId} onValueChange={setAssignPlanId}>
-            <SelectTrigger className="w-full sm:max-w-[200px]">
-              <SelectValue placeholder="Select plan" />
-            </SelectTrigger>
-            <SelectContent>
-              {plans.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name} (${p.price}/{p.interval})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={handleAssign} disabled={assigning || !assignUserId || !assignPlanId}>
-            {assigning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-            Assign plan
-          </Button>
         </CardContent>
       </Card>
 

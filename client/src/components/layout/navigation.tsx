@@ -94,10 +94,22 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
   const adminOrgDisplayName = useMemo(() => {
     if (!isAdminRoute || organizations.length === 0) return null;
     const id = adminSelectedOrgId;
-    const org = id ? organizations.find((o: { id: number }) => o.id === id) : null;
+    const org = id != null ? organizations.find((o) => String(o.id) === String(id)) : null;
     const current = org ?? organizations[0];
     return current?.name ?? null;
   }, [isAdminRoute, organizations, adminSelectedOrgId]);
+
+  /** Show organisation name when valid, otherwise "RFP-AI". Guards against invalid API values (e.g. Python method repr). */
+  const navDisplayName = useMemo(() => {
+    const raw =
+      (currentRole || "").toLowerCase() === "admin" || (currentRole || "").toLowerCase() === "super_admin"
+        ? adminOrgDisplayName
+        : null;
+    if (raw == null || typeof raw !== "string") return "RFP-AI";
+    const trimmed = String(raw).trim();
+    if (!trimmed || /<built-in method/i.test(trimmed)) return "RFP-AI";
+    return trimmed;
+  }, [currentRole, adminOrgDisplayName]);
 
   return (
     <nav className="glass-card border-b border-border px-3 sm:px-6 py-3 fixed top-0 left-0 right-0 z-50 backdrop-blur-md w-full max-w-full overflow-x-hidden">
@@ -127,7 +139,7 @@ export function Navigation({ sidebarOpen, setSidebarOpen }: NavigationProps = {}
               )}
               <div className="flex flex-col">
                 <span className="text-lg font-bold theme-gradient-text">
-                  {((currentRole || "").toLowerCase() === "admin" || (currentRole || "").toLowerCase() === "super_admin") && adminOrgDisplayName ? adminOrgDisplayName : "RFP AI"}
+                  {navDisplayName}
                 </span>
                 <span className="text-[10px] text-muted-foreground font-medium -mt-1">
                   {(currentRole || "").toLowerCase() === "super_admin" || currentRole === "admin" ? "Admin Console" : currentRole === "collaborator" ? "Collaborator Portal" : "Customer Portal"}

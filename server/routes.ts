@@ -833,6 +833,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     lastUsed: string;
     lastUpdated: string;
     author: string;
+    /** Who created this content (distinct from author/last-updater) */
+    createdBy?: string;
     attachments?: ContentAttachment[];
   };
   const contentStore: ContentItemRecord[] = [];
@@ -915,6 +917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastUsed: "",
           lastUpdated: now,
           author: authorName,
+          createdBy: authorName,
           attachments: [{ name: record.name, dataUrl: record.data, size: record.size }],
         };
         contentStore.push(contentItem);
@@ -998,6 +1001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastUsed: "",
           lastUpdated: now,
           author: authorName,
+          createdBy: authorName,
           attachments: [{ name: file.name, dataUrl: file.data, size: file.size }],
         };
         contentStore.push(contentItem);
@@ -1725,6 +1729,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastUsed: "",
         lastUpdated: contentNow,
         author: "Customer",
+        createdBy: "Customer",
       };
       contentStore.push(contentItem);
       res.status(201).json(doc);
@@ -1935,13 +1940,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const c = item.category || "Uncategorized";
         categoryCounts.set(c, (categoryCounts.get(c) || 0) + 1);
       }
-      const categories = Array.from(categoryCounts.entries()).map(([name], idx) => ({
-        id: idx + 1,
-        name,
-        icon: CONTENT_CATEGORY_ICONS[name] || "FileText",
-        count: categoryCounts.get(name) || 0,
-        color: CONTENT_CATEGORY_COLORS[idx % CONTENT_CATEGORY_COLORS.length],
-      }));
+      const skipCategory = (name: string) => !name || name.trim().toLowerCase() === "uncategorized" || name.trim().toLowerCase() === "other";
+      const categories = Array.from(categoryCounts.entries())
+        .filter(([name]) => !skipCategory(name))
+        .map(([name], idx) => ({
+          id: idx + 1,
+          name,
+          icon: CONTENT_CATEGORY_ICONS[name] || "FileText",
+          count: categoryCounts.get(name) || 0,
+          color: CONTENT_CATEGORY_COLORS[idx % CONTENT_CATEGORY_COLORS.length],
+        }));
       const contentItems = contentStore.map((item) => ({
         id: item.id,
         title: item.title,
@@ -1951,6 +1959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastUsed: item.lastUsed,
         lastUpdated: item.lastUpdated,
         author: item.author,
+        createdBy: item.createdBy,
         tags: item.tags || [],
         starred: item.starred,
       }));
@@ -2003,6 +2012,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             size: typeof a.size === "number" ? a.size : undefined,
           }))
         : [];
+      let creatorName: string = typeof body.createdBy === "string" ? body.createdBy : (typeof body.author === "string" ? body.author : "Admin");
+      const adminUserId = getAdminUserId(req);
+      if (adminUserId != null) {
+        try {
+          const user = await storage.getUser(adminUserId);
+          if (user) {
+            const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+            creatorName = name || (user.email ?? "Admin");
+          }
+        } catch (_) {}
+      }
       const item: ContentItemRecord = {
         id: contentNextId++,
         title: typeof body.title === "string" ? body.title : "",
@@ -2014,7 +2034,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         usageCount: 0,
         lastUsed: "",
         lastUpdated: now,
-        author: typeof body.author === "string" ? body.author : "Admin",
+        author: creatorName,
+        createdBy: creatorName,
         attachments: attachments.length ? attachments : undefined,
       };
       contentStore.push(item);
@@ -2156,6 +2177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             items: [
               { href: "/admin/security", label: "Security", icon: "Shield" },
               { href: "/admin/audit-logs", label: "Audit Logs", icon: "ScrollText" },
+              { href: "/admin/proposal-options", label: "Proposal Options", icon: "Tag" },
               { href: "/admin/integrations", label: "Integrations", icon: "Zap" },
               { href: "/admin/settings", label: "Settings", icon: "Settings" },
             ],
@@ -2417,6 +2439,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: proposal options (categories & industries) – manageable by admin/super_admin
+  type OptionItem = { value: string; label: string };
+  const proposalCategoriesStore: OptionItem[] = [
+    { value: "technology", label: "Technology" },
+    { value: "healthcare", label: "Healthcare" },
+    { value: "finance", label: "Finance" },
+    { value: "government", label: "Government" },
+    { value: "other", label: "Other" },
+  ];
+  const industriesStore: OptionItem[] = [
+    { value: "technology", label: "Technology" },
+    { value: "healthcare", label: "Healthcare" },
+    { value: "finance", label: "Financial Services" },
+    { value: "government", label: "Government" },
+    { value: "manufacturing", label: "Manufacturing" },
+    { value: "retail", label: "Retail" },
+    { value: "education", label: "Education" },
+  ];
+
+  const defaultProposalStatuses: OptionItem[] = [
+    { value: "draft", label: "Draft" },
+    { value: "in_progress", label: "In Progress" },
+    { value: "review", label: "Review" },
+    { value: "won", label: "Won" },
+    { value: "lost", label: "Lost" },
+  ];
+  app.get("/api/v1/admin/options", async (_req, res) => {
+    try {
+      res.json({
+        proposalCategories: [...proposalCategoriesStore],
+        industries: [...industriesStore],
+        roles: [],
+        contentCategories: [],
+        contentStatuses: [],
+        termTypes: [],
+        proposalStatuses: [...defaultProposalStatuses],
+        pageTitles: {},
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch options" });
+    }
+  });
+
+  app.get("/api/v1/options", async (_req, res) => {
+    try {
+      res.json({
+        proposalCategories: [...proposalCategoriesStore],
+        industries: [...industriesStore],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch options" });
+    }
+  });
+
+  app.post("/api/v1/admin/options/categories", async (req, res) => {
+    try {
+      const { value, label } = req.body || {};
+      const v = typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "-") : "";
+      const l = typeof label === "string" ? label.trim() : v;
+      if (!v) return res.status(400).json({ message: "value is required" });
+      if (proposalCategoriesStore.some((c) => c.value === v)) return res.status(400).json({ message: "Category value already exists" });
+      proposalCategoriesStore.push({ value: v, label: l || v });
+      res.status(201).json(proposalCategoriesStore[proposalCategoriesStore.length - 1]);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to add category" });
+    }
+  });
+
+  app.patch("/api/v1/admin/options/categories/:value", async (req, res) => {
+    try {
+      const item = proposalCategoriesStore.find((c) => c.value === req.params.value);
+      if (!item) return res.status(404).json({ message: "Category not found" });
+      const { label } = req.body || {};
+      if (typeof label === "string" && label.trim()) item.label = label.trim();
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/v1/admin/options/categories/:value", async (req, res) => {
+    try {
+      const idx = proposalCategoriesStore.findIndex((c) => c.value === req.params.value);
+      if (idx === -1) return res.status(404).json({ message: "Category not found" });
+      proposalCategoriesStore.splice(idx, 1);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete category" });
+    }
+  });
+
+  app.post("/api/v1/admin/options/industries", async (req, res) => {
+    try {
+      const { value, label } = req.body || {};
+      const v = typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "-") : "";
+      const l = typeof label === "string" ? label.trim() : v;
+      if (!v) return res.status(400).json({ message: "value is required" });
+      if (industriesStore.some((i) => i.value === v)) return res.status(400).json({ message: "Industry value already exists" });
+      industriesStore.push({ value: v, label: l || v });
+      res.status(201).json(industriesStore[industriesStore.length - 1]);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to add industry" });
+    }
+  });
+
+  app.patch("/api/v1/admin/options/industries/:value", async (req, res) => {
+    try {
+      const item = industriesStore.find((i) => i.value === req.params.value);
+      if (!item) return res.status(404).json({ message: "Industry not found" });
+      const { label } = req.body || {};
+      if (typeof label === "string" && label.trim()) item.label = label.trim();
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update industry" });
+    }
+  });
+
+  app.delete("/api/v1/admin/options/industries/:value", async (req, res) => {
+    try {
+      const idx = industriesStore.findIndex((i) => i.value === req.params.value);
+      if (idx === -1) return res.status(404).json({ message: "Industry not found" });
+      industriesStore.splice(idx, 1);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete industry" });
+    }
+  });
+
   // Admin: roles (built-in + custom with granular permissions)
   type RoleRecord = { id: string; name: string; isBuiltIn: boolean; permissions: Record<string, string[]> };
   const rolesStore: RoleRecord[] = [
@@ -2547,14 +2697,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: subscription & billing (plans, assign, invoices, API quota)
+  // Admin: subscription & billing (plans, invoices, API quota)
   type BillingPlanRecord = { id: string; name: string; price: number; interval: string; creditsIncluded?: number; apiQuotaPerMonth?: number; features?: string[] };
   const billingPlansStore: BillingPlanRecord[] = [
     { id: "plan_pro", name: "Professional", price: 99, interval: "month", creditsIncluded: 10000, apiQuotaPerMonth: 5000, features: ["AI generation", "Unlimited proposals"] },
     { id: "plan_enterprise", name: "Enterprise", price: 299, interval: "month", creditsIncluded: 50000, apiQuotaPerMonth: 50000, features: ["Everything in Pro", "SSO", "Priority support"] },
   ];
   let billingPlanNextId = 1;
-  const userPlanAssignments: Record<number, string> = {};
   const apiQuotaConfig = { limitPerMonth: 10000, usedThisMonth: 0, windowStart: new Date().toISOString().split("T")[0] };
   const invoicesStore: { id: string; customerId?: number; customerEmail?: string; planName: string; amount: number; currency: string; status: string; dueDate: string; paidAt?: string }[] = [];
 
@@ -2612,41 +2761,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete plan" });
-    }
-  });
-
-  app.post("/api/v1/admin/billing/assign", async (req, res) => {
-    try {
-      const { userId, planId } = req.body || {};
-      const uid = userId != null ? Number(userId) : NaN;
-      if (!Number.isInteger(uid) || uid < 1 || !planId || typeof planId !== "string") {
-        return res.status(400).json({ message: "Valid userId and planId are required" });
-      }
-      const plan = billingPlansStore.find((p) => p.id === planId);
-      if (!plan) return res.status(404).json({ message: "Plan not found" });
-      const user = await storage.getUser(uid);
-      if (!user) return res.status(404).json({ message: "User not found" });
-      userPlanAssignments[uid] = planId;
-      const creditsToSet = plan.creditsIncluded ?? 0;
-      await storage.updateUser(uid, { credits: creditsToSet });
-      const assignedUserName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || `User ${uid}`;
-      addNotification(
-        uid,
-        "Plan assigned",
-        `Subscription plan "${plan.name}" was assigned to you. You now have ${creditsToSet.toLocaleString()} credit(s).`,
-        "credit_plan_assigned",
-        "/rfp-projects"
-      );
-      await addLowCreditNotificationsIfNeeded(uid, creditsToSet, assignedUserName);
-      res.json({
-        success: true,
-        userId: uid,
-        planId,
-        message: `Plan "${plan.name}" assigned. User now has ${creditsToSet.toLocaleString()} credits.`,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to assign plan";
-      res.status(500).json({ message });
     }
   });
 
@@ -3124,40 +3238,320 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: AI config (stub; in-memory for local dev when not using external backend)
+  // Admin: usage analytics – real data from credit transactions and proposals; super_admin can pick admin, then see admin + customers/collaborators
+  app.get("/api/v1/admin/usage", async (req, res) => {
+    try {
+      const adminId = getAdminUserId(req);
+      if (adminId == null) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const currentUser = await storage.getUser(adminId);
+      const userRoleRaw = (currentUser?.role ?? "").toLowerCase().replace(/\s+/g, "_");
+      const isSuperAdmin = userRoleRaw === "super_admin" || userRoleRaw === "super_administrator";
+      const selectedAdminIdParam = req.query.adminId != null ? parseInt(String(req.query.adminId), 10) : undefined;
+      const selectedAdminId = isSuperAdmin && selectedAdminIdParam != null && !Number.isNaN(selectedAdminIdParam) ? selectedAdminIdParam : undefined;
+      const dateRange = (req.query.dateRange as string) || "7days";
+      const roleFilter = typeof req.query.role === "string" ? req.query.role.trim().toLowerCase() : "";
+      const nameFilter = typeof req.query.name === "string" ? req.query.name.trim().toLowerCase() : "";
+
+      const allUsers = await storage.getAllUsers();
+      const userById = new Map(allUsers.map((u) => [u.id, u]));
+      const displayName = (u: { firstName?: string | null; lastName?: string | null; email?: string | null; id: number }) =>
+        [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || `User ${u.id}`;
+      const roleLabel = (r: string) => {
+        const s = (r ?? "").toLowerCase().replace(/\s+/g, "_");
+        if (s === "super_admin" || s === "super_administrator") return "Super Admin";
+        if (s === "admin") return "Admin";
+        if (s === "customer") return "Customer";
+        if (s === "collaborator") return "Collaborator";
+        return r || "User";
+      };
+
+      const now = new Date();
+      let startDate: Date;
+      switch (dateRange) {
+        case "day":
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case "week":
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case "month":
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case "year":
+          startDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 7);
+      }
+      const startTime = startDate.getTime();
+
+      const inRange = (d: Date | string | null) => {
+        if (!d) return false;
+        const t = typeof d === "string" ? new Date(d).getTime() : d.getTime();
+        return t >= startTime;
+      };
+
+      // Admin list for super_admin folder view (no adminId selected). Normalize role so "Super Administrator" / "super admin" match.
+      const isAdminRole = (role: string | null | undefined) => {
+        const r = (role ?? "").toLowerCase().replace(/\s+/g, "_");
+        return r === "admin" || r === "super_admin" || r === "super_administrator";
+      };
+      let adminList: { id: number; name: string; email?: string | null; role: string }[] = [];
+      if (isSuperAdmin && selectedAdminId == null) {
+        adminList = allUsers
+          .filter((u) => isAdminRole(u.role))
+          .map((u) => ({ id: u.id, name: displayName(u), email: u.email ?? null, role: roleLabel(u.role ?? "") }));
+        // If still empty, include current user so super_admin always sees at least themselves
+        if (adminList.length === 0 && currentUser) {
+          adminList = [{ id: currentUser.id, name: displayName(currentUser), email: currentUser.email ?? null, role: roleLabel(currentUser.role ?? "") }];
+        }
+      }
+
+      // Scope: which user IDs to include in analytics (selected admin + their collaborators/customers, or current admin only)
+      // When super_admin with no selection: include ALL usage so dashboard shows same data as "all admins" combined.
+      const superAdminViewAll = isSuperAdmin && selectedAdminId == null;
+      let scopeUserIds: Set<number>;
+      if (isSuperAdmin && selectedAdminId != null) {
+        const adminProposals = await storage.getProposalsByUserId(selectedAdminId);
+        const proposalIds = new Set(adminProposals.map((p) => p.id));
+        const collaboratorIds = new Set<number>();
+        for (const pid of proposalIds) {
+          const collabs = await storage.getCollaborationsByProposalId(pid);
+          collabs.forEach((c) => { if (c.userId != null) collaboratorIds.add(c.userId); });
+        }
+        const ownerIds = new Set(adminProposals.map((p) => p.ownerId).filter((id): id is number => id != null));
+        scopeUserIds = new Set([selectedAdminId, ...collaboratorIds, ...ownerIds]);
+      } else if (!isSuperAdmin) {
+        const adminProposals = await storage.getProposalsByUserId(adminId);
+        const proposalIds = new Set(adminProposals.map((p) => p.id));
+        const collaboratorIds = new Set<number>();
+        for (const pid of proposalIds) {
+          const collabs = await storage.getCollaborationsByProposalId(pid);
+          collabs.forEach((c) => { if (c.userId != null) collaboratorIds.add(c.userId); });
+        }
+        const ownerIds = new Set(adminProposals.map((p) => p.ownerId).filter((id): id is number => id != null));
+        scopeUserIds = new Set([adminId, ...collaboratorIds, ...ownerIds]);
+      } else {
+        scopeUserIds = new Set(allUsers.map((u) => u.id));
+      }
+
+      const allTx = await storage.getAllCreditTransactions();
+      const usageTx = allTx.filter((t) => {
+        if (t.type !== "usage" || t.userId == null) return false;
+        if (superAdminViewAll) return true;
+        return scopeUserIds.size === 0 || scopeUserIds.has(t.userId);
+      });
+      const usageInRange = usageTx.filter((t) => inRange(t.createdAt));
+      const totalCreditsUsed = usageInRange.reduce((s, t) => s + Math.abs(t.amount), 0);
+
+      const allProposals = await storage.getAllProposals();
+      if (superAdminViewAll) {
+        const fromTx = allTx.filter((t) => t.userId != null).map((t) => t.userId!);
+        const fromProposals = allProposals.map((p) => p.ownerId).filter((id): id is number => id != null);
+        scopeUserIds = new Set([...scopeUserIds, ...fromTx, ...fromProposals]);
+      }
+      const proposalsByOwner = new Map<number, number>();
+      for (const p of allProposals) {
+        if (p.ownerId != null && (scopeUserIds.size === 0 || scopeUserIds.has(p.ownerId) || superAdminViewAll)) {
+          proposalsByOwner.set(p.ownerId, (proposalsByOwner.get(p.ownerId) ?? 0) + 1);
+        }
+      }
+      const proposalCountInRange = usageInRange.reduce((set, t) => {
+        const m = t.description?.match(/proposal\s*#?(\d+)/i);
+        if (m) set.add(parseInt(m[1], 10));
+        return set;
+      }, new Set<number>()).size;
+
+      const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const dailyByDay = new Map<string, { credits: number; proposals: Set<number> }>();
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().split("T")[0];
+        dailyByDay.set(key, { credits: 0, proposals: new Set() });
+      }
+      usageInRange.forEach((t) => {
+        const key = t.createdAt ? new Date(t.createdAt).toISOString().split("T")[0] : "";
+        if (dailyByDay.has(key)) {
+          const row = dailyByDay.get(key)!;
+          row.credits += Math.abs(t.amount);
+          const m = t.description?.match(/proposal\s*#?(\d+)/i);
+          if (m) row.proposals.add(parseInt(m[1], 10));
+        }
+      });
+      const dailyUsage = Array.from(dailyByDay.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([dateStr, v]) => ({
+          day: dayLabels[new Date(dateStr).getDay()],
+          credits: v.credits,
+          proposals: v.proposals.size,
+        }));
+
+      const totalUsageAll = usageTx.reduce((s, t) => s + Math.abs(t.amount), 0);
+      const featureUsage = totalUsageAll > 0
+        ? [{ feature: "Response Generation", usage: Math.round((totalCreditsUsed / totalUsageAll) * 100) || 0, credits: totalCreditsUsed }]
+        : [{ feature: "Response Generation", usage: 0, credits: 0 }];
+
+      const byUser = new Map<number, { credits: number; proposals: Set<number> }>();
+      usageInRange.forEach((t) => {
+        const uid = t.userId!;
+        if (!byUser.has(uid)) byUser.set(uid, { credits: 0, proposals: new Set() });
+        const row = byUser.get(uid)!;
+        row.credits += Math.abs(t.amount);
+        const m = t.description?.match(/proposal\s*#?(\d+)/i);
+        if (m) row.proposals.add(parseInt(m[1], 10));
+      });
+      const topUsersRaw = Array.from(byUser.entries()).map(([userId, v]) => {
+        const u = userById.get(userId);
+        const name = u ? displayName(u) : `User ${userId}`;
+        const initials = name.split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
+        const proposals = v.proposals.size || proposalsByOwner.get(userId) ?? 0;
+        const credits = v.credits;
+        const efficiency = proposals > 0 ? Math.round(credits / proposals) : 0;
+        return { name, avatar: initials, credits, proposals, efficiency, userId, role: u?.role ?? "" };
+      });
+      const topUsers = topUsersRaw
+        .filter((r) => (!roleFilter || (r.role || "").toLowerCase() === roleFilter) && (!nameFilter || r.name.toLowerCase().includes(nameFilter) || (userById.get(r.userId)?.email ?? "").toLowerCase().includes(nameFilter)))
+        .sort((a, b) => b.credits - a.credits)
+        .slice(0, 20)
+        .map(({ name, avatar, credits, proposals, efficiency }) => ({ name, avatar, credits, proposals, efficiency }));
+
+      const byHour = new Map<number, number>();
+      for (let h = 0; h < 24; h++) byHour.set(h, 0);
+      usageInRange.forEach((t) => {
+        if (t.createdAt) {
+          const h = new Date(t.createdAt).getHours();
+          byHour.set(h, (byHour.get(h) ?? 0) + Math.abs(t.amount));
+        }
+      });
+      const maxHourUsage = Math.max(...Array.from(byHour.values()), 1);
+      const hourlyPeaks = Array.from(byHour.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([h, usage]) => ({ hour: h === 12 ? "12pm" : h < 12 ? `${h}am` : `${h - 12}pm`, usage: Math.round((usage / maxHourUsage) * 100) }));
+
+      const usersInScope: { userId: number; name: string; email?: string | null; role: string; roleLabel: string; credits: number; proposals: number; efficiency: number }[] = topUsersRaw.map((r) => {
+        const u = userById.get(r.userId);
+        return {
+          userId: r.userId,
+          name: r.name,
+          email: u?.email ?? null,
+          role: (u?.role ?? "").toLowerCase(),
+          roleLabel: roleLabel(u?.role ?? ""),
+          credits: r.credits,
+          proposals: r.proposals,
+          efficiency: r.proposals > 0 ? Math.round(r.credits / r.proposals) : 0,
+        };
+      }).filter((r) => (!roleFilter || r.role === roleFilter) && (!nameFilter || r.name.toLowerCase().includes(nameFilter) || (r.email ?? "").toLowerCase().includes(nameFilter)));
+
+      const summaryCards = [
+        { label: "Credits Used", value: totalCreditsUsed.toLocaleString(), trend: dateRange === "7days" ? "Last 7 days" : dateRange, trendUp: true, icon: "Sparkles", iconColor: "text-primary", bgColor: "bg-primary/10" },
+        { label: "Proposals", value: String(proposalCountInRange), trend: "in range", trendUp: true, icon: "Activity", iconColor: "text-blue-500", bgColor: "bg-blue-500/10" },
+        { label: "Avg Credits/Proposal", value: proposalCountInRange > 0 ? String(Math.round(totalCreditsUsed / proposalCountInRange)) : "0", trend: "efficiency", trendUp: true, icon: "Target", iconColor: "text-emerald-500", bgColor: "bg-emerald-500/10" },
+        { label: "AI Messages", value: String(usageInRange.length), trend: "usage events", trendUp: true, icon: "Clock", iconColor: "text-amber-500", bgColor: "bg-amber-500/10" },
+      ];
+
+      res.json({
+        adminList,
+        summaryCards,
+        dailyUsage,
+        featureUsage,
+        topUsers,
+        hourlyPeaks,
+        usersInScope,
+        selectedAdminId: selectedAdminId ?? null,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to fetch usage";
+      res.status(500).json({ message });
+    }
+  });
+
+  // Admin: AI config (aligned with LLM backend: providers, modelsByProvider, selectedProvider, selectedModel, apiKeys)
+  const MASKED_KEY = "••••••••••••••••";
   type AIConfigFeatures = { autoSuggest?: boolean; contentFiltering?: boolean; allowBulkGenerate?: boolean; allowToneSelection?: boolean };
+  type AIModelItem = { id: string; name: string; speed?: string; quality?: string; cost?: string };
   type AIConfigStore = {
+    selectedProvider?: string;
+    selectedModel?: string;
     defaultModel?: string;
     defaultTemperature?: number;
     defaultMaxTokens?: number;
     systemPromptDefault?: string;
     features?: AIConfigFeatures;
+    apiKeys?: Record<string, string>;
   };
+  const defaultModelsByProvider: Record<string, AIModelItem[]> = {
+    openai: [
+      { id: "gpt-4o", name: "GPT-4o", speed: "Fast", quality: "Highest", cost: "$$$" },
+      { id: "gpt-4-turbo", name: "GPT-4 Turbo", speed: "Medium", quality: "High", cost: "$$" },
+    ],
+    anthropic: [
+      { id: "claude-3-opus", name: "Claude 3 Opus", speed: "Medium", quality: "Highest", cost: "$$$" },
+      { id: "claude-3-sonnet", name: "Claude 3 Sonnet", speed: "Fast", quality: "High", cost: "$$" },
+    ],
+    mistral: [
+      { id: "mistral-large", name: "Mistral Large", speed: "Fast", quality: "High", cost: "$$" },
+      { id: "mistral-small", name: "Mistral Small", speed: "Fast", quality: "Medium", cost: "$" },
+    ],
+    ollama: [
+      { id: "llama3.2", name: "Llama 3.2", speed: "Medium", quality: "High", cost: "Free" },
+      { id: "llama3.1", name: "Llama 3.1", speed: "Medium", quality: "High", cost: "Free" },
+      { id: "mistral", name: "Mistral", speed: "Fast", quality: "High", cost: "Free" },
+    ],
+  };
+  const defaultProviders = [
+    { id: "openai", name: "OpenAI" },
+    { id: "anthropic", name: "Anthropic" },
+    { id: "mistral", name: "Mistral" },
+    { id: "ollama", name: "Ollama" },
+  ];
   const aiConfigStore: AIConfigStore = {
+    selectedProvider: "openai",
+    selectedModel: "gpt-4o",
     defaultModel: "gpt-4o",
     defaultTemperature: 0.7,
     defaultMaxTokens: 2048,
     systemPromptDefault: "",
     features: { autoSuggest: true, contentFiltering: true, allowBulkGenerate: true, allowToneSelection: true },
+    apiKeys: { openai: "", anthropic: "", mistral: "", ollama: "" },
   };
+  function getAiConfigResponse() {
+    const provider = aiConfigStore.selectedProvider ?? "openai";
+    const modelsByProvider = defaultModelsByProvider;
+    const models = modelsByProvider[provider] ?? defaultModelsByProvider.openai;
+    const aiModels = Object.entries(modelsByProvider).flatMap(([provId, list]) =>
+      list.map((m) => ({ ...m, id: m.id, name: m.name, provider: defaultProviders.find((p) => p.id === provId)?.name ?? provId, speed: m.speed, quality: m.quality, cost: m.cost }))
+    );
+    return {
+      selectedProvider: aiConfigStore.selectedProvider,
+      selectedModel: aiConfigStore.selectedModel ?? aiConfigStore.defaultModel,
+      defaultModel: aiConfigStore.defaultModel ?? aiConfigStore.selectedModel,
+      defaultTemperature: aiConfigStore.defaultTemperature ?? 0.7,
+      defaultMaxTokens: aiConfigStore.defaultMaxTokens ?? 2048,
+      systemPromptDefault: aiConfigStore.systemPromptDefault ?? "",
+      creditsUsed: "0",
+      providers: defaultProviders,
+      modelsByProvider,
+      apiKeys: Object.fromEntries(
+        Object.entries(aiConfigStore.apiKeys ?? {}).map(([k, v]) => [k, v && v !== MASKED_KEY ? MASKED_KEY : v ?? ""])
+      ) as Record<string, string>,
+      aiModels,
+      qualityMetrics: [
+        { label: "Response Accuracy", value: 94.2, target: 95 },
+        { label: "Factual Consistency", value: 91.8, target: 90 },
+        { label: "Brand Voice Match", value: 88.5, target: 85 },
+        { label: "Compliance Adherence", value: 96.1, target: 95 },
+      ],
+      features: aiConfigStore.features,
+    };
+  }
   app.get("/api/v1/admin/ai-config", async (_req, res) => {
     try {
-      res.json({
-        defaultModel: aiConfigStore.defaultModel,
-        defaultTemperature: aiConfigStore.defaultTemperature,
-        defaultMaxTokens: aiConfigStore.defaultMaxTokens,
-        systemPromptDefault: aiConfigStore.systemPromptDefault ?? "",
-        creditsUsed: "0",
-        aiModels: [
-          { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI", speed: "Fast", quality: "High", cost: "$$" },
-          { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", speed: "Faster", quality: "Good", cost: "$" },
-        ],
-        qualityMetrics: [
-          { label: "Relevance", value: 92, target: 90 },
-          { label: "Brand Voice Match", value: 78, target: 85 },
-        ],
-        features: aiConfigStore.features,
-      });
+      res.json(getAiConfigResponse());
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch AI config" });
     }
@@ -3165,10 +3559,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/v1/admin/ai-config", async (req, res) => {
     try {
       const body = req.body || {};
+      if (body.selectedProvider !== undefined) aiConfigStore.selectedProvider = String(body.selectedProvider);
+      if (body.selectedModel !== undefined) aiConfigStore.selectedModel = String(body.selectedModel);
       if (body.defaultModel !== undefined) aiConfigStore.defaultModel = String(body.defaultModel);
       if (body.defaultTemperature !== undefined) aiConfigStore.defaultTemperature = Number(body.defaultTemperature);
       if (body.defaultMaxTokens !== undefined) aiConfigStore.defaultMaxTokens = Number(body.defaultMaxTokens);
       if (body.systemPromptDefault !== undefined) aiConfigStore.systemPromptDefault = String(body.systemPromptDefault);
+      if (body.apiKeys !== undefined && typeof body.apiKeys === "object") {
+        if (!aiConfigStore.apiKeys) aiConfigStore.apiKeys = {};
+        for (const [provider, key] of Object.entries(body.apiKeys as Record<string, string>)) {
+          if (key && key !== MASKED_KEY) aiConfigStore.apiKeys[provider] = key;
+        }
+      }
       if (body.features !== undefined && typeof body.features === "object") {
         const f = body.features as Record<string, unknown>;
         aiConfigStore.features = {
@@ -3178,13 +3580,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           allowToneSelection: f.allowToneSelection !== undefined ? Boolean(f.allowToneSelection) : aiConfigStore.features?.allowToneSelection,
         };
       }
-      res.json({
-        defaultModel: aiConfigStore.defaultModel,
-        defaultTemperature: aiConfigStore.defaultTemperature,
-        defaultMaxTokens: aiConfigStore.defaultMaxTokens,
-        systemPromptDefault: aiConfigStore.systemPromptDefault,
-        features: aiConfigStore.features,
-      });
+      res.json(getAiConfigResponse());
     } catch (error) {
       res.status(500).json({ message: "Failed to update AI config" });
     }

@@ -148,6 +148,7 @@ export default function AdminProposalDetail() {
     queryFn: fetchAdminOptions,
   });
   const proposalStatuses = optionsData?.proposalStatuses ?? [];
+  const industries = optionsData?.industries ?? [];
   const collaboratorRoles = optionsData?.collaboratorRoles ?? [];
   const collaboratorRolePermissions = (optionsData as { collaboratorRolePermissions?: Record<string, CollaboratorPermissions> })?.collaboratorRolePermissions ?? {};
   const collaboratorPermissions = (optionsData as { collaboratorPermissions?: { key: string; label: string }[] })?.collaboratorPermissions ?? [];
@@ -1195,11 +1196,24 @@ export default function AdminProposalDetail() {
                 <div>
                   <Label>Industry</Label>
                   {isEditing ? (
-                    <Input
-                      value={formData.industry}
-                      onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                      className="mt-1.5"
-                    />
+                    <Select
+                      value={formData.industry || ""}
+                      onValueChange={(v) => setFormData({ ...formData, industry: v })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue placeholder="Select industry" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[
+                          ...industries,
+                          ...(formData.industry && !industries.some((i: { value: string }) => i.value === formData.industry)
+                            ? [{ value: formData.industry, label: formData.industry }]
+                            : []),
+                        ].map((opt: { value: string; label: string }) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <p className="mt-1.5">{formData.industry || "Not specified"}</p>
                   )}

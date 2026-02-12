@@ -534,7 +534,7 @@ export default function AdminProposalsNew() {
               <div className="border-2 border-dashed upload-area-border rounded-xl p-4 sm:p-6 text-center cursor-pointer">
                 <Upload className="w-6 h-6 sm:w-8 sm:h-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-xs sm:text-sm text-muted-foreground">Drop RFP document here or <span className="text-primary font-medium">browse</span></p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground/70 mt-1">PDF, DOC, DOCX up to 25MB</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground/70 mt-1">PDF, DOC, DOCX, Audio (MP3, WAV, M4A), Video (MP4, MOV, AVI, WebM) up to 25MB</p>
               </div>
             </div>
           )}

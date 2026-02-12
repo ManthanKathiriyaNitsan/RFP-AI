@@ -45,7 +45,6 @@ function getDefaultPages(role: string): PageConfig[] {
     { id: "collaborator", label: "Assigned RFPs", href: "/collaborator", keywords: "collaborator assigned" },
     { id: "collaborator-analytics", label: "My Analytics", href: "/collaborator/analytics", keywords: "analytics collaborator" },
     { id: "admin", label: "Admin Dashboard", href: "/admin", keywords: "admin" },
-    { id: "admin-analytics", label: "Analytics", href: "/admin/analytics", keywords: "analytics" },
     { id: "admin-users", label: "Users", href: "/admin/users", keywords: "users" },
     { id: "admin-proposals", label: "Proposals", href: "/admin/proposals", keywords: "proposals" },
   ];

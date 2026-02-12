@@ -36,6 +36,8 @@ import { authStorage } from "@/lib/auth";
 import { parseApiError } from "@/lib/utils";
 import { useStore } from "@/contexts/StoreContext";
 import { uploadProposalFiles, type ProposalFileUploadItem } from "@/api/proposals";
+import { fetchProposalOptions } from "@/api/admin-data";
+import { useQuery } from "@tanstack/react-query";
 
 export default function ProposalBuilder() {
   const [location] = useWouterLocation();
@@ -53,6 +55,12 @@ export default function ProposalBuilder() {
   const proposalId = isEditMode ? parseInt(editProposalId!, 10) : null;
   const { data: existingProposal, isLoading: proposalLoading, isError: proposalError, error: proposalErrorObj, refetch: refetchProposal } = useProposal(proposalId);
   const { data: draft } = useDraft(proposalId);
+  const { data: proposalOptions } = useQuery({
+    queryKey: ["proposal-options"],
+    queryFn: fetchProposalOptions,
+  });
+  const categoryOptions = proposalOptions?.proposalCategories ?? [];
+  const industryOptions = proposalOptions?.industries ?? [];
   const createProposalMutation = useCreateProposal();
   const updateProposalMutation = useUpdateProposal(proposalId ?? 0);
 
@@ -364,11 +372,9 @@ export default function ProposalBuilder() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="technology">Technology</SelectItem>
-                  <SelectItem value="healthcare">Healthcare</SelectItem>
-                  <SelectItem value="finance">Finance</SelectItem>
-                  <SelectItem value="government">Government</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  {categoryOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {fieldErrors.category && (
@@ -487,13 +493,9 @@ export default function ProposalBuilder() {
                 <SelectValue placeholder="Select industry" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="technology">Technology</SelectItem>
-                <SelectItem value="healthcare">Healthcare</SelectItem>
-                <SelectItem value="finance">Financial Services</SelectItem>
-                <SelectItem value="government">Government</SelectItem>
-                <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                <SelectItem value="retail">Retail</SelectItem>
-                <SelectItem value="education">Education</SelectItem>
+                {industryOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -590,7 +592,7 @@ export default function ProposalBuilder() {
           </div>
           <div>
             <Label className="text-foreground text-sm sm:text-base">Upload Files</Label>
-            <p className="text-xs text-muted-foreground mt-1">PDF, DOC, DOCX up to 25MB</p>
+            <p className="text-xs text-muted-foreground mt-1">PDF, DOC, DOCX, Audio (MP3, WAV, M4A), Video (MP4, MOV, AVI, WebM) up to 25MB</p>
             <div
               className="border-2 border-dashed rounded-xl p-4 sm:p-6 text-center cursor-pointer mt-2 hover:bg-muted/50 transition-colors"
               onClick={() => fileInputRef.current?.click()}
@@ -599,7 +601,7 @@ export default function ProposalBuilder() {
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.doc,.docx,.txt,.mp3,.mp4,.wav,.m4a,.mov,.avi,.webm,.mpeg,.mpg,.mpga,.flv,.wmv"
                 className="hidden"
                 onChange={(e) => addFiles(e.target.files)}
               />

@@ -192,6 +192,44 @@ function parseProposalContent(htmlOrMarkdown: string): ExportSection[] {
   return out;
 }
 
+/** Parse a markdown-like block (e.g. Solution Approach, Timeline) into sections: numbered lists, bullet lists, bold runs, paragraphs. */
+function parseMarkdownLikeBlock(text: string): ExportSection[] {
+  const out: ExportSection[] = [];
+  const raw = normalizeTextForExport(text);
+  if (!raw) return out;
+  const paragraphs = raw.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+  for (const para of paragraphs) {
+    const lines = para.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) continue;
+    const bulletItems = lines.filter((l) => /^[-*•]\s+/.test(l) || /^\*\s+/.test(l));
+    const numberedItems = lines.filter((l) => /^\d+\.\s*/.test(l));
+    const allBullet = lines.length > 0 && bulletItems.length === lines.length;
+    const allNumbered = lines.length > 0 && numberedItems.length === lines.length;
+    if (allBullet && bulletItems.length > 0) {
+      out.push({
+        type: "list",
+        items: bulletItems.map((l) => l.replace(/^[-*•]\s+/, "").replace(/^\*\s+/, "").trim()),
+      });
+      continue;
+    }
+    if (allNumbered && numberedItems.length > 0) {
+      out.push({
+        type: "orderedList",
+        items: numberedItems.map((l) => l.replace(/^\d+\.\s*/, "").trim()),
+      });
+      continue;
+    }
+    const hasBold = /\*\*[^*]+\*\*/.test(para);
+    if (hasBold) {
+      const runs = parseBoldRuns(para);
+      if (runs.length) out.push({ type: "richText", runs });
+    } else if (para) {
+      out.push({ type: "text", value: para });
+    }
+  }
+  return out;
+}
+
 export type ExportSection =
   | { type: "heading"; title: string }
   | { type: "text"; value: string }
@@ -231,8 +269,19 @@ function buildOrderedSections(payload: ExportPayload): ExportSection[] {
   if (hasFullDocument) {
     const rawContent = (c as { fullDocument: string }).fullDocument;
     const parsed = parseProposalContent(rawContent);
+    // If we got large text blocks that look like markdown (numbered/bullet lines), re-parse for structure
+    const expanded: ExportSection[] = [];
+    for (const s of parsed) {
+      if (s.type === "text" && s.value && (/\n\n/.test(s.value) || /\n/.test(s.value)) && (/^\d+\.\s+/m.test(s.value) || /^[-*•]\s+/m.test(s.value))) {
+        const sub = parseMarkdownLikeBlock(s.value);
+        if (sub.length > 0) expanded.push(...sub);
+        else expanded.push(s);
+      } else {
+        expanded.push(s);
+      }
+    }
     if (parsed.length > 0) {
-      out.push(...parsed);
+      out.push(...expanded);
     } else {
       out.push({ type: "heading", title: "Proposal Content" });
       out.push({ type: "text", value: stripHtml(rawContent) });
@@ -284,7 +333,10 @@ function buildOrderedSections(payload: ExportPayload): ExportSection[] {
     }
     if (content.solutionApproach) {
       out.push({ type: "heading", title: "Solution Approach" });
-      out.push({ type: "text", value: safeStr(content.solutionApproach) });
+      const sa = safeStr(content.solutionApproach);
+      const parsed = parseMarkdownLikeBlock(sa);
+      if (parsed.length > 0) out.push(...parsed);
+      else if (sa) out.push({ type: "text", value: sa });
     }
     if (Array.isArray(content.technicalSpecifications) && content.technicalSpecifications.length > 0) {
       out.push({ type: "heading", title: "Technical Specifications" });
@@ -297,7 +349,10 @@ function buildOrderedSections(payload: ExportPayload): ExportSection[] {
     if (content.timeline !== undefined && content.timeline !== null) {
       out.push({ type: "heading", title: "Timeline" });
       if (typeof content.timeline === "string") {
-        out.push({ type: "text", value: content.timeline });
+        const tl = content.timeline;
+        const parsed = parseMarkdownLikeBlock(tl);
+        if (parsed.length > 0) out.push(...parsed);
+        else if (tl) out.push({ type: "text", value: tl });
       } else if (typeof content.timeline === "object") {
         const lines = Object.entries(content.timeline as Record<string, unknown>).map(
           ([k, v]) => `${k.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}: ${safeStr(v)}`
@@ -571,9 +626,11 @@ export function downloadProposalPdf(payload: ExportPayload, filename?: string): 
   }
   y += sectionGap;
 
+  let isFirstHeading = true;
   for (const s of sections) {
     if (s.type === "heading") {
-      if (s.title === "Requirements") addHorizontalRule();
+      if (!isFirstHeading) addHorizontalRule();
+      isFirstHeading = false;
       addHeading(s.title);
     } else if (s.type === "basicInfoBox") {
       addBasicInfoBox(s.items);
@@ -682,9 +739,10 @@ export async function downloadProposalDocx(payload: ExportPayload, filename?: st
     }),
   ];
 
+  let isFirstHeading = true;
   for (const s of sections) {
     if (s.type === "heading") {
-      if (s.title === "Requirements") {
+      if (!isFirstHeading) {
         children.push(
           new Paragraph({
             text: "",
@@ -693,6 +751,7 @@ export async function downloadProposalDocx(payload: ExportPayload, filename?: st
           })
         );
       }
+      isFirstHeading = false;
       children.push(
         new Paragraph({
           children: [new TextRun({ text: s.title, bold: true, size: headingSize })],

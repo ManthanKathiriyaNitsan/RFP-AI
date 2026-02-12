@@ -54,7 +54,7 @@ const TabsList = React.forwardRef<
     ref={ref}
     data-tabs-list
     className={cn(
-      "tabs-list-scrollbar-hide inline-flex h-10 items-center justify-center rounded-full bg-muted/50 p-1 text-muted-foreground gap-1 overflow-y-hidden overflow-x-auto min-h-10",
+      "tabs-list-scrollbar-hide inline-flex h-11 min-h-11 items-center justify-center rounded-full bg-muted/50 p-1.5 text-muted-foreground gap-1 overflow-visible overflow-x-auto",
       className
     )}
     {...props}
@@ -63,7 +63,7 @@ const TabsList = React.forwardRef<
 TabsList.displayName = TabsPrimitive.List.displayName
 
 const triggerBaseClasses =
-  "relative rounded-full px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background disabled:pointer-events-none disabled:opacity-50 data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=active]:text-primary-foreground"
+  "relative flex h-full min-h-8 items-center rounded-full px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background disabled:pointer-events-none disabled:opacity-50 data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=active]:text-primary-foreground"
 
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,

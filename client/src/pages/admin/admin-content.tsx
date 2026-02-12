@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";
-import { fetchAdminContent } from "@/api/admin-data";
+import { fetchAdminContent, fetchAdminUsersList } from "@/api/admin-data";
 import { QueryErrorState } from "@/components/shared/query-error-state";
 import { 
   Search, 
@@ -15,7 +16,6 @@ import {
   FolderOpen,
   FileText,
   Star,
-  Clock,
   MoreHorizontal,
   Edit,
   Copy,
@@ -27,7 +27,6 @@ import {
   BookOpen,
   Lightbulb,
   CheckCircle,
-  User,
   ArrowLeft,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,8 +42,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import type { LucideIcon } from "lucide-react";
+
+/** Short, readable label for MIME / category name (e.g. "application/pdf" → "PDF") */
+function contentCategoryLabel(name: string): string {
+  if (!name) return "Other";
+  const lower = name.toLowerCase();
+  if (lower === "application/pdf") return "PDF";
+  if (lower.includes("word") || lower.includes("document") || lower.includes("openxmlformats")) return "Word";
+  if (lower === "text/plain") return "Plain text";
+  if (lower.includes("sheet") || lower.includes("excel")) return "Spreadsheet";
+  if (lower.includes("image")) return "Image";
+  const parts = name.split("/");
+  return parts.length > 1 ? parts[1].split(".").slice(0, 1).join(".") : name;
+}
 
 const CONTENT_ICON_MAP: Record<string, LucideIcon> = {
   BookOpen,
@@ -57,13 +76,11 @@ export default function AdminContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [activeTab, setActiveTab] = useState("all");
-  const [selectedCustomerName, setSelectedCustomerName] = useState<string | null>(null);
   const { data, isError, error, refetch } = useQuery({
     queryKey: ["admin", "content"],
     queryFn: fetchAdminContent,
   });
   const contentCategoriesRaw = data?.contentCategories ?? [];
-  const contentByCustomer = data?.contentByCustomer ?? [];
   type ContentCategory = { id: number; name: string; color: string; count: number; icon: import("lucide-react").LucideIcon };
   const contentCategories: ContentCategory[] = contentCategoriesRaw.map((c: { id?: number; name?: string; color?: string; count?: number; icon?: string; [k: string]: unknown }) => ({
     id: c.id ?? 0,
@@ -76,14 +93,104 @@ export default function AdminContent() {
   useEffect(() => {
     if (data?.contentItems != null) setContentItemsState(data.contentItems);
   }, [data?.contentItems]);
-  useEffect(() => {
-    if (activeTab !== "by-customer") setSelectedCustomerName(null);
-  }, [activeTab]);
+
+  const adminContentItems = useMemo(() => {
+    return contentItemsState.filter(item => 
+      item.authorRole === "admin" || item.authorRole === "super_admin" || !item.authorRole
+    );
+  }, [contentItemsState]);
+
+  const [folderSearch, setFolderSearch] = useState("");
+  const [folderSort, setFolderSort] = useState<"a-z" | "z-a">("a-z");
+  const contentCreators = useMemo(() => {
+    const byName = new Map<string, number>();
+    // Only show folders for admin content
+    for (const item of adminContentItems) {
+      const name = (item.createdBy ?? item.author ?? "—").trim() || "—";
+      byName.set(name, (byName.get(name) ?? 0) + 1);
+    }
+    return Array.from(byName.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }, [adminContentItems]);
+
+  const filteredContentCreators = useMemo(() => {
+    const q = folderSearch.trim().toLowerCase();
+    let list = q
+      ? contentCreators.filter((c) => c.name.toLowerCase().includes(q))
+      : [...contentCreators];
+    list = [...list].sort((a, b) =>
+      folderSort === "a-z"
+        ? a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+        : b.name.localeCompare(a.name, undefined, { sensitivity: "base" })
+    );
+    return list;
+  }, [contentCreators, folderSearch, folderSort]);
+
   const { toast } = useToast();
+  const { user, currentRole } = useAuth();
+  const isSuperAdmin = (currentRole ?? "").toLowerCase() === "super_admin";
+  const [selectedCreatorName, setSelectedCreatorName] = useState<string | null>(null);
+
+  // Base list for counts: when super admin has a creator selected, only that creator's content
+  const baseList = useMemo(() => {
+    if (isSuperAdmin && selectedCreatorName != null && selectedCreatorName.trim() !== "") {
+      return adminContentItems.filter(
+        (item) => (item.createdBy ?? item.author ?? "—").trim() === selectedCreatorName
+      );
+    }
+    // For super admin, show all content (customer + admin) when no creator is selected
+    // For regular admin, show all content
+    return contentItemsState;
+  }, [contentItemsState, adminContentItems, isSuperAdmin, selectedCreatorName]);
+
+  // Real per-category counts from baseList (so "items" reflects actual visible scope)
+  const categoryCountsFromBase = useMemo(() => {
+    const map = new Map<string, number>();
+    const norm = (s: string) => (s ?? "").trim().toLowerCase();
+    for (const item of baseList) {
+      const cat = norm(item.category ?? "");
+      const key = cat || "uncategorized";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [baseList]);
+  const { data: allUsersRaw = [] } = useQuery({
+    queryKey: ["/api/v1/users"],
+    queryFn: fetchAdminUsersList,
+    enabled: isSuperAdmin,
+  });
+  type UserRow = { id: number; email?: string; first_name?: string; last_name?: string; firstName?: string; lastName?: string; role?: string };
+  const allUsers = allUsersRaw as UserRow[];
+  const normalizeForMatch = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const getUserByCreatorName = (creatorName: string): UserRow | null => {
+    const key = normalizeForMatch(creatorName);
+    if (!key) return null;
+    return allUsers.find((u) => {
+      const first = (u.firstName ?? u.first_name ?? "").trim();
+      const last = (u.lastName ?? u.last_name ?? "").trim();
+      const nameFirstLast = [first, last].filter(Boolean).join(" ");
+      const nameLastFirst = [last, first].filter(Boolean).join(" ");
+      const displayNorm = normalizeForMatch(nameFirstLast);
+      const displayNormReversed = normalizeForMatch(nameLastFirst);
+      const emailNorm = normalizeForMatch(u.email ?? "");
+      return displayNorm === key || displayNormReversed === key || emailNorm === key;
+    }) ?? null;
+  };
+  const roleLabel = (role: string | undefined) => {
+    const r = (role || "").toLowerCase();
+    if (r === "admin") return "Admin";
+    if (r === "super_admin") return "Super Admin";
+    if (r === "collaborator") return "Collaborator";
+    return "Customer";
+  };
   const { confirm, ConfirmDialog } = useConfirm();
   const { prompt, PromptDialog } = usePrompt();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const creatorName = user
+    ? [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || "Admin"
+    : "Admin";
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -124,25 +231,33 @@ export default function AdminContent() {
   // Filter by tab
   if (activeTab === "starred") {
     filteredContent = filteredContent.filter(item => item.starred);
-  } else if (activeTab === "by-customer" && selectedCustomerName) {
-    filteredContent = contentItemsState.filter((item) => (item.author || "").trim() === selectedCustomerName);
-  } else if (activeTab === "recent") {
-    filteredContent = [...filteredContent].sort((a, b) => {
-      const dateA = new Date(a.lastUpdated || 0);
-      const dateB = new Date(b.lastUpdated || 0);
-      const tA = Number.isNaN(dateA.getTime()) ? 0 : dateA.getTime();
-      const tB = Number.isNaN(dateB.getTime()) ? 0 : dateB.getTime();
-      return tB - tA;
-    }).slice(0, 10);
   }
   
   // Filter by search term (guard: title, category, tags may be missing)
-  const term = (searchTerm || "").toLowerCase();
-  if (term) {
-    filteredContent = filteredContent.filter(item =>
-      (item.title || "").toLowerCase().includes(term) ||
-      (item.category || "").toLowerCase().includes(term) ||
-      (item.tags || []).some((tag: string) => String(tag).toLowerCase().includes(term))
+  const term = (searchTerm || "").trim();
+  const termLower = term.toLowerCase();
+  const isCategoryFilter = term.length > 0 && contentCategories.some((c) => (c.name || "").trim().toLowerCase() === termLower);
+  if (term.length > 0) {
+    if (isCategoryFilter) {
+      // Clicked a category card: show only items in that exact category
+      filteredContent = filteredContent.filter(
+        (item) => (item.category ?? "").trim().toLowerCase() === termLower
+      );
+    } else {
+      // Typed in search box: substring match on title, category, tags
+      filteredContent = filteredContent.filter(
+        (item) =>
+          (item.title || "").toLowerCase().includes(termLower) ||
+          (item.category || "").toLowerCase().includes(termLower) ||
+          (item.tags || []).some((tag: string) => String(tag).toLowerCase().includes(termLower))
+      );
+    }
+  }
+
+  // Super admin: when a creator is selected, show only their content
+  if (isSuperAdmin && selectedCreatorName != null) {
+    filteredContent = filteredContent.filter(
+      (item) => (item.createdBy ?? item.author ?? "—").trim() === selectedCreatorName
     );
   }
 
@@ -154,6 +269,114 @@ export default function AdminContent() {
     );
   }
 
+  // Super Admin: folder view – select a creator to see their content
+  if (isSuperAdmin && selectedCreatorName == null) {
+    return (
+      <>
+        <ConfirmDialog />
+        {PromptDialog}
+        <div className="space-y-6 sm:space-y-8">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-content-title">Content Library</h1>
+            <p className="text-muted-foreground text-sm mt-1">View and manage admin content.</p>
+          </div>
+
+          {/* Admin Content Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Admin Content</h2>
+              <Badge variant="secondary" className="ml-auto">{adminContentItems.length}</Badge>
+            </div>
+            {contentCreators.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:gap-4">
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder="Search creators..."
+                    value={folderSearch}
+                    onChange={(e) => setFolderSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={folderSort} onValueChange={(v) => setFolderSort(v as "a-z" | "z-a")}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="a-z">A → Z</SelectItem>
+                    <SelectItem value="z-a">Z → A</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {contentCreators.length === 0 ? (
+              <Card className="border shadow-sm overflow-hidden">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <FolderOpen className="w-10 h-10 text-muted-foreground mb-3" />
+                    <h3 className="text-base font-semibold mb-1">No admin content yet</h3>
+                    <p className="text-sm text-muted-foreground">Content created by admins will appear here.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <TooltipProvider>
+                <div className="flex flex-wrap gap-2 sm:gap-2">
+                  {filteredContentCreators.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4">No creators match your search.</p>
+                  ) : (
+                  filteredContentCreators.map(({ name, count }) => (
+                    <Tooltip key={name}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCreatorName(name)}
+                          className="flex flex-col items-center gap-2 w-24 sm:w-28 group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg p-2 transition-colors hover:bg-muted/50"
+                          data-testid={`folder-creator-${name.replace(/\s+/g, "-")}`}
+                        >
+                          <img
+                            src="/icons8-folder-48.png"
+                            alt=""
+                            className="w-12 h-12 sm:w-14 sm:h-14 object-contain group-hover:scale-105 transition-transform"
+                          />
+                          <span className="text-sm font-medium text-foreground text-center line-clamp-2 break-words w-full">
+                            {name}
+                          </span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="font-medium">{name}</p>
+                        {(() => {
+                          const u = getUserByCreatorName(name);
+                          const role = u ? roleLabel(u.role) : "Creator";
+                          return (
+                            <>
+                              <p className="text-muted-foreground text-xs mt-0.5">
+                                <span className="font-medium text-foreground/90">Role:</span> {role}
+                              </p>
+                              {u?.email && (
+                                <p className="text-muted-foreground text-xs mt-0.5">
+                                  <span className="font-medium text-foreground/90">Email:</span> {u.email}
+                                </p>
+                              )}
+                              <p className="text-muted-foreground text-xs mt-0.5">{count} item{count !== 1 ? "s" : ""}</p>
+                            </>
+                          );
+                        })()}
+                      </TooltipContent>
+                    </Tooltip>
+                  ))
+                  )}
+                </div>
+              </TooltipProvider>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <ConfirmDialog />
@@ -161,8 +384,25 @@ export default function AdminContent() {
       <div className="space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl sm:text-2xl font-bold truncate" data-testid="text-content-title">Content Library</h1>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1 break-words">Manage reusable content blocks, templates, and knowledge base.</p>
+          {isSuperAdmin && selectedCreatorName != null && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mb-2 -ml-2 text-muted-foreground hover:text-foreground"
+              onClick={() => setSelectedCreatorName(null)}
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              All creators
+            </Button>
+          )}
+          <h1 className="text-xl sm:text-2xl font-bold truncate" data-testid="text-content-title">
+            {isSuperAdmin && selectedCreatorName != null ? `Content Library · ${selectedCreatorName}` : "Content Library"}
+          </h1>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1 break-words">
+            {isSuperAdmin && selectedCreatorName != null
+              ? `Content added by ${selectedCreatorName}.`
+              : "Manage reusable content blocks, templates, and knowledge base."}
+          </p>
         </div>
         <Link href="/admin/content/editor" className="w-full sm:w-auto shrink-0">
           <Button 
@@ -175,38 +415,89 @@ export default function AdminContent() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 w-full max-w-full overflow-x-hidden">
-        {contentCategories.map((category) => (
-          <Card 
-            key={category.id} 
-            className="border shadow-sm hover:shadow-md transition-all cursor-pointer group w-full max-w-full overflow-x-hidden"
-            data-testid={`card-category-${category.id}`}
-            onClick={() => {
-              setSearchTerm(category.name);
-              toast({
-                title: "Filtered by category",
-                description: `Showing content from ${category.name}`,
-              });
-            }}
-          >
-            <CardContent className="p-3 sm:p-4 w-full max-w-full overflow-x-hidden">
-              <div className="flex flex-col items-center sm:flex-row sm:items-start gap-2 sm:gap-3 w-full">
-                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl ${category.color.includes('purple') ? 'bg-primary/10' : `${category.color}/10`} flex items-center justify-center shrink-0`}>
-                  <category.icon
-                  className={`w-4 h-4 sm:w-5 sm:h-5 ${category.color.includes('purple') ? 'text-primary' : ''}`}
-                  style={category.color.includes('purple') ? undefined : {
-                    color: category.color.replace('bg-', '').replace('-500', '') === 'blue' ? '#3b82f6' : category.color.replace('bg-', '').replace('-500', '') === 'emerald' ? '#10b981' : category.color.replace('bg-', '').replace('-500', '') === 'amber' ? '#f59e0b' : '#ef4444',
-                  }}
-                />
-                </div>
-                <div className="text-center sm:text-left min-w-0 flex-1 w-full">
-                  <p className="text-xs sm:text-sm font-medium group-hover:text-primary transition-colors break-words line-clamp-2">{category.name}</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{category.count} items</p>
-                </div>
+      <div className="flex flex-wrap gap-2 w-full max-w-full overflow-x-hidden">
+        {/* All – show everything; no category filter */}
+        <Card
+          className={`border rounded-xl shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group shrink-0 ${!searchTerm ? "border-primary/40 ring-1 ring-primary/20" : "border-border/80 hover:border-primary/20"}`}
+          data-testid="card-category-all"
+          onClick={() => {
+            setSearchTerm("");
+            if (searchTerm) toast({ title: "Showing all", description: "All content types." });
+          }}
+        >
+          <CardContent className="px-3 py-2 sm:px-3.5 sm:py-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                <Grid3X3 className="w-4 h-4" />
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">All</p>
+                <p className="text-[10px] text-muted-foreground">{baseList.length} items</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Category filters – from API so new content types appear automatically; hide "Other" / Uncategorized to avoid showing all data when clicked */}
+        {contentCategories
+          .filter((category) => {
+            const label = contentCategoryLabel(category.name);
+            const nameLower = (category.name ?? "").trim().toLowerCase();
+            return label !== "Other" && nameLower !== "" && nameLower !== "uncategorized";
+          })
+          .map((category) => {
+          const iconColor = category.color.includes("purple")
+            ? "text-primary"
+            : category.color.includes("blue")
+              ? "text-blue-500"
+              : category.color.includes("emerald")
+                ? "text-emerald-500"
+                : category.color.includes("amber")
+                  ? "text-amber-500"
+                  : "text-red-500";
+          const bgColor = category.color.includes("purple")
+            ? "bg-primary/10"
+            : category.color.includes("blue")
+              ? "bg-blue-500/10"
+              : category.color.includes("emerald")
+                ? "bg-emerald-500/10"
+                : category.color.includes("amber")
+                  ? "bg-amber-500/10"
+                  : "bg-red-500/10";
+          const label = contentCategoryLabel(category.name);
+          const isActive = searchTerm === category.name;
+          return (
+            <Card
+              key={category.id}
+              className={`border rounded-xl shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group shrink-0 ${isActive ? "border-primary/40 ring-1 ring-primary/20" : "border-border/80 hover:border-primary/20"}`}
+              data-testid={`card-category-${category.id}`}
+              onClick={() => {
+                setSearchTerm(category.name);
+                toast({ title: "Filtered", description: `Showing ${label}.` });
+              }}
+            >
+              <CardContent className="px-3 py-2 sm:px-3.5 sm:py-2.5">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${bgColor} ${iconColor} group-hover:scale-105 transition-transform`}>
+                    <category.icon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-foreground truncate" title={category.name}>
+                      {label}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {(() => {
+                        const norm = (s: string) => (s ?? "").trim().toLowerCase();
+                        const key = norm(category.name) || "uncategorized";
+                        const count = categoryCountsFromBase.get(key) ?? 0;
+                        return `${count} ${count === 1 ? "item" : "items"}`;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full max-w-full overflow-x-hidden">
@@ -214,16 +505,10 @@ export default function AdminContent() {
           <div className="w-full sm:flex-shrink-0 overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0 sm:overflow-visible">
             <TabsList className="bg-muted/50 inline-flex">
               <TabsTrigger value="all" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
-                All Content <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{contentItemsState.length}</Badge>
+                All Content <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{baseList.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="starred" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
-                <Star className="w-3 h-3 mr-1" /> Starred <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{contentItemsState.filter(i => i.starred).length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="recent" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
-                <Clock className="w-3 h-3 mr-1" /> Recent
-              </TabsTrigger>
-              <TabsTrigger value="by-customer" className="data-[state=active]:bg-background text-xs sm:text-sm whitespace-nowrap shrink-0">
-                <User className="w-3 h-3 mr-1" /> By Customer <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{contentByCustomer.length}</Badge>
+                <Star className="w-3 h-3 mr-1" /> Starred <Badge variant="secondary" className="ml-2 text-[10px] text-primary-foreground">{baseList.filter(i => i.starred).length}</Badge>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -293,7 +578,7 @@ export default function AdminContent() {
           </div>
         </div>
 
-        {(["all", "starred", "recent"] as const).map((tabValue) => (
+        {(["all", "starred"] as const).map((tabValue) => (
         <TabsContent key={tabValue} value={tabValue} className="w-full max-w-full overflow-x-hidden">
           {viewMode === "list" ? (
             <Card className="border shadow-sm w-full max-w-full overflow-x-hidden">
@@ -306,6 +591,7 @@ export default function AdminContent() {
                           <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
                           <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
                           <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Usage</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Created by</th>
                           <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Updated</th>
                           <th className="text-right py-3 px-4 w-12"></th>
                         </tr>
@@ -313,7 +599,7 @@ export default function AdminContent() {
                       <tbody>
                         {filteredContent.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="py-12 px-4">
+                            <td colSpan={7} className="py-12 px-4">
                               <div className="flex flex-col items-center justify-center text-center">
                                 <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-3">
                                   <FileText className="w-6 h-6 text-muted-foreground" />
@@ -322,8 +608,6 @@ export default function AdminContent() {
                                 <p className="text-sm text-muted-foreground mb-4 max-w-sm">
                                   {activeTab === "starred"
                                     ? "Star items to see them here."
-                                    : activeTab === "recent"
-                                    ? "Content you've updated recently will appear here."
                                     : "Add reusable blocks, templates, or knowledge base items to get started."}
                                 </p>
                                 {activeTab === "all" && (
@@ -389,6 +673,9 @@ export default function AdminContent() {
                                 </div>
                               </td>
                               <td className="py-3 px-4 min-w-0">
+                                <span className="text-sm truncate block">{item.createdBy ?? item.author ?? "—"}</span>
+                              </td>
+                              <td className="py-3 px-4 min-w-0">
                                 <div className="min-w-0">
                                   <p className="text-sm truncate">{item.lastUpdated}</p>
                                   <p className="text-[10px] text-muted-foreground truncate">by {item.author}</p>
@@ -426,6 +713,8 @@ export default function AdminContent() {
                                                 content: full.content,
                                                 tags: full.tags || [],
                                                 status: full.status || "draft",
+                                                author: creatorName,
+                                                createdBy: creatorName,
                                               });
                                               queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
                                               toast({ title: "Duplicated", description: `${item.title} has been duplicated.` });
@@ -516,8 +805,6 @@ export default function AdminContent() {
                   <p className="text-sm text-muted-foreground mb-4 max-w-sm">
                     {activeTab === "starred"
                       ? "Star items to see them here."
-                      : activeTab === "recent"
-                      ? "Content you've updated recently will appear here."
                       : "Add reusable blocks, templates, or knowledge base items to get started."}
                   </p>
                   {activeTab === "all" && (
@@ -574,175 +861,6 @@ export default function AdminContent() {
           )}
         </TabsContent>
         ))}
-
-        <TabsContent value="by-customer" className="w-full max-w-full overflow-x-hidden">
-          {selectedCustomerName === null ? (
-            <Card className="border shadow-sm w-full max-w-full overflow-x-hidden">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <User className="w-4 h-4 text-muted-foreground" />
-                  Documents by Customer
-                </CardTitle>
-                <CardDescription>
-                  Click a customer name to see the documents they uploaded from proposals.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {contentByCustomer.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">
-                    No proposal documents yet. When customers upload files in proposals, they will appear here by name.
-                  </p>
-                ) : (
-                  <ul className="space-y-2">
-                    {contentByCustomer.map((entry) => (
-                      <li key={entry.author}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCustomerName(entry.author)}
-                          className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left hover:bg-muted/50 transition-colors"
-                        >
-                          <span className="font-medium truncate">{entry.author}</span>
-                          <Badge variant="secondary" className="shrink-0">
-                            {entry.documentCount} document{entry.documentCount !== 1 ? "s" : ""}
-                          </Badge>
-                          <ArrowLeft className="w-4 h-4 shrink-0 rotate-180 text-muted-foreground" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <div className="flex items-center gap-3 mb-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedCustomerName(null)}
-                  className="gap-2"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Back to customers
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  {selectedCustomerName} — {contentItemsState.filter((i) => (i.author || "").trim() === selectedCustomerName).length} document(s)
-                </span>
-              </div>
-              {viewMode === "list" ? (
-                <Card className="border shadow-sm w-full max-w-full overflow-x-hidden">
-                  <CardContent className="p-0 w-full max-w-full overflow-x-hidden">
-                    <div className="overflow-x-auto w-full max-w-full">
-                      <table className="w-full min-w-[600px]">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/30">
-                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Content</th>
-                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
-                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                            <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Updated</th>
-                            <th className="text-right py-3 px-4 w-12"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredContent.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="py-8 px-4 text-center text-sm text-muted-foreground">No documents for this customer.</td>
-                            </tr>
-                          ) : (
-                            filteredContent.map((item) => {
-                              const statusConfig = getStatusConfig(item.status);
-                              return (
-                                <tr key={item.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                                  <td className="py-3 px-4 min-w-0">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(e) => { e.stopPropagation(); toggleStar(item); }}>
-                                        <Star className={`w-4 h-4 ${item.starred ? "fill-amber-500 text-amber-500" : "text-muted-foreground"}`} />
-                                      </Button>
-                                      <p className="font-medium text-sm truncate">{item.title}</p>
-                                    </div>
-                                  </td>
-                                  <td className="py-3 px-4 min-w-0"><span className="text-sm truncate block">{item.category}</span></td>
-                                  <td className="py-3 px-4">
-                                    <Badge variant="outline" className={`${statusConfig.className} text-[10px] font-medium shrink-0`}>{statusConfig.label}</Badge>
-                                  </td>
-                                  <td className="py-3 px-4 min-w-0"><span className="text-sm truncate">{item.lastUpdated}</span></td>
-                                  <td className="py-3 px-4">
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        {(item as { source?: string; proposalId?: number }).source === "proposal" && (item as { proposalId?: number }).proposalId != null ? (
-                                          <DropdownMenuItem asChild>
-                                            <Link href={`/admin/proposals/${(item as { proposalId: number }).proposalId}`} className="flex items-center">
-                                              <FileText className="w-4 h-4 mr-2" /> View proposal
-                                            </Link>
-                                          </DropdownMenuItem>
-                                        ) : (
-                                          <>
-                                            <DropdownMenuItem asChild>
-                                              <Link href={`/admin/content/editor?id=${item.id}`} className="flex items-center">
-                                                <Edit className="w-4 h-4 mr-2" /> Edit
-                                              </Link>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem className="text-destructive" onClick={async () => {
-                                              const confirmed = await confirm({ title: "Delete Content", description: `Delete "${item.title}"?`, confirmText: "Delete", cancelText: "Cancel", variant: "destructive" });
-                                              if (confirmed) {
-                                                try {
-                                                  setContentItemsState((items) => items.filter((i) => i.id !== item.id));
-                                                  await apiRequest("DELETE", `/api/content/${item.id}`);
-                                                  queryClient.invalidateQueries({ queryKey: ["admin", "content"] });
-                                                  toast({ title: "Deleted", description: `${item.title} has been deleted.`, variant: "destructive" });
-                                                } catch {
-                                                  toast({ title: "Error", description: "Failed to delete.", variant: "destructive" });
-                                                }
-                                              }
-                                            }}>
-                                              <Trash2 className="w-4 h-4 mr-2" /> Delete
-                                            </DropdownMenuItem>
-                                          </>
-                                        )}
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  {filteredContent.map((item) => {
-                    const statusConfig = getStatusConfig(item.status);
-                    const isProposalByCustomer = (item as { source?: string; proposalId?: number }).source === "proposal" && (item as { proposalId?: number }).proposalId != null;
-                    const hrefByCustomer = isProposalByCustomer ? `/admin/proposals/${(item as { proposalId: number }).proposalId}` : `/admin/content/editor?id=${item.id}`;
-                    return (
-                      <Link key={item.id} href={hrefByCustomer}>
-                        <Card className="border shadow-sm hover:shadow-md transition-all cursor-pointer h-full">
-                          <CardContent className="p-3 sm:p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" disabled={isProposalByCustomer} onClick={(e) => { e.preventDefault(); toggleStar(item); }}>
-                                <Star className={`w-4 h-4 ${item.starred ? "fill-amber-500 text-amber-500" : "text-muted-foreground"}`} />
-                              </Button>
-                              <Badge variant="outline" className={`${statusConfig.className} text-[10px]`}>{statusConfig.label}</Badge>
-                            </div>
-                            <h3 className="font-medium text-sm mb-1.5 line-clamp-2 break-words">{item.title}</h3>
-                            <p className="text-xs text-muted-foreground truncate">{item.category}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{item.lastUpdated}</p>
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-        </TabsContent>
       </Tabs>
       </div>
     </>

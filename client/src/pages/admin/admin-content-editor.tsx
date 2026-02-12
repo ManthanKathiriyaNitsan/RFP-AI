@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { fetchAdminOptions } from "@/api/admin-data";
@@ -31,10 +32,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export default function AdminContentEditor() {
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isPreview, setIsPreview] = useState(false);
   const isMobile = useIsMobile();
-  
+  const creatorName = user
+    ? [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.email || "Admin"
+    : "Admin";
+
   // Extract content ID from URL
   const contentId = new URLSearchParams(location.split('?')[1] || '').get('id');
   const isNew = !contentId;
@@ -156,18 +161,19 @@ export default function AdminContentEditor() {
       tags: formData.tags,
       status: formData.status,
       attachments: formData.attachments.length ? formData.attachments : undefined,
+      ...(isNew ? { author: creatorName, createdBy: creatorName } : {}),
     });
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
-    const limit = 10 * 1024 * 1024; // 10MB per file
+    const limit = 25 * 1024 * 1024; // 25MB per file
     const toRead: File[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (file.size > limit) {
-        toast({ title: "File too large", description: `${file.name} is over 10MB.`, variant: "destructive" });
+        toast({ title: "File too large", description: `${file.name} is over 25MB.`, variant: "destructive" });
         continue;
       }
       toRead.push(file);
@@ -306,7 +312,7 @@ export default function AdminContentEditor() {
               </div>
               <div>
                 <Label className="text-xs sm:text-sm">Documents</Label>
-                <p className="text-muted-foreground text-xs mt-0.5 mb-2">Attach PDFs, Word docs, or other files to this content.</p>
+                <p className="text-muted-foreground text-xs mt-0.5 mb-2">Attach PDFs, Word docs, audio, video, or other files (max 25MB per file).</p>
                 {!isPreview && (
                   <label className="flex items-center justify-center gap-2 mt-1.5 p-4 border border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="w-4 h-4 text-muted-foreground" />
@@ -315,7 +321,7 @@ export default function AdminContentEditor() {
                       type="file"
                       className="sr-only"
                       multiple
-                      accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,image/*"
+                      accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,image/*,.mp3,.mp4,.wav,.m4a,.mov,.avi,.webm,.mpeg,.mpg,.mpga,.flv,.wmv"
                       onChange={handleFileSelect}
                     />
                   </label>

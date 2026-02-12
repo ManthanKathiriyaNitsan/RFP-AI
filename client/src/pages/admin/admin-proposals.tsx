@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -6,7 +6,7 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { 
-  Search, 
+  Search,
   MoreHorizontal,
   Eye,
   Edit,
@@ -47,6 +47,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -100,6 +106,24 @@ export default function AdminProposals() {
   const adminUsers = (adminUsersRaw as AdminUser[]).filter(
     (u) => (u.role || "").toLowerCase() === "admin"
   );
+
+  const [folderSearch, setFolderSearch] = useState("");
+  const [folderSort, setFolderSort] = useState<"a-z" | "z-a">("a-z");
+  const filteredAdminUsers = useMemo(() => {
+    const q = folderSearch.trim().toLowerCase();
+    let list = adminUsers;
+    if (q) {
+      const name = (u: AdminUser) => [u.firstName ?? u.first_name, u.lastName ?? u.last_name].filter(Boolean).join(" ") || u.email || "";
+      list = list.filter((u) => name(u).toLowerCase().includes(q) || (u.email ?? "").toLowerCase().includes(q));
+    }
+    list = [...list].sort((a, b) => {
+      const na = [a.firstName ?? a.first_name, a.lastName ?? a.last_name].filter(Boolean).join(" ") || a.email || `Admin #${a.id}`;
+      const nb = [b.firstName ?? b.first_name, b.lastName ?? b.last_name].filter(Boolean).join(" ") || b.email || `Admin #${b.id}`;
+      const c = na.localeCompare(nb, undefined, { sensitivity: "base" });
+      return folderSort === "z-a" ? -c : c;
+    });
+    return list;
+  }, [adminUsers, folderSearch, folderSort]);
 
   // Fetch proposals: for super_admin with selected admin = that admin's proposals; for admin or super_admin without selection = all (or none when super_admin list view)
   const { data: apiProposals = [], isLoading: isLoadingProposals, isError: proposalsError, error: proposalsErrorObj, refetch: refetchProposals } = useQuery<any[]>({
@@ -156,6 +180,21 @@ export default function AdminProposals() {
     won: allProposals.filter(p => p.status === 'won').length,
     lost: allProposals.filter(p => p.status === 'lost').length,
   };
+
+  // Only show statuses that actually exist in the current project (have at least one proposal)
+  const STATUS_ORDER = ["draft", "in_progress", "review", "won", "lost"] as const;
+  const statusesInProject = useMemo(
+    () => STATUS_ORDER.filter((status) => (statusCounts as Record<string, number>)[status] > 0),
+    [statusCounts.all, statusCounts.draft, statusCounts.in_progress, statusCounts.review, statusCounts.won, statusCounts.lost]
+  );
+
+  // Reset filter to "all" if the selected status no longer exists in the project
+  useEffect(() => {
+    if (statusFilter !== "all" && !statusesInProject.includes(statusFilter as typeof STATUS_ORDER[number])) {
+      setStatusFilter("all");
+      setCurrentPage(1);
+    }
+  }, [statusFilter, statusesInProject]);
 
   const getStatusConfig = (status: string) => {
     const labels: Record<string, { label: string; icon: typeof CheckCircle }> = {
@@ -331,7 +370,7 @@ export default function AdminProposals() {
 
   const selectedAdmin = selectedAdminId != null ? adminUsers.find((a) => a.id === selectedAdminId) : null;
 
-  // Super Admin: show list of admins first; when one is selected, show that admin's proposals
+  // Super Admin: show folder-style admin selection; when one is selected, show that admin's proposals table
   if (isSuperAdmin && selectedAdminId == null) {
     return (
       <div className="space-y-4 sm:space-y-6">
@@ -340,45 +379,76 @@ export default function AdminProposals() {
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-proposals-title">{proposalsTitle}</h1>
           <p className="text-muted-foreground text-sm mt-1">Select an admin to view their proposals.</p>
         </div>
-        <Card className="border shadow-sm overflow-hidden">
-          <CardContent className={adminUsers.length === 0 ? "p-4 sm:p-6" : "p-0"}>
-            {adminUsers.length === 0 ? (
+        {adminUsers.length > 0 && (
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:gap-4">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search admins..."
+                value={folderSearch}
+                onChange={(e) => setFolderSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={folderSort} onValueChange={(v) => setFolderSort(v as "a-z" | "z-a")}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="a-z">A → Z</SelectItem>
+                <SelectItem value="z-a">Z → A</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {adminUsers.length === 0 ? (
+          <Card className="border shadow-sm overflow-hidden">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Users className="w-12 h-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No admins found</h3>
                 <p className="text-muted-foreground">There are no users with the Administrator role yet.</p>
               </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {adminUsers.map((admin, index) => {
-                  const name = [admin.firstName ?? admin.first_name, admin.lastName ?? admin.last_name].filter(Boolean).join(" ") || admin.email || `Admin #${admin.id}`;
-                  const initials = name.slice(0, 2).toUpperCase();
-                  return (
-                    <button
-                      key={admin.id}
-                      type="button"
-                      onClick={() => handleSelectAdmin(admin.id)}
-                      className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${index % 2 === 1 ? "bg-muted/20" : ""}`}
-                    >
-                      <Avatar className="h-9 w-9 shrink-0 rounded-full border border-border">
-                        <AvatarFallback className="rounded-full bg-primary/10 text-primary text-xs font-semibold">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm text-foreground truncate">{name}</p>
-                        {admin.email && (
-                          <p className="text-xs text-muted-foreground truncate">{admin.email}</p>
-                        )}
-                      </div>
-                      <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          <TooltipProvider>
+            <div className="flex flex-wrap gap-6 sm:gap-8">
+              {filteredAdminUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">No admins match your search.</p>
+              ) : (
+              filteredAdminUsers.map((admin) => {
+                const name = [admin.firstName ?? admin.first_name, admin.lastName ?? admin.last_name].filter(Boolean).join(" ") || admin.email || `Admin #${admin.id}`;
+                return (
+                  <Tooltip key={admin.id}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectAdmin(admin.id)}
+                        className="flex flex-col items-center gap-2 w-24 sm:w-28 group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg p-2 transition-colors hover:bg-muted/50"
+                        data-testid={`folder-admin-${admin.id}`}
+                      >
+                        <img
+                          src="/icons8-folder-48.png"
+                          alt=""
+                          className="w-12 h-12 sm:w-14 sm:h-14 object-contain group-hover:scale-105 transition-transform"
+                        />
+                        <span className="text-sm font-medium text-foreground text-center line-clamp-2 break-words w-full">
+                          {name}
+                        </span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      <p className="font-medium">{name}</p>
+                      {admin.email && <p className="text-muted-foreground text-xs mt-0.5">{admin.email}</p>}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })
+              )}
+            </div>
+          </TooltipProvider>
+        )}
       </div>
     );
   }
@@ -423,18 +493,14 @@ export default function AdminProposals() {
               <TabsTrigger value="all" className="data-[state=active]:bg-background text-xs sm:text-sm">
                 All <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.all}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="in_progress" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                In Progress <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.in_progress}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="review" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                Review <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.review}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="won" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                Won <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.won}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="lost" className="data-[state=active]:bg-background text-xs sm:text-sm">
-                Lost <Badge variant="secondary" className="ml-2 text-[10px] text-white">{statusCounts.lost}</Badge>
-              </TabsTrigger>
+              {statusesInProject.map((status) => {
+                const config = getStatusConfig(status);
+                return (
+                  <TabsTrigger key={status} value={status} className="data-[state=active]:bg-background text-xs sm:text-sm">
+                    {config.label} <Badge variant="secondary" className="ml-2 text-[10px] text-white">{(statusCounts as Record<string, number>)[status]}</Badge>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           </div>
 

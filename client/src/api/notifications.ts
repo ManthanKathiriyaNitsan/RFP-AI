@@ -4,14 +4,13 @@
  */
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
+import { authFetch } from "@/lib/queryClient";
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = authStorage.getAccessToken();
   const auth = authStorage.getAuth();
   const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
   if (auth?.user?.id != null) headers["x-user-id"] = String(auth.user.id);
-  return fetch(url, { credentials: "include", ...options, headers });
+  return authFetch(url, { ...options, headers });
 }
 
 export type NotificationType =

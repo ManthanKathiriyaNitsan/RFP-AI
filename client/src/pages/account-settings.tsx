@@ -159,7 +159,8 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
   const [activeTab, setActiveTab] = useState(config.sidebar.nav[0]?.id ?? "profile");
   const isMobile = useIsMobile();
   const isCustomerOrCollaborator = ["customer", "collaborator"].includes((currentRole || "").toLowerCase());
-  const showBillingTab = Boolean(config.sections.billing) && !isCustomerOrCollaborator;
+  const isSuperAdmin = (currentRole || "").toLowerCase() === "super_admin";
+  const showBillingTab = Boolean(config.sections.billing) && !isCustomerOrCollaborator && !isSuperAdmin;
 
   const getHomeRoute = () => {
     if (currentRole === "admin") return "/admin";

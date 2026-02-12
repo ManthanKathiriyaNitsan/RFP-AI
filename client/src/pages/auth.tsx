@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
-import { Brain, Eye, EyeOff } from "lucide-react";
+import { Brain, Eye, EyeOff, Mail, Lock, Sparkles, FileText, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useBranding } from "@/contexts/BrandingContext";
+
+const TEAL_PRIMARY = "hsl(174, 70%, 42%)";
+const TEAL_LIGHT = "hsl(174, 70%, 52%)";
 
 export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
@@ -31,7 +33,6 @@ export default function Auth() {
 
       const userRole = (user.role || "").toLowerCase();
 
-      // Yield so React commits auth state and storage; then navigate so the next page sees the token
       await new Promise((r) => setTimeout(r, 0));
 
       if (userRole === "admin") {
@@ -91,74 +92,158 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex h-dvh items-center justify-center hero-gradient px-4 py-8 sm:py-12">
-      <div className="w-full max-w-md">
-        <Card className="glass-card shadow-2xl">
-          <CardHeader className="text-center space-y-4">
-            {/* Logo and Branding inside form */}
-            <div className="flex flex-col items-center gap-2">
-              {primaryLogoUrl ? (
-                <img src={primaryLogoUrl} alt="Logo" className="w-16 h-16 rounded-xl object-contain bg-muted" />
-              ) : (
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-xl">
-                  <Brain className="w-8 h-8 text-primary-foreground" />
-                </div>
-              )}
-              <h1 className="text-2xl sm:text-3xl font-bold">RFP AI</h1>
-              <p className="text-muted-foreground text-sm">Intelligent Proposal Management</p>
-            </div>
-           
-          </CardHeader>
-          
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+    <div className="flex min-h-dvh font-sans bg-[#fafafa] flex-col lg:flex-row">
+      {/* Left panel – login form (wider and responsive) */}
+      <div className="flex flex-1 flex-col justify-center px-4 sm:px-8 md:px-12 lg:px-16 xl:px-20 py-8 sm:py-12 w-full min-w-0 lg:max-w-[52rem] xl:max-w-[58rem]">
+        <div className="w-full max-w-[min(100%,22rem)] sm:max-w-[26rem] md:max-w-[30rem] lg:max-w-[34rem] xl:max-w-[36rem] mx-auto lg:mx-0">
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 md:p-10 lg:p-12 shadow-sm">
+            {/* Logo */}
+            <div className="flex items-center gap-3 mb-8 sm:mb-10">
+            {primaryLogoUrl ? (
+              <img src={primaryLogoUrl} alt="RFP AI" className="h-10 w-10 rounded-lg object-contain" />
+            ) : (
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                style={{ backgroundColor: TEAL_PRIMARY }}
+              >
+                <Brain className="h-5 w-5 text-white" />
+              </div>
+            )}
+            <span className="text-xl font-bold text-gray-900">RFP AI</span>
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-gray-900 mb-2">
+            Welcome Back!
+          </h1>
+          <p className="text-[15px] sm:text-base text-gray-500 mb-6 sm:mb-8">
+            Sign in to access your dashboard and continue managing your proposals.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                Email
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="Enter your email"
                   value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                   required
+                  className="h-11 sm:h-12 pl-10 pr-4 rounded-lg border border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
+                  style={{ borderColor: "#e5e7eb" }}
                 />
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                    required
-                    className="pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={formData.password}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                  required
+                  className="h-11 sm:h-12 pl-10 pr-11 rounded-lg border border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
+                  style={{ borderColor: "#e5e7eb" }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full w-10 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              <div className="flex justify-end pt-0.5">
+                <Link href="/forgot-password">
+                  <span
+                    className="text-sm cursor-pointer hover:underline font-medium"
+                    style={{ color: TEAL_LIGHT }}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </Button>
-                </div>
-                <Link href="/forgot-password" className="inline-block">
-                  <Button type="button" variant="link" className="h-auto p-0 text-sm text-primary hover:underline">
-                    Forgot password?
-                  </Button>
+                    Forgot Password?
+                  </span>
                 </Link>
               </div>
+            </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Please wait..." : "Sign In"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+            <Button
+              type="submit"
+              className="w-full h-11 sm:h-12 rounded-lg text-white font-semibold text-[15px] sm:text-base hover:opacity-95"
+              style={{ backgroundColor: TEAL_PRIMARY }}
+              disabled={loading}
+            >
+              {loading ? "Signing in…" : "Sign In"}
+            </Button>
+            <p className="text-center text-sm text-gray-500 pt-2">
+              Don&apos;t have an account?{" "}
+              <Link href="/register">
+                <span
+                  className="font-medium cursor-pointer hover:underline"
+                  style={{ color: TEAL_LIGHT }}
+                >
+                  Create account
+                </span>
+              </Link>
+            </p>
+          </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Right panel – promotional (dark teal); hidden on small screens for responsive single-column */}
+      <div
+        className="hidden lg:flex flex-1 flex-col justify-center px-10 xl:px-16 py-12 xl:py-16 min-h-0 lg:min-h-dvh shrink-0"
+        style={{
+          background: "linear-gradient(180deg, #0d9488 0%, #0f766e 50%, #115e59 100%)",
+        }}
+      >
+        <div className="max-w-md xl:max-w-lg">
+          <h2 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-12">
+            Smarter proposals & AI for your RFPs
+          </h2>
+
+          <ul className="space-y-6">
+            <li className="flex items-start gap-4">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
+                <Sparkles className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-white">AI-powered responses</p>
+                <p className="text-sm text-white/80">Generate and refine answers with intelligent suggestions.</p>
+              </div>
+            </li>
+            <li className="flex items-start gap-4">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
+                <FileText className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-white">One place for every RFP</p>
+                <p className="text-sm text-white/80">Manage projects, knowledge base, and exports in one dashboard.</p>
+              </div>
+            </li>
+            <li className="flex items-start gap-4">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-white">Collaborate with your team</p>
+                <p className="text-sm text-white/80">Invite collaborators and control access from a single place.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   );

@@ -19,10 +19,15 @@ import { useToast } from "@/hooks/use-toast";
 import { QueryErrorState } from "@/components/shared/query-error-state";
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
-import { fetchAdminOrganizations } from "@/api/admin-data";
+import {
+  fetchAdminOrganizations,
+  updateAdminOrganization,
+  deleteAdminOrganization,
+} from "@/api/admin-data";
+import { useConfirm } from "@/hooks/use-confirm";
 
 type Organization = {
-  id: number;
+  id: number | string;
   name: string;
   customerIds: number[];
   archived: boolean;
@@ -32,10 +37,13 @@ type Organization = {
 export default function AdminOrganizations() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { confirm, ConfirmDialog } = useConfirm();
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [localOrgs, setLocalOrgs] = useState<Organization[]>([]);
   const [nextId, setNextId] = useState(100);
+  const [archivingId, setArchivingId] = useState<number | string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | string | null>(null);
 
   const { data: apiOrgs = [], isError, error, refetch } = useQuery({
     queryKey: ["admin", "organizations"],
@@ -91,7 +99,7 @@ export default function AdminOrganizations() {
     }
   };
 
-  const handleArchive = (org: Organization) => {
+  const handleArchive = async (org: Organization) => {
     if (org.archived) {
       toast({ title: "Already archived" });
       return;
@@ -99,17 +107,54 @@ export default function AdminOrganizations() {
     if (localOrgs.some((o) => o.id === org.id)) {
       setLocalOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, archived: true } : o)));
       toast({ title: "Archived", description: org.name });
-    } else {
-      toast({ title: "Archive", description: "Connect backend to persist archive." });
+      return;
+    }
+    setArchivingId(org.id);
+    try {
+      const updated = await updateAdminOrganization(org.id, { archived: true });
+      if (updated) {
+        qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
+        toast({ title: "Archived", description: org.name });
+      } else {
+        toast({ title: "Archive failed", description: "Could not archive organization.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({
+        title: "Archive failed",
+        description: e instanceof Error ? e.message : "Could not archive organization.",
+        variant: "destructive",
+      });
+    } finally {
+      setArchivingId(null);
     }
   };
 
-  const handleDelete = (org: Organization) => {
+  const handleDelete = async (org: Organization) => {
     if (localOrgs.some((o) => o.id === org.id)) {
       setLocalOrgs((prev) => prev.filter((o) => o.id !== org.id));
       toast({ title: "Deleted", description: org.name, variant: "destructive" });
-    } else {
-      toast({ title: "Delete", description: "Connect backend to persist delete." });
+      return;
+    }
+    const confirmed = await confirm({
+      title: "Delete organization",
+      description: `Are you sure you want to delete "${org.name}"? This cannot be undone.`,
+      confirmText: "Delete",
+      variant: "destructive",
+    });
+    if (!confirmed) return;
+    setDeletingId(org.id);
+    try {
+      await deleteAdminOrganization(org.id);
+      qc.invalidateQueries({ queryKey: ["admin", "organizations"] });
+      toast({ title: "Deleted", description: org.name, variant: "destructive" });
+    } catch (e) {
+      toast({
+        title: "Delete failed",
+        description: e instanceof Error ? e.message : "Could not delete organization.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -176,14 +221,25 @@ export default function AdminOrganizations() {
                       </Button>
                     </Link>
                     {!org.archived && (
-                      <Button variant="outline" size="sm" onClick={() => handleArchive(org)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleArchive(org)}
+                        disabled={archivingId === org.id}
+                      >
                         <Archive className="w-4 h-4 mr-1" />
-                        Archive
+                        {archivingId === org.id ? "Archiving…" : "Archive"}
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(org)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(org)}
+                      disabled={deletingId === org.id}
+                    >
                       <Trash2 className="w-4 h-4 mr-1" />
-                      Delete
+                      {deletingId === org.id ? "Deleting…" : "Delete"}
                     </Button>
                   </div>
                 </div>
@@ -216,6 +272,7 @@ export default function AdminOrganizations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog />
     </div>
   );
 }

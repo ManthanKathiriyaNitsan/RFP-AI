@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Upload, FileText, Tag, Trash2, MoreHorizontal, Search,
-  Filter, Download, File, X, Plus, Edit, RefreshCw
+  Filter, Download, File, X, Plus, Edit, RefreshCw, LayoutGrid, List, LayoutDashboard
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +31,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { QueryErrorState } from "@/components/shared/query-error-state";
+
+type LayoutMode = "card" | "list" | "grid";
 
 type KbDocument = {
   id: number;
@@ -75,6 +78,7 @@ export default function KnowledgeBase() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<KbDocument | null>(null);
   const [activeTab, setActiveTab] = useState("documents");
+  const [layout, setLayout] = useState<LayoutMode>("list");
 
   const { data: documentsFromApi = [], isLoading: documentsLoading, isError: documentsError, error: documentsErrorObj, refetch: refetchDocuments } = useQuery({
     queryKey: ["customer", "knowledge-base", "documents"],
@@ -97,13 +101,24 @@ export default function KnowledgeBase() {
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      const res = await apiRequest("POST", "/api/v1/customer/knowledge-base/documents", {
-        name: file.name,
-        type: file.name.split(".").pop() || "unknown",
-        size: file.size,
-        tags: [],
-        description: "",
+      // Create FormData with the file
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      // Use authFetch to handle auth and token refresh
+      const { authFetch } = await import("@/lib/queryClient");
+      const { getApiUrl } = await import("@/lib/api");
+      
+      const res = await authFetch(getApiUrl("/api/v1/customer/knowledge-base/upload"), {
+        method: "POST",
+        body: formData,
       });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || "Upload failed");
+      }
+      
       return res.json() as Promise<KbDocument>;
     },
     onSuccess: (newDoc, file) => {
@@ -116,11 +131,15 @@ export default function KnowledgeBase() {
       queryClient.invalidateQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
       queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "documents"] });
       queryClient.refetchQueries({ queryKey: ["customer", "knowledge-base", "versions"] });
-      toast({ title: "Document uploaded", description: `${file.name} has been uploaded successfully.` });
+      toast({ title: "Document uploaded", description: `${file.name} has been uploaded and processed successfully.` });
       setIsUploadDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Upload failed", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ 
+        title: "Upload failed", 
+        description: error.message || "Failed to upload file. Please try again.",
+        variant: "destructive" 
+      });
     },
   });
 
@@ -329,7 +348,7 @@ export default function KnowledgeBase() {
           {/* Filters */}
           <Card>
             <CardContent className="p-3 sm:p-4">
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
                 <div className="search-box flex-1">
                   <Search className="search-box-icon" />
                   <Input
@@ -350,6 +369,22 @@ export default function KnowledgeBase() {
                     ))}
                   </SelectContent>
                 </Select>
+                <ToggleGroup
+                  type="single"
+                  value={layout}
+                  onValueChange={(v) => v && setLayout(v as LayoutMode)}
+                  className="border rounded-md p-0.5 bg-muted/30 shrink-0"
+                >
+                  <ToggleGroupItem value="card" aria-label="Card layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                    <LayoutDashboard className="w-4 h-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="list" aria-label="List layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                    <List className="w-4 h-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="grid" aria-label="Grid layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                    <LayoutGrid className="w-4 h-4" />
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
             </CardContent>
           </Card>
@@ -391,8 +426,60 @@ export default function KnowledgeBase() {
                 </div>
               </CardContent>
             </Card>
+          ) : layout === "list" ? (
+            <div className="rounded-lg border overflow-hidden bg-card shadow-sm overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse text-left">
+                <thead>
+                  <tr className="border-b bg-muted">
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground min-w-0 w-[22%]">Name</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Size</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Updated</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground min-w-0">Tags</th>
+                    <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap">Download</th>
+                    <th scope="col" className="px-2 py-1.5 pr-4 text-sm font-medium text-muted-foreground text-center whitespace-nowrap w-16 min-w-[4rem]">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-card">
+                  {filteredDocuments.map((doc) => (
+                    <tr key={doc.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/50 transition-colors">
+                      <td className="px-2 py-1.5 align-middle min-w-0 max-w-0 w-[22%]">
+                        <p className="font-medium text-sm truncate" title={doc.name}>{doc.name}</p>
+                        {doc.description && <p className="text-[13px] text-muted-foreground truncate" title={doc.description}>{doc.description}</p>}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle text-[13px] whitespace-nowrap hidden sm:table-cell">{formatFileSize(doc.size)}</td>
+                      <td className="px-2 py-1.5 align-middle text-[13px] text-muted-foreground whitespace-nowrap hidden sm:table-cell">{formatTimeAgo(doc.uploadedAt)}</td>
+                      <td className="px-2 py-1.5 align-middle min-w-0">
+                        <div className="flex flex-wrap gap-1 min-w-0">
+                          {doc.tags.slice(0, 3).map((tag, idx) => (
+                            <Badge key={idx} variant="outline" className="text-[11px] py-0 max-w-[6rem] truncate" title={tag}>{tag}</Badge>
+                          ))}
+                          {doc.tags.length > 3 && <span className="text-[13px] text-muted-foreground shrink-0">+{doc.tags.length - 3}</span>}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                        <Button size="icon" variant="outline" className="h-8 w-8 ml-5" onClick={() => handleDownload(doc)} title="Download">
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </td>
+                      <td className="px-2 py-1.5 pr-4 align-middle text-center whitespace-nowrap w-16 min-w-[4rem]">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 ml-5"><MoreHorizontal className="w-4 h-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleDownload(doc)}><Download className="w-4 h-4 mr-2" /> Download</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(doc)}><Trash2 className="w-4 h-4 mr-2" /> Delete</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div className={layout === "card" ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4"}>
               {filteredDocuments.map((doc) => (
                 <Card key={doc.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="p-3 sm:p-4 pb-2">
@@ -533,11 +620,11 @@ export default function KnowledgeBase() {
               <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-sm font-medium mb-2">Drop file here or click to browse</p>
               <p className="text-xs text-muted-foreground mb-4">
-                Supported formats: PDF, DOC, DOCX, XLSX, TXT (Max 10MB)
+                Supported formats: PDF, DOC, DOCX, XLSX, TXT, Audio (MP3, WAV, M4A), Video (MP4, MOV, AVI, WebM) (Max 25MB)
               </p>
               <Input
                 type="file"
-                accept=".pdf,.doc,.docx,.xlsx,.txt"
+                accept=".pdf,.doc,.docx,.xlsx,.txt,.mp3,.mp4,.wav,.m4a,.mov,.avi,.webm,.mpeg,.mpg,.mpga,.flv,.wmv"
                 onChange={(e) => handleUpload(e.target.files?.[0] || null)}
                 className="max-w-xs mx-auto"
               />

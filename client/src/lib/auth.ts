@@ -33,6 +33,9 @@ export const authStorage = {
 
   clearAuth(): void {
     localStorage.removeItem("auth");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("auth-cleared"));
+    }
   },
 
   /** Returns current access token for API Authorization header. */

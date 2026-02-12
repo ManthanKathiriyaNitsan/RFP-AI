@@ -55,6 +55,18 @@ export interface UsageData {
   featureUsage?: { feature: string; usage: number; credits: number }[];
   topUsers?: { name: string; avatar: string; credits: number; proposals: number; efficiency: number }[];
   hourlyPeaks?: { hour: string; usage: number }[];
+  /** Super admin folder view: list of admins to select */
+  adminList?: { id: number; name: string; email?: string | null; role: string }[];
+  /** Users in scope (admin + customers/collaborators) with role and usage */
+  usersInScope?: { userId: number; name: string; email?: string | null; role: string; roleLabel: string; credits: number; proposals: number; efficiency: number }[];
+  selectedAdminId?: number | null;
+}
+
+export interface AdminUsageParams {
+  dateRange?: string;
+  adminId?: number | null;
+  role?: string;
+  name?: string;
 }
 
 export interface CreditsData {
@@ -132,7 +144,7 @@ export interface ContentByCustomer {
 
 export interface ContentData {
   contentCategories?: { id: number; name: string; icon: string; count: number; color: string }[];
-  contentItems?: { id: number; title: string; category: string; status: string; usageCount: number; lastUsed: string; lastUpdated: string; author: string; tags: string[]; starred: boolean }[];
+  contentItems?: { id: number; title: string; category: string; status: string; usageCount: number; lastUsed: string; lastUpdated: string; author: string; createdBy?: string; tags: string[]; starred: boolean }[];
   /** Customers who have uploaded proposal documents; click to see their documents */
   contentByCustomer?: ContentByCustomer[];
 }
@@ -164,13 +176,32 @@ export interface KnowledgeBaseVersionsData {
   versions: KnowledgeBaseVersion[];
 }
 
+/** Single model in modelsByProvider (no provider field; provider comes from key) */
+export interface AIModelItem {
+  id: string;
+  name: string;
+  speed?: string;
+  quality?: string;
+  cost?: string;
+}
+
+export interface AIProviderItem {
+  id: string;
+  name: string;
+}
+
 export interface AIConfigData {
+  selectedProvider?: string;
+  selectedModel?: string;
   defaultModel?: string;
   creditsUsed?: string;
   defaultTemperature?: number;
   defaultMaxTokens?: number;
   systemPromptDefault?: string;
-  aiModels?: { id: string; name: string; provider: string; speed: string; quality: string; cost: string }[];
+  providers?: AIProviderItem[];
+  modelsByProvider?: Record<string, AIModelItem[]>;
+  apiKeys?: Record<string, string>;
+  aiModels?: { id: string; name: string; provider?: string; speed?: string; quality?: string; cost?: string }[];
   qualityMetrics?: { label: string; value: number; target: number }[];
   features?: { autoSuggest?: boolean; contentFiltering?: boolean; allowBulkGenerate?: boolean; allowToneSelection?: boolean };
 }
@@ -397,8 +428,13 @@ export function fetchAdminDashboard(): Promise<DashboardData> {
   return getAdminJson<DashboardData>("/api/v1/admin/dashboard");
 }
 
-export function fetchAdminUsage(params?: { dateRange?: string }): Promise<UsageData> {
-  return getAdminJson<UsageData>("/api/v1/admin/usage", params?.dateRange != null ? { dateRange: params.dateRange } : undefined);
+export function fetchAdminUsage(params?: AdminUsageParams): Promise<UsageData> {
+  const q: Record<string, string> = {};
+  if (params?.dateRange != null) q.dateRange = params.dateRange;
+  if (params?.adminId != null) q.adminId = String(params.adminId);
+  if (params?.role != null && params.role !== "") q.role = params.role;
+  if (params?.name != null && params.name !== "") q.name = params.name;
+  return getAdminJson<UsageData>("/api/v1/admin/usage", Object.keys(q).length ? q : undefined);
 }
 
 export function fetchAdminCredits(): Promise<CreditsData> {
@@ -571,29 +607,6 @@ export async function deleteAdminBillingPlan(id: string): Promise<boolean> {
   }
 }
 
-export async function assignPlanToCustomer(
-  userId: number,
-  planId: string
-): Promise<{ success: boolean; message?: string }> {
-  try {
-    const token = authStorage.getAccessToken();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(getApiUrl("/api/v1/admin/billing/assign"), {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ userId, planId }),
-      credentials: "include",
-    });
-    const data = await res.json().catch(() => ({}));
-    const message = typeof data?.message === "string" ? data.message : undefined;
-    if (res.ok) return { success: true, message };
-    return { success: false, message: message || `Request failed (${res.status})` };
-  } catch (e) {
-    return { success: false, message: e instanceof Error ? e.message : "Network error" };
-  }
-}
-
 export async function fetchAdminInvoices(): Promise<InvoicesData> {
   try {
     return await getAdminJson<InvoicesData>("/api/v1/admin/billing/invoices");
@@ -634,6 +647,114 @@ export function fetchAdminAnalytics(params?: { dateRange?: string }): Promise<An
 
 export function fetchAdminOptions(): Promise<AdminOptionsData> {
   return getAdminJson<AdminOptionsData>("/api/v1/admin/options");
+}
+
+/** Normalize raw option to { value, label } for dropdowns. */
+function normalizeOptionItem(raw: unknown): OptionItem | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const value = typeof o.value === "string" ? o.value : typeof o.name === "string" ? o.name : "";
+  const label = typeof o.label === "string" ? o.label : typeof o.name === "string" ? o.name : String(value || "");
+  if (!value && !label) return null;
+  return { value: value || label, label: label || value };
+}
+
+/** Public options for proposal forms (category + industry dropdowns). No auth required. */
+export async function fetchProposalOptions(): Promise<{ proposalCategories: OptionItem[]; industries: OptionItem[] }> {
+  // Use same-origin URL when in browser so the request hits the server that served the page (e.g. Node on 5001).
+  const url =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/v1/options`
+      : getApiUrl("/api/v1/options");
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) return { proposalCategories: [], industries: [] };
+  const data = (await res.json()) as { proposalCategories?: unknown[]; industries?: unknown[]; categories?: unknown[] };
+  const toOptions = (arr: unknown[] | undefined): OptionItem[] =>
+    Array.isArray(arr) ? arr.map(normalizeOptionItem).filter((x): x is OptionItem => x != null) : [];
+  return {
+    proposalCategories: toOptions(data.proposalCategories ?? data.categories),
+    industries: toOptions(data.industries),
+  };
+}
+
+export async function addProposalCategory(item: { value: string; label: string }): Promise<OptionItem | null> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl("/api/v1/admin/options/categories"), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(item),
+    credentials: "include",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as OptionItem;
+}
+
+export async function updateProposalCategory(value: string, label: string): Promise<OptionItem | null> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl(`/api/v1/admin/options/categories/${encodeURIComponent(value)}`), {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ label }),
+    credentials: "include",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as OptionItem;
+}
+
+export async function deleteProposalCategory(value: string): Promise<boolean> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl(`/api/v1/admin/options/categories/${encodeURIComponent(value)}`), {
+    method: "DELETE",
+    headers,
+    credentials: "include",
+  });
+  return res.status === 204;
+}
+
+export async function addIndustry(item: { value: string; label: string }): Promise<OptionItem | null> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl("/api/v1/admin/options/industries"), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(item),
+    credentials: "include",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as OptionItem;
+}
+
+export async function updateIndustry(value: string, label: string): Promise<OptionItem | null> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl(`/api/v1/admin/options/industries/${encodeURIComponent(value)}`), {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ label }),
+    credentials: "include",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as OptionItem;
+}
+
+export async function deleteIndustry(value: string): Promise<boolean> {
+  const token = authStorage.getAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(getApiUrl(`/api/v1/admin/options/industries/${encodeURIComponent(value)}`), {
+    method: "DELETE",
+    headers,
+    credentials: "include",
+  });
+  return res.status === 204;
 }
 
 export function fetchAdminSidebar(): Promise<AdminSidebarData> {

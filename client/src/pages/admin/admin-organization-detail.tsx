@@ -44,10 +44,13 @@ import {
 import { useConfirm } from "@/hooks/use-confirm";
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
 
-function useOrgId(): number | null {
+function useOrgId(): number | string | null {
   const [, params] = useRoute("/admin/organizations/:id");
-  const id = params?.id != null ? parseInt(params.id, 10) : NaN;
-  return Number.isNaN(id) ? null : id;
+  const rawId = params?.id;
+  if (rawId == null || rawId === "") return null;
+  const n = parseInt(rawId, 10);
+  if (String(n) === rawId) return n;
+  return rawId;
 }
 
 export default function AdminOrganizationDetail() {

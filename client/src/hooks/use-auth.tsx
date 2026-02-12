@@ -120,8 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onRefreshed = () => setAuth(authStorage.getAuth());
+    const onCleared = () => setAuth({ user: null, currentRole: "customer" });
     window.addEventListener("auth-refreshed", onRefreshed);
-    return () => window.removeEventListener("auth-refreshed", onRefreshed);
+    window.addEventListener("auth-cleared", onCleared);
+    return () => {
+      window.removeEventListener("auth-refreshed", onRefreshed);
+      window.removeEventListener("auth-cleared", onCleared);
+    };
   }, []);
 
   // Keep full-page loader until session API and role layout API have completed (full response), then show app.

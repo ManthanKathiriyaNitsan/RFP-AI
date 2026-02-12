@@ -7,7 +7,7 @@ import { fetchQuestions, fetchAnswers, addCollaboration, parseRfpUpload, createQ
 import {
   Plus, Search, FileText, Upload, Edit, Trash2, MoreHorizontal,
   Calendar, Filter, Download, FileUp, CheckCircle, Clock, AlertCircle, Users, Link2, UserPlus,
-  Eye, FileEdit, MessageSquare, Sparkles
+  Eye, FileEdit, MessageSquare, Sparkles, LayoutGrid, List, LayoutDashboard
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,9 @@ import {
   downloadProposalJson,
 } from "@/lib/export-proposal";
 import { COLLABORATOR_ROLE_OPTIONS, getPermissionsForRole, DEFAULT_COLLABORATOR_PERMISSIONS } from "@/lib/collaborator-roles";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+type LayoutMode = "card" | "list" | "grid";
 
 export default function RFPProjects() {
   const { user } = useAuth();
@@ -54,6 +57,7 @@ export default function RFPProjects() {
   const isMobile = useIsMobile();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [layout, setLayout] = useState<LayoutMode>("list");
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<any>(null);
@@ -355,7 +359,7 @@ export default function RFPProjects() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center">
             <div className="search-box flex-1">
               <Search className="search-box-icon" />
               <Input
@@ -376,6 +380,22 @@ export default function RFPProjects() {
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
+            <ToggleGroup
+              type="single"
+              value={layout}
+              onValueChange={(v) => v && setLayout(v as LayoutMode)}
+              className="border rounded-md p-0.5 bg-muted/30 shrink-0"
+            >
+              <ToggleGroupItem value="card" aria-label="Card layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                <LayoutDashboard className="w-4 h-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="List layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                <List className="w-4 h-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="grid" aria-label="Grid layout" className="px-2.5 py-1.5 data-[state=on]:bg-background data-[state=on]:shadow-sm">
+                <LayoutGrid className="w-4 h-4" />
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </CardContent>
       </Card>
@@ -407,8 +427,72 @@ export default function RFPProjects() {
             )}
           </CardContent>
         </Card>
+      ) : layout === "list" ? (
+        <div className="rounded-lg border overflow-hidden bg-card shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse text-left">
+            <thead>
+              <tr className="border-b bg-muted">
+                <th scope="col" className="pl-4 pr-2 py-1.5 text-sm font-medium text-muted-foreground w-[25%] min-w-0">Project</th>
+                <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap">Status</th>
+                <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Questions</th>
+                <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Progress</th>
+                <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground min-w-0 hidden sm:table-cell">Timeline</th>
+                <th scope="col" className="px-2 py-1.5 text-sm font-medium text-muted-foreground whitespace-nowrap">View</th>
+                <th scope="col" className="px-2 py-1.5 pr-4 text-sm font-medium text-muted-foreground text-center whitespace-nowrap w-16 min-w-[4rem]">Action</th>
+              </tr>
+            </thead>
+            <tbody className="bg-card">
+              {filteredProjects.map((project: any) => {
+                const progress = project.questionCount ? Math.round(((project.answeredCount ?? 0) / project.questionCount) * 100) : 0;
+                return (
+                  <tr key={project.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/50 transition-colors">
+                    <td className="pl-4 pr-2 py-1.5 align-middle min-w-0 max-w-0 w-[25%]">
+                      <p className="font-medium text-sm truncate" title={project.title}>{project.title}</p>
+                      <p className="text-[13px] text-muted-foreground truncate" title={(project as any).clientName ?? (project as any).client ?? ""}>{(project as any).clientName ?? (project as any).client ?? "—"}</p>
+                    </td>
+                    <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                      <Badge variant="outline" className={`${getStatusBadgeClass(project.status)} text-[11px] whitespace-nowrap`}>
+                        {getStatusLabel(project.status)}
+                      </Badge>
+                    </td>
+                    <td className="px-2 py-1.5 align-middle text-sm whitespace-nowrap hidden sm:table-cell">{project.answeredCount ?? 0} / {project.questionCount ?? 0}</td>
+                    <td className="px-2 py-1.5 align-middle hidden sm:table-cell">
+                      <div className="flex items-center gap-1">
+                        <Progress value={progress} className="h-1.5 w-14" />
+                        <span className="text-[13px]">{progress}%</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 align-middle text-[13px] text-muted-foreground truncate min-w-0 max-w-[8rem] hidden sm:table-cell" title={project.timeline ?? ""}>{project.timeline ?? "—"}</td>
+                    <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                      <Button size="icon" variant="outline" className="h-8 w-8 ml-2" onClick={() => navigate(`/rfp/${project.id}`)} title="View">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </td>
+                    <td className="px-2 py-1.5 pr-4 align-middle text-center whitespace-nowrap w-16 min-w-[4rem]">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 ml-2">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => navigate(`/rfp/${project.id}`)}><FileText className="w-4 h-4 mr-2" /> View Details</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openInviteDialog(project)}><UserPlus className="w-4 h-4 mr-2" /> Invite collaborator</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate(`/rfp/${project.id}?edit=true`)}><Edit className="w-4 h-4 mr-2" /> Edit</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setExportDialogProject(project)}><Download className="w-4 h-4 mr-2" /> Export</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(project)}><Trash2 className="w-4 h-4 mr-2" /> Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:gap-6">
+        <div className={layout === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6" : "grid grid-cols-1 gap-4 sm:gap-6"}>
           {filteredProjects.map((project: any) => {
             const daysUntilDeadline = Math.ceil(
               (new Date(project.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
@@ -522,11 +606,11 @@ export default function RFPProjects() {
               <FileUp className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-sm font-medium mb-2">Drop file here or click to browse</p>
               <p className="text-xs text-muted-foreground mb-4">
-                Supported formats: PDF, DOC, DOCX (Max 10MB)
+                Supported formats: PDF, DOC, DOCX, Audio (MP3, WAV, M4A), Video (MP4, MOV, AVI, WebM) (Max 25MB)
               </p>
               <Input
                 type="file"
-                accept=".pdf,.doc,.docx"
+                accept=".pdf,.doc,.docx,.mp3,.mp4,.wav,.m4a,.mov,.avi,.webm,.mpeg,.mpg,.mpga,.flv,.wmv"
                 disabled={importing}
                 onChange={(e) => {
                   const f = e.target.files?.[0] || null;

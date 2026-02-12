@@ -31,6 +31,23 @@ function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+/**
+ * Fetch with auth. On 401, attempts token refresh and retries once.
+ * Use for API calls that bypass the default queryFn (e.g. admin sidebar, notifications).
+ */
+export async function authFetch(url: string, init?: RequestInit): Promise<Response> {
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string>),
+    ...getAuthHeaders(),
+  };
+  let res = await fetch(url, { ...init, credentials: "include", headers });
+  if (res.status === 401 && (await tryRefreshToken())) {
+    Object.assign(headers, getAuthHeaders());
+    res = await fetch(url, { ...init, credentials: "include", headers });
+  }
+  return res;
+}
+
 /** Refresh response shape (backend returns expires_in in seconds). */
 export type RefreshResponse = Parameters<typeof authStorage.updateFromRefresh>[0] & {
   expires_in?: number;

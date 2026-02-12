@@ -293,35 +293,6 @@ export default function AdminSecurity() {
         </Card>
       </div>
 
-      {securityAlerts.some(a => a.type === 'warning') && (
-        <div className="p-3 sm:p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
-          <div className={`flex ${isMobile ? 'flex-col' : 'items-center'} gap-3`}>
-            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-amber dark:text-amber shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-amber dark:text-amber">Security Alert</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  {securityAlerts.find(a => a.type === "warning")?.message ?? "Security attention required."}
-                </p>
-              </div>
-            </div>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              className="border-amber text-amber hover:bg-amber-light w-full sm:w-auto shrink-0"
-              onClick={() => {
-                toast({
-                  title: "Review users",
-                  description: "Opening user management to review 2FA status...",
-                });
-              }}
-            >
-              Review Users
-            </Button>
-          </div>
-        </div>
-      )}
-
       <Tabs defaultValue="settings" className="w-full">
         <TabsList className="bg-muted/50 overflow-x-auto overflow-y-hidden w-full sm:w-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           <TabsTrigger value="settings" className="data-[state=active]:bg-background text-xs sm:text-sm">
@@ -343,41 +314,25 @@ export default function AdminSecurity() {
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               <div className="space-y-3 sm:space-y-4">
-                {securitySettings.map((setting) => (
-                  <div key={setting.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3" data-testid={`setting-${setting.id}`}>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm font-medium">{setting.name}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">{setting.description}</p>
+                {securitySettings
+                  .filter(
+                    (setting) =>
+                      !/two-factor|2fa|sso|saml|single sign-on|ip whitelist/i.test(setting.name ?? "")
+                  )
+                  .map((setting) => (
+                    <div key={setting.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3" data-testid={`setting-${setting.id}`}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-medium">{setting.name}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground">{setting.description}</p>
+                      </div>
+                      <Switch
+                        checked={settingEnabled(setting.id)}
+                        disabled={savingSettingId === setting.id}
+                        onCheckedChange={(checked) => handleToggleSetting(setting.id, checked)}
+                        className="shrink-0"
+                      />
                     </div>
-                    <Switch
-                      checked={settingEnabled(setting.id)}
-                      disabled={savingSettingId === setting.id}
-                      onCheckedChange={(checked) => handleToggleSetting(setting.id, checked)}
-                      className="shrink-0"
-                    />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base">Two-factor authentication</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Require 2FA for all users. When enabled, users must set up 2FA to access the platform.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm font-medium">Require 2FA for all users</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">When on, every user must enable two-factor authentication.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch checked={requireTwoFactor} onCheckedChange={setRequireTwoFactor} className="shrink-0" />
-                  <Button size="sm" onClick={handleSave2FA} disabled={saving2FA}>
-                    {saving2FA ? "Saving…" : "Save"}
-                  </Button>
-                </div>
+                  ))}
               </div>
             </CardContent>
           </Card>
@@ -471,93 +426,6 @@ export default function AdminSecurity() {
               <Button size="sm" onClick={handleSaveSession} disabled={savingSession}>
                 <Save className="w-4 h-4 mr-2" />
                 {savingSession ? "Saving…" : "Save session settings"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border shadow-sm">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <Network className="w-4 h-4" />
-                IP access control
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Allowlist or denylist IPs/CIDRs. When enabled, only allowlisted IPs can access (or denylisted are blocked).</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm font-medium">Restrict access by IP</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">When on, only IPs in the allowlist can log in; denylist blocks specific IPs regardless.</p>
-                </div>
-                <Switch checked={ipRestrictionEnabled} onCheckedChange={setIpRestrictionEnabled} className="shrink-0" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs sm:text-sm">Allowlist (allowed IPs/CIDRs)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="e.g. 192.168.1.0/24"
-                      value={newAllowIp}
-                      onChange={(e) => setNewAllowIp(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAllowIp())}
-                    />
-                    <Button type="button" variant="outline" size="icon" onClick={addAllowIp}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <ul className="space-y-1 max-h-32 overflow-y-auto">
-                    {ipAllowlist.map((ip) => (
-                      <li key={ip} className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/50 text-xs">
-                        <span className="font-mono">{ip}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-destructive hover:text-destructive"
-                          onClick={() => setIpAllowlist((prev) => prev.filter((x) => x !== ip))}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </li>
-                    ))}
-                    {ipAllowlist.length === 0 && <p className="text-[10px] text-muted-foreground py-1">No entries. Add IPs or CIDRs (e.g. 10.0.0.0/24).</p>}
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs sm:text-sm">Denylist (blocked IPs/CIDRs)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="e.g. 203.0.113.50"
-                      value={newDenyIp}
-                      onChange={(e) => setNewDenyIp(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addDenyIp())}
-                    />
-                    <Button type="button" variant="outline" size="icon" onClick={addDenyIp}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <ul className="space-y-1 max-h-32 overflow-y-auto">
-                    {ipDenylist.map((ip) => (
-                      <li key={ip} className="flex items-center justify-between py-1.5 px-2 rounded bg-muted/50 text-xs">
-                        <span className="font-mono">{ip}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-destructive hover:text-destructive"
-                          onClick={() => setIpDenylist((prev) => prev.filter((x) => x !== ip))}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </li>
-                    ))}
-                    {ipDenylist.length === 0 && <p className="text-[10px] text-muted-foreground py-1">No entries.</p>}
-                  </ul>
-                </div>
-              </div>
-              <Button size="sm" onClick={handleSaveIp} disabled={savingIp}>
-                <Save className="w-4 h-4 mr-2" />
-                {savingIp ? "Saving…" : "Save IP access control"}
               </Button>
             </CardContent>
           </Card>

@@ -95,6 +95,7 @@ import { getLowCreditsToastOptions, LOW_CREDIT_WARNING_THRESHOLD, showCreditAler
 import { useCollaboratorRoleOptions } from "@/hooks/use-collaborator-role-options";
 import { ProposalDiscussionTab } from "@/components/customer/proposal-discussion";
 import { fetchProposalFiles, fetchProposalFileBlob, type ProposalFileApi } from "@/api/proposals";
+import { fetchProposalOptions } from "@/api/admin-data";
 import { ProposalQuillEditor } from "@/components/editor/ProposalQuillEditor";
 
 /** Reveals text letter-by-letter with a blinking cursor, matching left-panel paragraph style. */
@@ -223,6 +224,11 @@ export default function RFPDetail() {
   const { data: collaborationsData = [] } = useCollaborations(proposalId);
   const deleteCollaborationMutation = useDeleteCollaboration(proposalId ?? 0);
   const { data: myCollaboration } = useMyCollaboration(isCollaborator ? proposalId : null);
+  const { data: proposalOptions } = useQuery({
+    queryKey: ["proposal-options"],
+    queryFn: fetchProposalOptions,
+  });
+  const industryOptions = proposalOptions?.industries ?? [];
   const { data: activityData } = useQuery({
     queryKey: [...proposalKeys.detail(proposalId ?? 0), "activity"],
     queryFn: () => fetchProposalActivity(proposalId!),
@@ -1457,11 +1463,24 @@ export default function RFPDetail() {
                 <div>
                   <Label>Industry</Label>
                   {isEditing ? (
-                    <Input
-                      value={formData.industry}
-                      onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                      className="mt-1.5"
-                    />
+                    <Select
+                      value={formData.industry || ""}
+                      onValueChange={(v) => setFormData({ ...formData, industry: v })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue placeholder="Select industry" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[
+                          ...industryOptions,
+                          ...(formData.industry && !industryOptions.some((i) => i.value === formData.industry)
+                            ? [{ value: formData.industry, label: formData.industry }]
+                            : []),
+                        ].map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <p className="mt-1.5">{formData.industry || "Not specified"}</p>
                   )}

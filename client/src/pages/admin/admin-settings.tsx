@@ -50,7 +50,6 @@ export default function AdminSettings() {
   const organization = data?.organization ?? { companyName: "", industry: "", description: "", website: "", supportEmail: "" };
   const billing = data?.billing ?? { planName: "", planPrice: "", billingInterval: "" };
   const defaultTheme = (data as { defaultTheme?: string })?.defaultTheme ?? colorPresets[0]?.name ?? "Teal";
-  const settingsIndustries = optionsData?.settingsIndustries ?? [];
   const [selectedColor, setSelectedColor] = useState("");
   const effectiveColor = selectedColor || defaultTheme;
   const selectedPreset = colorPresets.find((p) => p.name === effectiveColor) ?? colorPresets[0];
@@ -128,7 +127,6 @@ export default function AdminSettings() {
 
   // Organization Details (Settings → Organization tab) – controlled form for Save
   const [orgCompanyName, setOrgCompanyName] = useState(organization.companyName ?? "");
-  const [orgIndustry, setOrgIndustry] = useState(organization.industry ?? settingsIndustries[0]?.value ?? "");
   const [orgDescription, setOrgDescription] = useState(organization.description ?? "");
   const [orgWebsite, setOrgWebsite] = useState(organization.website ?? "");
   const [orgSupportEmail, setOrgSupportEmail] = useState(organization.supportEmail ?? "");
@@ -163,12 +161,11 @@ export default function AdminSettings() {
     const o = data?.organization;
     if (o) {
       setOrgCompanyName(o.companyName ?? "");
-      setOrgIndustry(o.industry ?? settingsIndustries[0]?.value ?? "");
       setOrgDescription(o.description ?? "");
       setOrgWebsite(o.website ?? "");
       setOrgSupportEmail(o.supportEmail ?? "");
     }
-  }, [data?.organization, settingsIndustries]);
+  }, [data?.organization]);
 
   const handleUploadLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -287,7 +284,7 @@ export default function AdminSettings() {
               const updatedSettings = await updateAdminSettings({
                 organization: {
                   companyName: orgCompanyName,
-                  industry: orgIndustry,
+                  industry: organization.industry ?? "",
                   description: orgDescription,
                   website: orgWebsite,
                   supportEmail: orgSupportEmail,
@@ -392,24 +389,9 @@ export default function AdminSettings() {
               <CardDescription className="text-xs sm:text-sm">Basic information about your company</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 p-4 sm:p-6 pt-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <Label className="text-xs sm:text-sm">Company Name</Label>
-                  <Input className="mt-1.5 text-sm sm:text-base" value={orgCompanyName} onChange={(e) => setOrgCompanyName(e.target.value)} data-testid="input-company-name" />
-                </div>
-                <div>
-                  <Label className="text-xs sm:text-sm">Industry</Label>
-                  <Select value={orgIndustry} onValueChange={setOrgIndustry}>
-                    <SelectTrigger className="mt-1.5 text-sm sm:text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {settingsIndustries.map((opt: { value: string; label: string }) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label className="text-xs sm:text-sm">Company Name</Label>
+                <Input className="mt-1.5 text-sm sm:text-base" value={orgCompanyName} onChange={(e) => setOrgCompanyName(e.target.value)} data-testid="input-company-name" />
               </div>
               <div>
                 <Label className="text-xs sm:text-sm">Company Description</Label>

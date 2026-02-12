@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Database,
   Receipt,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useBranding } from "@/contexts/BrandingContext";
-import { fetchAdminSidebar } from "@/api/admin-data";
+import { useAdminSelectedOrgId } from "@/contexts/AdminSelectedOrgContext";
+import { fetchAdminSidebar, fetchAdminOrganizations } from "@/api/admin-data";
 
 const SIDEBAR_ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -52,6 +54,7 @@ const SIDEBAR_ICON_MAP: Record<string, LucideIcon> = {
   ShieldCheck,
   Database,
   Receipt,
+  Tag,
 };
 
 interface NavItem {
@@ -73,6 +76,8 @@ interface AdminSidebarProps {
 }
 
 const SUPER_ADMIN_ONLY_HREFS = new Set(["/admin/ai-config", "/admin/subscription-billing"]);
+/** Hidden from both admin and super_admin (no nav link). */
+const HIDDEN_NAV_HREFS = new Set(["/admin/integrations"]);
 
 export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) {
   const [location] = useLocation();
@@ -83,12 +88,29 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navItemRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
 
+  const adminSelectedOrgId = useAdminSelectedOrgId();
   const { data: sidebarData } = useQuery({
     queryKey: ["admin", "sidebar"],
     queryFn: fetchAdminSidebar,
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   });
+  const { data: orgsList = [] } = useQuery({
+    queryKey: ["admin", "organizations"],
+    queryFn: fetchAdminOrganizations,
+  });
+  const adminOrgDisplayName = useMemo(() => {
+    const organizations = Array.isArray(orgsList) ? orgsList : [];
+    if (organizations.length === 0) return null;
+    const id = adminSelectedOrgId;
+    const org = id != null ? organizations.find((o) => String(o.id) === String(id)) : null;
+    const current = org ?? organizations[0];
+    const raw = current?.name ?? null;
+    if (raw == null || typeof raw !== "string") return "RFP-AI";
+    const trimmed = String(raw).trim();
+    if (!trimmed || /<built-in method/i.test(trimmed)) return "RFP-AI";
+    return trimmed;
+  }, [orgsList, adminSelectedOrgId]);
   const defaultNavGroups: NavGroup[] = useMemo(
     () => [
       {
@@ -124,6 +146,7 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
         items: [
           { href: "/admin/security", label: "Security", icon: Shield },
           { href: "/admin/audit-logs", label: "Audit Logs", icon: ScrollText },
+          { href: "/admin/proposal-options", label: "Proposal Options", icon: Tag },
           { href: "/admin/integrations", label: "Integrations", icon: Zap },
           { href: "/admin/settings", label: "Settings", icon: Settings },
         ],
@@ -164,8 +187,12 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
         return item;
       }),
     }));
-    if (isSuperAdmin) return base;
-    return base.map((group) => ({
+    const withoutHidden = base.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !HIDDEN_NAV_HREFS.has(item.href)),
+    }));
+    if (isSuperAdmin) return withoutHidden;
+    return withoutHidden.map((group) => ({
       ...group,
       items: group.items.filter((item) => !SUPER_ADMIN_ONLY_HREFS.has(item.href)),
     }));
@@ -277,7 +304,7 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
               </div>
             )}
             <div className="flex flex-col">
-              <span className="text-lg font-bold theme-gradient-text">RFP AI</span>
+              <span className="text-lg font-bold theme-gradient-text">{adminOrgDisplayName ?? "RFP-AI"}</span>
               <span className="text-[10px] text-muted-foreground font-medium -mt-1">Admin Console</span>
             </div>
           </Link>
