@@ -47,12 +47,13 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await registerApi({ name, email, password });
+      const response = await registerApi({ name, email, password });
       toast({
-        title: "Account created",
-        description: "You can now sign in with your email and password.",
+        title: "Check your email",
+        description: response.message || "Please check your email to verify your account and complete registration.",
       });
-      navigate("/auth");
+      // Navigate to a verification pending page or show success message
+      navigate(`/verify-email-pending?email=${encodeURIComponent(email)}`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Registration failed";
       const statusMatch = msg.match(/^(\d{3}):\s*/);

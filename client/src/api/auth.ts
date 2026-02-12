@@ -15,6 +15,27 @@ export interface RegisterRequest {
 
 export interface RegisterResponse {
   message?: string;
+  email?: string;
+}
+
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface VerifyEmailResponse {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: any;
+}
+
+export interface ResendVerificationRequest {
+  email: string;
+}
+
+export interface ResendVerificationResponse {
+  message?: string;
 }
 
 export interface ForgotPasswordRequest {
@@ -286,5 +307,72 @@ export async function resetPassword(payload: ResetPasswordRequest): Promise<Rese
           : data.message ?? text ?? res.statusText;
     throw new Error(`${res.status}: ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
   }
+  return data;
+}
+
+/**
+ * Verify email address using token from verification email.
+ * POST /api/v1/auth/verify-email
+ * Body: { token: string }
+ * Success: 200 with login tokens. Error: 400/401 with detail/message.
+ */
+export async function verifyEmail(payload: VerifyEmailRequest): Promise<VerifyEmailResponse> {
+  const { token } = payload;
+  if (!(token && token.trim())) throw new Error("Verification token is required.");
+  
+  const res = await fetch(getApiUrl("/api/v1/auth/verify-email"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: token.trim() }),
+    credentials: "include",
+  });
+  
+  const text = await res.text();
+  let data: VerifyEmailResponse & { detail?: string; message?: string } = {} as any;
+  try {
+    if (text) data = JSON.parse(text) as VerifyEmailResponse & { detail?: string; message?: string };
+  } catch {
+    // non-JSON response
+  }
+  
+  if (!res.ok) {
+    const msg = data.detail ?? data.message ?? text ?? res.statusText;
+    throw new Error(`${res.status}: ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
+  }
+  
+  return data;
+}
+
+/**
+ * Resend email verification link.
+ * POST /api/v1/auth/resend-verification
+ * Body: { email: string }
+ * Success: 200. Does not reveal if email exists for security.
+ */
+export async function resendVerification(payload: ResendVerificationRequest): Promise<ResendVerificationResponse> {
+  const email = (payload.email || "").trim();
+  if (!email) throw new Error("Email is required.");
+  if (!isValidEmail(email)) throw new Error("Please enter a valid email address.");
+  
+  const res = await fetch(getApiUrl("/api/v1/auth/resend-verification"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+    credentials: "include",
+  });
+  
+  const text = await res.text();
+  let data: ResendVerificationResponse & { detail?: string; message?: string } = {};
+  try {
+    if (text) data = JSON.parse(text) as ResendVerificationResponse & { detail?: string; message?: string };
+  } catch {
+    // non-JSON response
+  }
+  
+  if (!res.ok) {
+    const msg = data.detail ?? data.message ?? text ?? res.statusText;
+    throw new Error(`${res.status}: ${typeof msg === "string" ? msg : JSON.stringify(msg)}`);
+  }
+  
   return data;
 }

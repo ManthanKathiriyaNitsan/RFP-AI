@@ -429,6 +429,83 @@ export default function AdminSecurity() {
               </Button>
             </CardContent>
           </Card>
+
+          <Card className="border shadow-sm">
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <Network className="w-4 h-4" />
+                Allow IP listing
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Restrict access by IP allowlist and denylist.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium">Enable IP restriction</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Only allowlisted IPs can access (denylist takes precedence).</p>
+                </div>
+                <Switch checked={ipRestrictionEnabled} onCheckedChange={setIpRestrictionEnabled} className="shrink-0" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs sm:text-sm">Allowlist (allowed IPs)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="e.g. 192.168.1.1 or 10.0.0.0/24"
+                      value={newAllowIp}
+                      onChange={(e) => setNewAllowIp(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addAllowIp()}
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={addAllowIp} title="Add IP">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {ipAllowlist.length > 0 && (
+                    <ul className="flex flex-wrap gap-1.5 mt-1.5">
+                      {ipAllowlist.map((ip) => (
+                        <li key={ip} className="inline-flex items-center gap-1 rounded-md bg-muted/70 px-2 py-1 text-xs">
+                          {ip}
+                          <button type="button" onClick={() => setIpAllowlist((prev) => prev.filter((x) => x !== ip))} className="hover:text-destructive" aria-label={`Remove ${ip}`}>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs sm:text-sm">Denylist (blocked IPs)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="e.g. 192.168.1.100"
+                      value={newDenyIp}
+                      onChange={(e) => setNewDenyIp(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addDenyIp()}
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={addDenyIp} title="Add IP">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {ipDenylist.length > 0 && (
+                    <ul className="flex flex-wrap gap-1.5 mt-1.5">
+                      {ipDenylist.map((ip) => (
+                        <li key={ip} className="inline-flex items-center gap-1 rounded-md bg-muted/70 px-2 py-1 text-xs">
+                          {ip}
+                          <button type="button" onClick={() => setIpDenylist((prev) => prev.filter((x) => x !== ip))} className="hover:text-destructive" aria-label={`Remove ${ip}`}>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <Button size="sm" onClick={handleSaveIp} disabled={savingIp}>
+                <Save className="w-4 h-4 mr-2" />
+                {savingIp ? "Saving…" : "Save IP access control"}
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="activity" className="mt-4 sm:mt-6">
