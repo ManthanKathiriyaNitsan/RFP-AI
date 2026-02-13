@@ -5,6 +5,9 @@ node_modules/
 dist/
 dist-ssr/
 public/
+# Allow client public assets (favicon etc.) to be committed for Vercel deploy
+!client/public/
+!client/public/**
 .vercel/
 
 # Local environment variables

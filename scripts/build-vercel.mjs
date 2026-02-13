@@ -6,7 +6,7 @@
  * - functions/server.func/ = Express app (run as serverless, not served as static)
  * - config.json = routes: filesystem first, then fallback to server
  */
-import { cpSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
@@ -16,6 +16,14 @@ const root = join(__dirname, "..");
 // 1. Run vite build and esbuild (same as npm run build, but we don't copy to public/)
 import { execSync } from "child_process";
 execSync("npx vite build", { cwd: root, stdio: "inherit" });
+
+// Ensure favicon is in static output (client/public/ may be gitignored so not in Vercel clone)
+const faviconSrc = join(root, "client", "src", "assets", "icons8-ai-94.png");
+const distPublic = join(root, "dist", "public");
+if (existsSync(faviconSrc)) {
+  mkdirSync(distPublic, { recursive: true });
+  cpSync(faviconSrc, join(distPublic, "favicon.png"));
+}
 execSync(
   "npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
   { cwd: root, stdio: "inherit" }
