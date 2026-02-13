@@ -361,16 +361,16 @@ export async function fetchBranding(organizationId?: number | string): Promise<B
   const data = (await res.json()) as BrandingData;
   return {
     primaryLogoUrl: data.primaryLogoUrl ?? null,
-    faviconUrl: data.faviconUrl ?? null,
+    faviconUrl: null,
     colorTheme: data.colorTheme ?? "Teal",
     colorPresets: Array.isArray(data.colorPresets) ? data.colorPresets : [],
   };
 }
 
-/** Upload logo or favicon for an org; returns the stored URL (data URL in stub). */
+/** Upload logo for an org; returns the stored URL (data URL in stub). Favicon is fixed to default app icon. */
 export async function uploadOrgBrandingAsset(
   organizationId: number | string,
-  type: "logo" | "favicon",
+  type: "logo",
   dataUrl: string
 ): Promise<string | null> {
   try {
@@ -380,7 +380,7 @@ export async function uploadOrgBrandingAsset(
     const res = await fetch(getApiUrl(`/api/v1/admin/organizations/${encodeURIComponent(String(organizationId))}/branding/upload`), {
       method: "POST",
       headers,
-      body: JSON.stringify({ type, data: dataUrl }),
+      body: JSON.stringify({ type: "logo", data: dataUrl }),
       credentials: "include",
     });
     if (!res.ok) return null;

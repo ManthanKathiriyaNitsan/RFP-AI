@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { fetchBranding, DEFAULT_COLOR_PRESETS, type BrandingData, type BrandingColorPreset } from "@/api/admin-data";
 import { useOrganizationId } from "@/hooks/use-organization-id";
 import { useAuth } from "@/hooks/use-auth";
@@ -96,7 +96,6 @@ export function BrandingProvider({
 
   const [data, setData] = useState<BrandingData>(DEFAULT_BRANDING);
   const [isLoading, setIsLoading] = useState(true);
-  const faviconEl = useRef<HTMLLinkElement | null>(null);
 
   const refetch = useCallback(async (overrideOrgId?: number | string) => {
     setIsLoading(true);
@@ -156,23 +155,7 @@ export function BrandingProvider({
     } else {
       BRANDING_CSS_VARS.forEach((name) => root.style.removeProperty(name));
     }
-
-    // Favicon
-    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"][data-branding]');
-    if (data.faviconUrl) {
-      if (!link) {
-        link = document.createElement("link");
-        link.rel = "icon";
-        link.setAttribute("data-branding", "true");
-        document.head.appendChild(link);
-      }
-      link.href = data.faviconUrl;
-      faviconEl.current = link;
-    } else if (link) {
-      link.remove();
-      faviconEl.current = null;
-    }
-  }, [data.colorTheme, data.colorPresets, data.faviconUrl]);
+  }, [data.colorTheme, data.colorPresets]);
 
   const value: BrandingContextValue = {
     ...data,
