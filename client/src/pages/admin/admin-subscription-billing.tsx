@@ -11,6 +11,7 @@ import {
   fetchAdminInvoices,
   fetchAdminApiQuota,
   updateAdminApiQuota,
+  fetchAdminAIConfig,
   type BillingPlanItem,
 } from "@/api/admin-data";
 import {
@@ -45,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 
 export default function AdminSubscriptionBilling() {
   const qc = useQueryClient();
@@ -53,20 +55,34 @@ export default function AdminSubscriptionBilling() {
   const { currentRole } = useAuth();
   const isSuperAdmin = (currentRole ?? "").toLowerCase() === "super_admin";
 
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
+
   const { data: plansData, isError, error, refetch } = useQuery({ queryKey: ["admin", "billing-plans"], queryFn: fetchAdminBillingPlans });
   const { data: invoicesData } = useQuery({ queryKey: ["admin", "billing-invoices"], queryFn: fetchAdminInvoices });
   const { data: quotaData } = useQuery({ queryKey: ["admin", "api-quota"], queryFn: fetchAdminApiQuota });
+  const { data: aiConfigData } = useQuery({
+    queryKey: ["admin", "ai-config"],
+    queryFn: fetchAdminAIConfig,
+    enabled: isSuperAdmin,
+  });
 
   const plans = plansData?.plans ?? [];
   const invoices = invoicesData?.invoices ?? [];
   const limitPerMonth = quotaData?.limitPerMonth ?? 10000;
   const usedThisMonth = quotaData?.usedThisMonth ?? 0;
 
+  const providers = aiConfigData?.providers ?? [];
+  const modelsByProvider = aiConfigData?.modelsByProvider ?? {};
+  const selectedProviderId = aiConfigData?.selectedProvider ?? "";
+  const selectedModelId = aiConfigData?.selectedModel ?? aiConfigData?.defaultModel ?? "";
+  const providerDisplayName = (providers.find((p) => p.id === selectedProviderId)?.name ?? selectedProviderId) || "—";
+  const providerModels = modelsByProvider[selectedProviderId] ?? [];
+  const modelDisplayName = (providerModels.find((m) => m.id === selectedModelId)?.name ?? selectedModelId) || "—";
+
   useEffect(() => {
     if (quotaData?.limitPerMonth != null) setQuotaLimit(quotaData.limitPerMonth);
   }, [quotaData?.limitPerMonth]);
 
-  const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<BillingPlanItem | null>(null);
   const [planName, setPlanName] = useState("");
   const [planPrice, setPlanPrice] = useState(0);
@@ -205,8 +221,8 @@ export default function AdminSubscriptionBilling() {
             <div className="space-y-3">
               {plans.map((p) => (
                 <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border border-border">
-                  <div>
-                    <p className="font-medium flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium flex items-center gap-2 flex-wrap">
                       {p.name}
                       {p.popular && (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-primary/15 text-primary">Most popular</span>
@@ -217,8 +233,15 @@ export default function AdminSubscriptionBilling() {
                       {p.creditsIncluded != null && ` • ${p.creditsIncluded.toLocaleString()} credits`}
                       {p.apiQuotaPerMonth != null && ` • ${p.apiQuotaPerMonth.toLocaleString()} API calls/mo`}
                     </p>
+                    {isSuperAdmin && (providerDisplayName !== "—" || modelDisplayName !== "—") && (
+                      <div className="mt-2">
+                        <Badge variant="default" className="text-[10px] font-medium px-2 py-1">
+                          Provider: {providerDisplayName} · Model: {modelDisplayName}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     <Button variant="outline" size="sm" onClick={() => openEditPlan(p)}>
                       <Pencil className="w-4 h-4 mr-1" />
                       Edit
@@ -347,15 +370,19 @@ export default function AdminSubscriptionBilling() {
               <Label htmlFor="plan-popular" className="text-sm font-normal cursor-pointer">Mark as most popular (shown to customers and in admin credits)</Label>
             </div>
             {isSuperAdmin && (
-              <div>
-                <Label>Allowed LLM (super admin only)</Label>
-                <Input
-                  className="mt-1.5"
-                  value={planAllowedLlm}
-                  onChange={(e) => setPlanAllowedLlm(e.target.value)}
-                  placeholder="e.g. gpt-4o, claude-3-5-sonnet"
-                />
-                <p className="text-muted-foreground text-xs mt-1">Which model this plan is allowed to use. Leave empty for default.</p>
+              <div className="space-y-3">
+                <Label className="text-xs text-muted-foreground">Current AI config (super admin only)</Label>
+                <div className="grid gap-3">
+                  <div>
+                    <Label className="text-xs">Model Provider</Label>
+                    <Input readOnly className="mt-1 bg-muted cursor-not-allowed" value={providerDisplayName} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Chat Model</Label>
+                    <Input readOnly className="mt-1 bg-muted cursor-not-allowed" value={modelDisplayName} />
+                  </div>
+                </div>
+                <p className="text-muted-foreground text-xs">Read-only. Configure in AI Configuration.</p>
               </div>
             )}
           </div>

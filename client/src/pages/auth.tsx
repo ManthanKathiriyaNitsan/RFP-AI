@@ -8,9 +8,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useBranding } from "@/contexts/BrandingContext";
 
-const TEAL_PRIMARY = "hsl(174, 70%, 42%)";
-const TEAL_LIGHT = "hsl(174, 70%, 52%)";
-
 export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -92,40 +89,37 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex min-h-dvh font-sans bg-[#fafafa] flex-col lg:flex-row">
+    <div className="flex min-h-dvh font-sans bg-[#fafafa] dark:bg-gray-950 flex-col lg:flex-row">
       {/* Left panel – login form (wider and responsive) */}
       <div className="flex flex-1 flex-col justify-center items-center px-4 sm:px-8 md:px-12 lg:px-16 xl:px-20 py-8 sm:py-12 w-full min-w-0 lg:max-w-[52rem] xl:max-w-[58rem]">
         <div className="w-full max-w-[min(100%,22rem)] sm:max-w-[26rem] md:max-w-[30rem] lg:max-w-[34rem] xl:max-w-[36rem] mx-auto">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 md:p-10 lg:p-12 shadow-sm">
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 sm:p-8 md:p-10 lg:p-12 shadow-sm">
             {/* Logo */}
             <div className="flex items-center gap-3 mb-8 sm:mb-10">
             {primaryLogoUrl ? (
               <img src={primaryLogoUrl} alt="RFP AI" className="h-10 w-10 rounded-lg object-contain" />
             ) : (
-              <div
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-                style={{ backgroundColor: TEAL_PRIMARY }}
-              >
-                <Brain className="h-5 w-5 text-white" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary">
+                <Brain className="h-5 w-5 text-primary-foreground" />
               </div>
             )}
-            <span className="text-xl font-bold text-gray-900">RFP AI</span>
+            <span className="text-xl font-bold text-gray-900 dark:text-gray-100">RFP AI</span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-bold text-gray-900 dark:text-gray-100 mb-2">
             Welcome Back!
           </h1>
-          <p className="text-[15px] sm:text-base text-gray-500 mb-6 sm:mb-8">
+          <p className="text-[15px] sm:text-base text-gray-500 dark:text-gray-400 mb-6 sm:mb-8">
             Sign in to access your dashboard and continue managing your proposals.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Email
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <Input
                   id="email"
                   type="email"
@@ -133,18 +127,18 @@ export default function Auth() {
                   value={formData.email}
                   onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                   required
-                  className="h-11 sm:h-12 pl-10 pr-4 rounded-lg border border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
-                  style={{ borderColor: "#e5e7eb" }}
+                  className="h-11 sm:h-12 pl-10 pr-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
+                  style={{ borderColor: undefined }}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Password
               </Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -152,14 +146,14 @@ export default function Auth() {
                   value={formData.password}
                   onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
                   required
-                  className="h-11 sm:h-12 pl-10 pr-11 rounded-lg border border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
-                  style={{ borderColor: "#e5e7eb" }}
+                  className="h-11 sm:h-12 pl-10 pr-11 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
+                  style={{ borderColor: undefined }}
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-0 top-0 h-full w-10 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                  className="absolute right-0 top-0 h-full w-10 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
@@ -168,10 +162,7 @@ export default function Auth() {
               </div>
               <div className="flex justify-end pt-0.5">
                 <Link href="/forgot-password">
-                  <span
-                    className="text-sm cursor-pointer hover:underline font-medium"
-                    style={{ color: TEAL_LIGHT }}
-                  >
+                  <span className="text-sm cursor-pointer hover:underline font-medium text-primary">
                     Forgot Password?
                   </span>
                 </Link>
@@ -180,34 +171,30 @@ export default function Auth() {
 
             <Button
               type="submit"
-              className="w-full h-11 sm:h-12 rounded-lg text-white font-semibold text-[15px] sm:text-base hover:opacity-95"
-              style={{ backgroundColor: TEAL_PRIMARY }}
+              className="w-full h-11 sm:h-12 rounded-lg bg-primary text-primary-foreground font-semibold text-[15px] sm:text-base hover:opacity-95"
               disabled={loading}
             >
               {loading ? "Signing in…" : "Sign In"}
             </Button>
-            <p className="text-center text-sm text-gray-500 pt-2">
+            <p className="text-center text-sm text-gray-500 dark:text-gray-400 pt-2">
               Don&apos;t have an account?{" "}
               <Link href="/register">
-                <span
-                  className="font-medium cursor-pointer hover:underline"
-                  style={{ color: TEAL_LIGHT }}
-                >
+                <span className="font-medium cursor-pointer hover:underline text-primary">
                   Create account
                 </span>
               </Link>
             </p>
           </form>
           </div>
-          <p className="text-center text-xs text-gray-400 mt-6">© 2026 RFP-AI. Enterprise AI Platform.</p>
+          <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">© 2026 RFP-AI. Enterprise AI Platform.</p>
         </div>
       </div>
 
-      {/* Right panel – promotional (dark teal); hidden on small screens for responsive single-column */}
+      {/* Right panel – promotional; uses admin-chosen theme */}
       <div
-        className="hidden lg:flex flex-1 flex-col justify-center px-10 xl:px-16 py-12 xl:py-16 min-h-0 lg:min-h-dvh shrink-0"
+        className="hidden lg:flex flex-1 flex-col justify-center px-10 xl:px-16 py-12 xl:py-16 min-h-0 lg:min-h-dvh shrink-0 bg-primary"
         style={{
-          background: "linear-gradient(180deg, #0d9488 0%, #0f766e 50%, #115e59 100%)",
+          background: "linear-gradient(180deg, var(--primary) 0%, var(--primary-shade) 50%, var(--primary) 100%)",
         }}
       >
         <div className="max-w-md xl:max-w-lg">

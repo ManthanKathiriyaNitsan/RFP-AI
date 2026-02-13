@@ -111,29 +111,26 @@ export function BrandingProvider({
     }
   }, [effectiveOrgId]);
 
-  // When logged out: use default branding. When logged in: fetch org branding.
+  // When logged out: fetch default org branding so login/register/forgot-password use admin-chosen theme.
+  // When logged in: fetch org branding for current user/admin context.
+  // If fetch fails when logged out, keep previous branding so theme does not flash back to default.
   useEffect(() => {
     if (!user) {
-      setData(DEFAULT_BRANDING);
-      setIsLoading(false);
+      setIsLoading(true);
+      fetchBranding(undefined)
+        .then((next) => setData(next))
+        .catch(() => {
+          // Keep current data so theme (e.g. Rose) persists on login page after logout; do not reset to default
+        })
+        .finally(() => setIsLoading(false));
     } else {
       refetch();
     }
   }, [user, refetch]);
 
-  // Apply color theme (CSS variables) site-wide. When logged out, clear custom branding so default theme shows.
+  // Apply color theme (CSS variables) site-wide (including login/register/forgot-password when logged out).
   useEffect(() => {
     const root = document.documentElement;
-
-    if (!user) {
-      BRANDING_CSS_VARS.forEach((name) => root.style.removeProperty(name));
-      const link = document.querySelector<HTMLLinkElement>('link[rel="icon"][data-branding]');
-      if (link) {
-        link.remove();
-        faviconEl.current = null;
-      }
-      return;
-    }
 
     const themeName = (data.colorTheme || "").trim();
     const preset: BrandingColorPreset | undefined =
@@ -175,7 +172,7 @@ export function BrandingProvider({
       link.remove();
       faviconEl.current = null;
     }
-  }, [user, data.colorTheme, data.colorPresets, data.faviconUrl]);
+  }, [data.colorTheme, data.colorPresets, data.faviconUrl]);
 
   const value: BrandingContextValue = {
     ...data,

@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { fetchAdminOptions } from "@/api/admin-data";
 import { getApiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
-import { parseApiError } from "@/lib/utils";
+import { parseApiError, cn } from "@/lib/utils";
 import { isValidEmail } from "@/api/auth";
 import {
   Dialog,
@@ -236,9 +236,10 @@ export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
             <Input
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              readOnly={!!user}
+              onChange={user ? undefined : (e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="john@example.com"
-              className="text-sm sm:text-base"
+              className={cn("text-sm sm:text-base", user && "bg-muted cursor-not-allowed")}
             />
           </div>
           <div>

@@ -91,7 +91,6 @@ export default function AdminSettings() {
   });
   const orgSettings = (selectedOrg?.settings ?? {}) as Record<string, string | undefined>;
   const orgPrimaryLogoUrl = orgSettings.primaryLogoUrl ?? "";
-  const orgFaviconUrl = orgSettings.faviconUrl ?? "";
   const orgColorTheme = orgSettings.colorTheme ?? defaultTheme;
   const selectedOrgName = selectedOrg?.name ?? organizations.find((o) => o.id === effectiveOrgId)?.name ?? "";
 
@@ -122,7 +121,6 @@ export default function AdminSettings() {
   }, [effectiveOrgId, refetchBranding]);
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [uploadingFavicon, setUploadingFavicon] = useState(false);
   const [savingTheme, setSavingTheme] = useState(false);
 
   // Organization Details (Settings → Organization tab) – controlled form for Save
@@ -194,33 +192,6 @@ export default function AdminSettings() {
       toast({ title: "Upload failed", variant: "destructive" });
     } finally {
       setUploadingLogo(false);
-      e.target.value = "";
-    }
-  };
-
-  const handleUploadFavicon = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || effectiveOrgId == null) return;
-    setUploadingFavicon(true);
-    try {
-      const dataUrl = await new Promise<string>((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result as string);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
-      const url = await uploadOrgBrandingAsset(effectiveOrgId, "favicon", dataUrl);
-      if (url) {
-        qc.invalidateQueries({ queryKey: ["admin", "organization", effectiveOrgId] });
-        await refetchBranding(effectiveOrgId);
-        toast({ title: "Favicon uploaded", description: "Favicon updated for this organization." });
-      } else {
-        toast({ title: "Upload failed", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Upload failed", variant: "destructive" });
-    } finally {
-      setUploadingFavicon(false);
       e.target.value = "";
     }
   };
@@ -494,38 +465,6 @@ export default function AdminSettings() {
                         </Button>
                       </div>
                     </div>
-                    <div>
-                      <Label className="text-xs sm:text-sm mb-2 sm:mb-3 block">Favicon</Label>
-                      <div className="border-2 border-dashed border-border rounded-xl p-4 sm:p-8 text-center hover:border-primary/50 transition-colors">
-                        {orgFaviconUrl ? (
-                          <img src={orgFaviconUrl} alt="Favicon" className="w-12 h-12 mx-auto rounded-lg object-contain bg-muted mb-3" />
-                        ) : (
-                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-muted mx-auto mb-2 sm:mb-3 flex items-center justify-center">
-                            <Image className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
-                          </div>
-                        )}
-                        <p className="text-xs sm:text-sm font-medium">Drop your favicon here</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">ICO, PNG 32x32</p>
-                        <Input
-                          type="file"
-                          accept="image/x-icon,image/png"
-                          className="mt-3 hidden"
-                          onChange={handleUploadFavicon}
-                          disabled={uploadingFavicon}
-                          id="favicon-upload"
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-3 text-xs sm:text-sm"
-                          onClick={() => document.getElementById("favicon-upload")?.click()}
-                          disabled={uploadingFavicon}
-                        >
-                          {uploadingFavicon ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                          Upload
-                        </Button>
-                      </div>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -596,7 +535,7 @@ export default function AdminSettings() {
               <CardContent className="p-6 text-center text-muted-foreground">
                 <Building className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm font-medium">No organization selected</p>
-                <p className="text-xs mt-1">Use the &quot;Working on organization&quot; dropdown above to select an organization, then you can edit its logo, favicon, and color theme here.</p>
+                <p className="text-xs mt-1">Use the &quot;Working on organization&quot; dropdown above to select an organization, then you can edit its logo and color theme here.</p>
               </CardContent>
             </Card>
           )}

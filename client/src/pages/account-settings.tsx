@@ -337,7 +337,8 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
   });
 
   const handleProfileSave = () => {
-    updateProfileMutation.mutate(profileData);
+    const { email: _email, ...rest } = profileData;
+    updateProfileMutation.mutate(rest);
   };
 
   const handlePasswordUpdate = () => {
@@ -404,6 +405,7 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
   const renderProfileField = (field: FormField) => {
     const value = profileData[field.id] ?? "";
     const isTextarea = field.type === "textarea";
+    const isEmailReadOnly = field.id === "email";
     const gridClass = field.gridCol === "half" ? "sm:col-span-1" : "sm:col-span-2";
     return (
       <div key={field.id} className={cn("space-y-2", gridClass)}>
@@ -424,8 +426,9 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
             id={field.id}
             type={field.type}
             value={value}
-            onChange={(e) => updateProfileData(field.id, e.target.value)}
-            className="text-sm sm:text-base"
+            readOnly={isEmailReadOnly}
+            onChange={isEmailReadOnly ? undefined : (e) => updateProfileData(field.id, e.target.value)}
+            className={cn("text-sm sm:text-base", isEmailReadOnly && "bg-muted cursor-not-allowed")}
           />
         )}
       </div>
@@ -503,44 +506,46 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
                   </div>
                 </div>
               </div>
-              <div className="p-4 border-t border-border">
-                <div className="rounded-xl p-4 sidebar-widget-bg">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Avatar className="w-8 h-8">
-                      {getAvatarUrl(user?.avatar ?? null) && (
-                        <AvatarImage src={getAvatarUrl(user?.avatar ?? null)!} alt="" className="object-cover" />
-                      )}
-                      <AvatarFallback className="text-xs sidebar-avatar-bg">
-                        {user?.firstName?.[0]}
-                        {user?.lastName?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {user?.firstName} {user?.lastName}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{sidebar.userCard.creditsLabel}</span>
-                      <span className="font-medium text-foreground">{credits}</span>
-                    </div>
-                    {sidebar.userCard.showCreditsBar && (
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full theme-gradient-fill rounded-full"
-                          style={{ width: `${Math.min((credits / 1000) * 100, 100)}%` }}
-                        />
+              {!isSuperAdmin && (
+                <div className="p-4 border-t border-border">
+                  <div className="rounded-xl p-4 sidebar-widget-bg">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Avatar className="w-8 h-8">
+                        {getAvatarUrl(user?.avatar ?? null) && (
+                          <AvatarImage src={getAvatarUrl(user?.avatar ?? null)!} alt="" className="object-cover" />
+                        )}
+                        <AvatarFallback className="text-xs sidebar-avatar-bg">
+                          {user?.firstName?.[0]}
+                          {user?.lastName?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {user?.firstName} {user?.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                       </div>
-                    )}
-                    <p className="text-[10px] text-muted-foreground">
-                      {credits} {sidebar.userCard.creditsSuffix}
-                    </p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{sidebar.userCard.creditsLabel}</span>
+                        <span className="font-medium text-foreground">{credits}</span>
+                      </div>
+                      {sidebar.userCard.showCreditsBar && (
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full theme-gradient-fill rounded-full"
+                            style={{ width: `${Math.min((credits / 1000) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">
+                        {credits} {sidebar.userCard.creditsSuffix}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </SheetContent>
         </Sheet>
@@ -601,46 +606,48 @@ export default function AccountSettings({ sidebarOpen = false, setSidebarOpen }:
                   </div>
                 </div>
               </div>
-              <div className="p-4 border-t border-border">
-                <div className="rounded-xl p-4 sidebar-widget-bg">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Avatar className="w-8 h-8">
-                      {getAvatarUrl(user?.avatar ?? null) && (
-                        <AvatarImage src={getAvatarUrl(user?.avatar ?? null)!} alt="" className="object-cover" />
-                      )}
-                      <AvatarFallback className="text-xs sidebar-avatar-bg">
-                        {user?.firstName?.[0]}
-                        {user?.lastName?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {user?.firstName} {user?.lastName}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        {sidebar.userCard.creditsLabel}
-                      </span>
-                      <span className="font-medium text-foreground">{credits}</span>
-                    </div>
-                    {sidebar.userCard.showCreditsBar && (
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full theme-gradient-fill rounded-full"
-                          style={{ width: `${Math.min((credits / 1000) * 100, 100)}%` }}
-                        />
+              {!isSuperAdmin && (
+                <div className="p-4 border-t border-border">
+                  <div className="rounded-xl p-4 sidebar-widget-bg">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Avatar className="w-8 h-8">
+                        {getAvatarUrl(user?.avatar ?? null) && (
+                          <AvatarImage src={getAvatarUrl(user?.avatar ?? null)!} alt="" className="object-cover" />
+                        )}
+                        <AvatarFallback className="text-xs sidebar-avatar-bg">
+                          {user?.firstName?.[0]}
+                          {user?.lastName?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {user?.firstName} {user?.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                       </div>
-                    )}
-                    <p className="text-[10px] text-muted-foreground">
-                      {credits} {sidebar.userCard.creditsSuffix}
-                    </p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          {sidebar.userCard.creditsLabel}
+                        </span>
+                        <span className="font-medium text-foreground">{credits}</span>
+                      </div>
+                      {sidebar.userCard.showCreditsBar && (
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full theme-gradient-fill rounded-full"
+                            style={{ width: `${Math.min((credits / 1000) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">
+                        {credits} {sidebar.userCard.creditsSuffix}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </aside>
           </div>
         )}

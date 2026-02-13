@@ -348,6 +348,7 @@ export default function AdminSecurity() {
                 {securitySettings
                   .filter(
                     (setting) =>
+                      setting.id !== 6 &&
                       !/two-factor|2fa|sso|saml|single sign-on|ip whitelist/i.test(setting.name ?? "")
                   )
                   .map((setting) => (
