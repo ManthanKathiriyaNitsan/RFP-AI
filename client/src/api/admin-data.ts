@@ -103,6 +103,8 @@ export interface BillingPlanItem {
   features?: string[];
   /** When true, shown as "Most popular" on admin credits and customer purchase. */
   popular?: boolean;
+  /** Allowed LLM for this plan (super_admin only). e.g. gpt-4o, claude-3. */
+  allowedLlm?: string;
 }
 
 export interface BillingPlansData {
@@ -208,6 +210,8 @@ export interface AIConfigData {
   defaultTemperature?: number;
   defaultMaxTokens?: number;
   systemPromptDefault?: string;
+  defaultTone?: string;
+  defaultFormality?: string;
   providers?: AIProviderItem[];
   modelsByProvider?: Record<string, AIModelItem[]>;
   apiKeys?: Record<string, string>;
@@ -903,6 +907,8 @@ export function fetchAdminSecurity(): Promise<SecurityData> {
 }
 
 export async function updateAdminSecurityConfig(body: Partial<{
+  defaultPasswordLength: string;
+  defaultSessionDuration: string;
   sessionIdleMinutes: number;
   sessionMaxDurationMinutes: number;
   sessionRememberMeDays: number;

@@ -2707,7 +2707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: subscription & billing (plans, invoices, API quota)
-  type BillingPlanRecord = { id: string; name: string; price: number; interval: string; creditsIncluded?: number; apiQuotaPerMonth?: number; features?: string[] };
+  type BillingPlanRecord = { id: string; name: string; price: number; interval: string; creditsIncluded?: number; apiQuotaPerMonth?: number; features?: string[]; allowedLlm?: string };
   const billingPlansStore: BillingPlanRecord[] = [
     { id: "plan_pro", name: "Professional", price: 99, interval: "month", creditsIncluded: 10000, apiQuotaPerMonth: 5000, features: ["AI generation", "Unlimited proposals"] },
     { id: "plan_enterprise", name: "Enterprise", price: 299, interval: "month", creditsIncluded: 50000, apiQuotaPerMonth: 50000, features: ["Everything in Pro", "SSO", "Priority support"] },
@@ -2737,6 +2737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         creditsIncluded: body.creditsIncluded != null ? Number(body.creditsIncluded) : undefined,
         apiQuotaPerMonth: body.apiQuotaPerMonth != null ? Number(body.apiQuotaPerMonth) : undefined,
         features: Array.isArray(body.features) ? body.features.filter((e: unknown) => typeof e === "string") : undefined,
+        allowedLlm: body.allowedLlm != null && typeof body.allowedLlm === "string" ? body.allowedLlm.trim() || undefined : undefined,
       };
       billingPlansStore.push(plan);
       res.status(201).json(plan);
@@ -2756,6 +2757,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (body.creditsIncluded !== undefined) plan.creditsIncluded = Number(body.creditsIncluded);
       if (body.apiQuotaPerMonth !== undefined) plan.apiQuotaPerMonth = Number(body.apiQuotaPerMonth);
       if (body.features !== undefined && Array.isArray(body.features)) plan.features = body.features.filter((e: unknown) => typeof e === "string");
+      if (body.allowedLlm !== undefined) plan.allowedLlm = typeof body.allowedLlm === "string" && body.allowedLlm.trim() ? body.allowedLlm.trim() : undefined;
       res.json(plan);
     } catch (error) {
       res.status(500).json({ message: "Failed to update plan" });

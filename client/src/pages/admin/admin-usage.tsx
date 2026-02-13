@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { fetchAdminUsage, fetchAdminOptions, type UsageData } from "@/api/admin-data";
 import { useAuth } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { folderIconUrl } from "@/assets/folder-icon-url";
 import {
   BarChart3,
   TrendingUp,
@@ -250,7 +251,7 @@ export default function AdminUsage() {
                     className="flex items-center gap-3 w-full p-3 text-left hover:bg-muted/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                     data-testid={`folder-admin-${admin.id}`}
                   >
-                    <img src="/icons8-folder-48.png" alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
+                    <img src={folderIconUrl} alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-sm text-foreground truncate">{admin.name}</p>
                       {admin.email && <p className="text-xs text-muted-foreground truncate">{admin.email}</p>}
@@ -273,7 +274,7 @@ export default function AdminUsage() {
                       className="flex flex-col items-center gap-2 w-24 sm:w-28 group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg p-2 transition-colors hover:bg-muted/50"
                       data-testid={`folder-admin-${admin.id}`}
                     >
-                      <img src="/icons8-folder-48.png" alt="" className="w-12 h-12 sm:w-14 sm:h-14 object-contain group-hover:scale-105 transition-transform" />
+                      <img src={folderIconUrl} alt="" className="w-12 h-12 sm:w-14 sm:h-14 object-contain group-hover:scale-105 transition-transform" />
                       <span className="text-sm font-medium text-foreground text-center line-clamp-2 break-words w-full">{admin.name}</span>
                     </button>
                   </TooltipTrigger>

@@ -10,6 +10,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { usePrompt } from "@/hooks/use-prompt";
 import { fetchAdminContent, fetchAdminUsersList } from "@/api/admin-data";
 import { QueryErrorState } from "@/components/shared/query-error-state";
+import { folderIconUrl } from "@/assets/folder-icon-url";
 import { 
   Search, 
   Plus, 
@@ -371,7 +372,7 @@ export default function AdminContent() {
                           className="flex items-center gap-3 w-full p-3 text-left hover:bg-muted/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                           data-testid={`folder-creator-${name.replace(/\s+/g, "-")}`}
                         >
-                          <img src="/icons8-folder-48.png" alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
+                          <img src={folderIconUrl} alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-sm text-foreground truncate">{name}</p>
                             {u?.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
@@ -397,7 +398,7 @@ export default function AdminContent() {
                           data-testid={`folder-creator-${name.replace(/\s+/g, "-")}`}
                         >
                           <img
-                            src="/icons8-folder-48.png"
+                            src={folderIconUrl}
                             alt=""
                             className="w-12 h-12 sm:w-14 sm:h-14 object-contain group-hover:scale-105 transition-transform"
                           />

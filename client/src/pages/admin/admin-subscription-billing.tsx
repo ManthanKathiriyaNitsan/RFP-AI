@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useConfirm } from "@/hooks/use-confirm";
+import { useAuth } from "@/hooks/use-auth";
 import {
   fetchAdminBillingPlans,
   createAdminBillingPlan,
@@ -49,6 +50,8 @@ export default function AdminSubscriptionBilling() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { currentRole } = useAuth();
+  const isSuperAdmin = (currentRole ?? "").toLowerCase() === "super_admin";
 
   const { data: plansData, isError, error, refetch } = useQuery({ queryKey: ["admin", "billing-plans"], queryFn: fetchAdminBillingPlans });
   const { data: invoicesData } = useQuery({ queryKey: ["admin", "billing-invoices"], queryFn: fetchAdminInvoices });
@@ -71,6 +74,7 @@ export default function AdminSubscriptionBilling() {
   const [planCredits, setPlanCredits] = useState<number | "">("");
   const [planApiQuota, setPlanApiQuota] = useState<number | "">("");
   const [planPopular, setPlanPopular] = useState(false);
+  const [planAllowedLlm, setPlanAllowedLlm] = useState("");
   const [savingPlan, setSavingPlan] = useState(false);
 
   const [quotaLimit, setQuotaLimit] = useState(limitPerMonth);
@@ -84,6 +88,7 @@ export default function AdminSubscriptionBilling() {
     setPlanCredits(10000);
     setPlanApiQuota(5000);
     setPlanPopular(false);
+    setPlanAllowedLlm("");
     setPlanDialogOpen(true);
   };
 
@@ -95,6 +100,7 @@ export default function AdminSubscriptionBilling() {
     setPlanCredits(p.creditsIncluded ?? "");
     setPlanApiQuota(p.apiQuotaPerMonth ?? "");
     setPlanPopular(p.popular ?? false);
+    setPlanAllowedLlm(p.allowedLlm ?? "");
     setPlanDialogOpen(true);
   };
 
@@ -112,6 +118,7 @@ export default function AdminSubscriptionBilling() {
       creditsIncluded: planCredits === "" ? undefined : Number(planCredits),
       apiQuotaPerMonth: planApiQuota === "" ? undefined : Number(planApiQuota),
       popular: planPopular,
+      ...(isSuperAdmin && { allowedLlm: planAllowedLlm.trim() || undefined }),
     };
     if (editingPlan) {
       const updated = await updateAdminBillingPlan(editingPlan.id, payload);
@@ -339,6 +346,18 @@ export default function AdminSubscriptionBilling() {
               <Checkbox id="plan-popular" checked={planPopular} onCheckedChange={(v) => setPlanPopular(v === true)} />
               <Label htmlFor="plan-popular" className="text-sm font-normal cursor-pointer">Mark as most popular (shown to customers and in admin credits)</Label>
             </div>
+            {isSuperAdmin && (
+              <div>
+                <Label>Allowed LLM (super admin only)</Label>
+                <Input
+                  className="mt-1.5"
+                  value={planAllowedLlm}
+                  onChange={(e) => setPlanAllowedLlm(e.target.value)}
+                  placeholder="e.g. gpt-4o, claude-3-5-sonnet"
+                />
+                <p className="text-muted-foreground text-xs mt-1">Which model this plan is allowed to use. Leave empty for default.</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>Cancel</Button>

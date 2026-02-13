@@ -71,13 +71,25 @@ export default function AdminSecurity() {
     date: (c.date as string) ?? "",
     icon: COMPLIANCE_ICON_MAP[c.icon as string] ?? Shield,
   }));
-  const defaultPasswordLength = data?.defaultPasswordLength ?? "12";
-  const defaultSessionDuration = data?.defaultSessionDuration ?? "90";
-  const passwordLengths = optionsData?.passwordLengths ?? [];
-  const sessionDurations = optionsData?.sessionDurations ?? [];
+  const passwordLengths = optionsData?.passwordLengths ?? [
+    { value: "8", label: "8 characters" },
+    { value: "10", label: "10 characters" },
+    { value: "12", label: "12 characters" },
+    { value: "14", label: "14 characters" },
+    { value: "16", label: "16 characters" },
+  ];
+  const sessionDurations = optionsData?.sessionDurations ?? [
+    { value: "30", label: "30 days" },
+    { value: "60", label: "60 days" },
+    { value: "90", label: "90 days" },
+    { value: "180", label: "180 days" },
+    { value: "365", label: "1 year" },
+  ];
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
+  const [defaultPasswordLength, setDefaultPasswordLength] = useState(data?.defaultPasswordLength ?? "12");
+  const [defaultSessionDuration, setDefaultSessionDuration] = useState(data?.defaultSessionDuration ?? "90");
   const [sessionIdleMinutes, setSessionIdleMinutes] = useState(data?.sessionIdleMinutes ?? 30);
   const [sessionMaxDurationMinutes, setSessionMaxDurationMinutes] = useState(data?.sessionMaxDurationMinutes ?? 480);
   const [sessionRememberMeDays, setSessionRememberMeDays] = useState(data?.sessionRememberMeDays ?? 14);
@@ -86,6 +98,7 @@ export default function AdminSecurity() {
   const [ipDenylist, setIpDenylist] = useState<string[]>(data?.ipDenylist ?? []);
   const [newAllowIp, setNewAllowIp] = useState("");
   const [newDenyIp, setNewDenyIp] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
   const [savingSession, setSavingSession] = useState(false);
   const [savingIp, setSavingIp] = useState(false);
   const [requireTwoFactor, setRequireTwoFactor] = useState(data?.requireTwoFactorForAllUsers ?? false);
@@ -128,13 +141,30 @@ export default function AdminSecurity() {
   }, [data?.requireTwoFactorForAllUsers]);
 
   useEffect(() => {
+    if (data?.defaultPasswordLength != null) setDefaultPasswordLength(data.defaultPasswordLength);
+    if (data?.defaultSessionDuration != null) setDefaultSessionDuration(data.defaultSessionDuration);
     if (data?.sessionIdleMinutes != null) setSessionIdleMinutes(data.sessionIdleMinutes);
     if (data?.sessionMaxDurationMinutes != null) setSessionMaxDurationMinutes(data.sessionMaxDurationMinutes);
     if (data?.sessionRememberMeDays != null) setSessionRememberMeDays(data.sessionRememberMeDays);
     if (data?.ipRestrictionEnabled != null) setIpRestrictionEnabled(data.ipRestrictionEnabled);
     if (Array.isArray(data?.ipAllowlist)) setIpAllowlist(data.ipAllowlist);
     if (Array.isArray(data?.ipDenylist)) setIpDenylist(data.ipDenylist);
-  }, [data?.sessionIdleMinutes, data?.sessionMaxDurationMinutes, data?.sessionRememberMeDays, data?.ipRestrictionEnabled, data?.ipAllowlist, data?.ipDenylist]);
+  }, [data?.defaultPasswordLength, data?.defaultSessionDuration, data?.sessionIdleMinutes, data?.sessionMaxDurationMinutes, data?.sessionRememberMeDays, data?.ipRestrictionEnabled, data?.ipAllowlist, data?.ipDenylist]);
+
+  const handleSavePassword = async () => {
+    setSavingPassword(true);
+    const updated = await updateAdminSecurityConfig({
+      defaultPasswordLength,
+      defaultSessionDuration,
+    });
+    setSavingPassword(false);
+    if (updated) {
+      qc.setQueryData(["admin", "security"], (prev: typeof data) => (prev ? { ...prev, ...updated } : updated));
+      toast({ title: "Password policy saved", description: "Minimum length and expiry updated." });
+    } else {
+      toast({ title: "Failed to save password policy", variant: "destructive" });
+    }
+  };
 
   const handleSaveSession = async () => {
     setSavingSession(true);
@@ -343,13 +373,13 @@ export default function AdminSecurity() {
               <CardTitle className="text-sm sm:text-base">Password Policy</CardTitle>
               <CardDescription className="text-xs sm:text-sm">Set requirements for user passwords</CardDescription>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
+            <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <Label className="text-xs sm:text-sm">Minimum Length</Label>
-                  <Select defaultValue={defaultPasswordLength}>
+                  <Select value={defaultPasswordLength} onValueChange={setDefaultPasswordLength}>
                     <SelectTrigger className="mt-1.5 text-sm sm:text-base">
-                      <SelectValue />
+                      <SelectValue placeholder="Select length" />
                     </SelectTrigger>
                     <SelectContent>
                       {passwordLengths.map((opt: { value: string; label: string }) => (
@@ -360,9 +390,9 @@ export default function AdminSecurity() {
                 </div>
                 <div>
                   <Label className="text-xs sm:text-sm">Password Expiry</Label>
-                  <Select defaultValue={defaultSessionDuration}>
+                  <Select value={defaultSessionDuration} onValueChange={setDefaultSessionDuration}>
                     <SelectTrigger className="mt-1.5 text-sm sm:text-base">
-                      <SelectValue />
+                      <SelectValue placeholder="Select duration" />
                     </SelectTrigger>
                     <SelectContent>
                       {sessionDurations.map((opt: { value: string; label: string }) => (
@@ -372,6 +402,10 @@ export default function AdminSecurity() {
                   </Select>
                 </div>
               </div>
+              <Button size="sm" onClick={handleSavePassword} disabled={savingPassword}>
+                <Save className="w-4 h-4 mr-2" />
+                {savingPassword ? "Saving…" : "Save password policy"}
+              </Button>
             </CardContent>
           </Card>
 

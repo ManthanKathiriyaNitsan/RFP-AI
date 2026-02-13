@@ -7,6 +7,7 @@ import { fetchAdminCredits, allocateAdminCredits, fetchAdminUsersList, createCre
 import { authStorage } from "@/lib/auth";
 import { useAuth } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { folderIconUrl } from "@/assets/folder-icon-url";
 import { 
   CreditCard, 
   Plus, 
@@ -628,7 +629,7 @@ export default function AdminCredits() {
                         data-testid={`folder-admin-${admin.adminId}`}
                       >
                         <img
-                          src="/icons8-folder-48.png"
+                          src={folderIconUrl}
                           alt=""
                           className="w-12 h-12 sm:w-14 sm:h-14 object-contain group-hover:scale-105 transition-transform"
                         />

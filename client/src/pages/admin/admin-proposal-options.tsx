@@ -14,6 +14,7 @@ import {
   deleteIndustry,
   type OptionItem,
 } from "@/api/admin-data";
+import { folderIconUrl } from "@/assets/folder-icon-url";
 import { Tag, Building2, Plus, Pencil, Trash2, Loader2, ArrowLeft, FolderOpen, Search, Grid3X3, List } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -315,7 +316,7 @@ export default function AdminProposalOptions() {
                     className="flex items-center gap-3 w-full p-3 text-left hover:bg-muted/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                     data-testid={`folder-admin-${admin.id}`}
                   >
-                    <img src="/icons8-folder-48.png" alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
+                    <img src={folderIconUrl} alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-sm text-foreground truncate">{admin.name}</p>
                       {admin.email && <p className="text-xs text-muted-foreground truncate">{admin.email}</p>}
@@ -337,7 +338,7 @@ export default function AdminProposalOptions() {
                 data-testid={`folder-admin-${admin.id}`}
               >
                 <img
-                  src="/icons8-folder-48.png"
+                  src={folderIconUrl}
                   alt=""
                   className="w-12 h-12 sm:w-14 sm:h-14 object-contain group-hover:scale-105 transition-transform"
                 />

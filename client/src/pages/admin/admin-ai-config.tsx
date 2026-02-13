@@ -71,13 +71,24 @@ export default function AdminAIConfig() {
   const activeModelDisplayName = displayModels.find((m) => m.id === effectiveModel)?.name ?? effectiveModel ?? "—";
   const avgAccuracy = qualityMetrics[0] != null ? `${qualityMetrics[0].value}%` : "—";
   const avgResponseTime = "2.3s";
-  const aiToneOptions = optionsData?.aiToneOptions ?? [];
-  const aiDetailLevels = optionsData?.aiDetailLevels ?? [];
+  const aiToneOptions = optionsData?.aiToneOptions ?? [
+    { value: "professional", label: "Professional" },
+    { value: "friendly", label: "Friendly" },
+    { value: "formal", label: "Formal" },
+    { value: "casual", label: "Casual" },
+  ];
+  const aiDetailLevels = optionsData?.aiDetailLevels ?? [
+    { value: "low", label: "Low" },
+    { value: "moderate", label: "Moderate" },
+    { value: "high", label: "High" },
+  ];
   const pageTitles = (optionsData as { pageTitles?: Record<string, string> })?.pageTitles ?? {};
   const aiConfigTitle = pageTitles.aiConfig ?? "AI Configuration";
   const [temperature, setTemperature] = useState([defaultTemperature]);
   const [maxTokens, setMaxTokens] = useState([defaultMaxTokens]);
   const [systemPrompt, setSystemPrompt] = useState(systemPromptDefault);
+  const [defaultTone, setDefaultTone] = useState(data?.defaultTone ?? aiToneOptions[0]?.value ?? "professional");
+  const [defaultFormality, setDefaultFormality] = useState(data?.defaultFormality ?? aiDetailLevels[2]?.value ?? aiDetailLevels[0]?.value ?? "high");
   const features = data?.features ?? {};
   const [autoSuggest, setAutoSuggest] = useState(features.autoSuggest ?? true);
   const [contentFiltering, setContentFiltering] = useState(features.contentFiltering ?? true);
@@ -96,6 +107,12 @@ export default function AdminAIConfig() {
   useEffect(() => {
     if (data?.systemPromptDefault != null) setSystemPrompt(data.systemPromptDefault);
   }, [data?.systemPromptDefault]);
+  useEffect(() => {
+    if (data?.defaultTone != null) setDefaultTone(data.defaultTone);
+  }, [data?.defaultTone]);
+  useEffect(() => {
+    if (data?.defaultFormality != null) setDefaultFormality(data.defaultFormality);
+  }, [data?.defaultFormality]);
   useEffect(() => {
     if (data?.defaultTemperature != null) setTemperature([data.defaultTemperature]);
   }, [data?.defaultTemperature]);
@@ -219,6 +236,8 @@ export default function AdminAIConfig() {
                 setTemperature([defaultTemperature]);
                 setMaxTokens([defaultMaxTokens]);
                 setSystemPrompt(systemPromptDefault || "");
+                setDefaultTone(data?.defaultTone ?? aiToneOptions[0]?.value ?? "professional");
+                setDefaultFormality(data?.defaultFormality ?? aiDetailLevels[2]?.value ?? aiDetailLevels[0]?.value ?? "high");
                 setApiKeyInputs({});
                 const f = data?.features ?? {};
                 setAutoSuggest(f.autoSuggest ?? true);
@@ -251,6 +270,8 @@ export default function AdminAIConfig() {
                   defaultTemperature: temperature[0],
                   defaultMaxTokens: maxTokens[0],
                   systemPromptDefault: systemPrompt,
+                  defaultTone,
+                  defaultFormality,
                   ...(Object.keys(apiKeysPayload).length > 0 ? { apiKeys: apiKeysPayload } : {}),
                   features: {
                     autoSuggest,
@@ -485,9 +506,9 @@ export default function AdminAIConfig() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <Label className="text-sm">Tone</Label>
-                  <Select defaultValue={aiToneOptions[0]?.value ?? ""}>
+                  <Select value={defaultTone} onValueChange={setDefaultTone}>
                     <SelectTrigger className="mt-1.5" data-testid="select-tone">
-                      <SelectValue />
+                      <SelectValue placeholder="Select tone" />
                     </SelectTrigger>
                     <SelectContent>
                       {aiToneOptions.map((opt: { value: string; label: string }) => (
@@ -498,9 +519,9 @@ export default function AdminAIConfig() {
                 </div>
                 <div>
                   <Label className="text-sm">Formality Level</Label>
-                  <Select defaultValue={aiDetailLevels[2]?.value ?? aiDetailLevels[0]?.value ?? ""}>
+                  <Select value={defaultFormality} onValueChange={setDefaultFormality}>
                     <SelectTrigger className="mt-1.5" data-testid="select-formality">
-                      <SelectValue />
+                      <SelectValue placeholder="Select formality" />
                     </SelectTrigger>
                     <SelectContent>
                       {aiDetailLevels.map((opt: { value: string; label: string }) => (
