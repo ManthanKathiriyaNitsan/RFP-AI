@@ -172,9 +172,7 @@ export default function AdminSubscriptionBilling() {
     <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold">Subscription & Billing</h1>
-        <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-          Create plans, view invoices, and set API quota.
-        </p>
+        <p className="text-muted-foreground text-xs sm:text-sm mt-1">Create plans, view invoices, and set API quota.</p>
       </div>
 
       <Card>

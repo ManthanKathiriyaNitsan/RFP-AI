@@ -6,6 +6,7 @@ import { fetchAdminOptions } from "@/api/admin-data";
 import { getApiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { parseApiError } from "@/lib/utils";
+import { isValidEmail } from "@/api/auth";
 import {
   Dialog,
   DialogContent,
@@ -123,12 +124,14 @@ export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
         return response.json();
       }
     },
-    onSuccess: () => {
+    onSuccess: (data: { message?: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/users"] });
       toast({
         title: user ? "User updated" : "User created",
-        description: `${formData.firstName} ${formData.lastName} has been ${user ? "updated" : "created"} successfully.`,
+        description: user
+          ? `${formData.firstName} ${formData.lastName} has been updated successfully.`
+          : (data?.message ?? `${formData.firstName} ${formData.lastName} has been created. A verification email has been sent to their email address.`),
       });
       onOpenChange(false);
       setFormData({
@@ -153,7 +156,8 @@ export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
   });
 
   const handleSubmit = () => {
-    if (!formData.firstName || !formData.lastName || !formData.email) {
+    const trimmedEmail = (formData.email || "").trim();
+    if (!formData.firstName || !formData.lastName || !trimmedEmail) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields.",
@@ -161,7 +165,14 @@ export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
       });
       return;
     }
-
+    if (!user && !isValidEmail(trimmedEmail)) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!user && !formData.password) {
       toast({
         title: "Validation Error",
@@ -196,7 +207,7 @@ export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
         <DialogHeader>
           <DialogTitle className="text-base sm:text-lg">{user ? "Edit User" : "Create New User"}</DialogTitle>
           <DialogDescription className="text-xs sm:text-sm">
-            {user ? "Update user information" : "Add a new user to the system"}
+            {user ? "Update user information" : "Add a new user. A verification link will be sent to their email; they must verify before signing in."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">

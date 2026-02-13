@@ -181,8 +181,8 @@ export default function ForgotPassword() {
   return (
     <div className="flex min-h-dvh font-sans bg-[#fafafa] flex-col lg:flex-row">
       {/* Left panel – form (same layout as login) */}
-      <div className="flex flex-1 flex-col justify-center px-4 sm:px-8 md:px-12 lg:px-16 xl:px-20 py-8 sm:py-12 w-full min-w-0 lg:max-w-[52rem] xl:max-w-[58rem]">
-        <div className="w-full max-w-[min(100%,22rem)] sm:max-w-[26rem] md:max-w-[30rem] lg:max-w-[34rem] xl:max-w-[36rem] mx-auto lg:mx-0">
+      <div className="flex flex-1 flex-col justify-center items-center px-4 sm:px-8 md:px-12 lg:px-16 xl:px-20 py-8 sm:py-12 w-full min-w-0 lg:max-w-[52rem] xl:max-w-[58rem]">
+        <div className="w-full max-w-[min(100%,22rem)] sm:max-w-[26rem] md:max-w-[30rem] lg:max-w-[34rem] xl:max-w-[36rem] mx-auto">
           <div className="rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 md:p-10 lg:p-12 shadow-sm">
             <div className="flex items-center gap-3 mb-8 sm:mb-10">
               {primaryLogoUrl ? (
@@ -412,6 +412,7 @@ export default function ForgotPassword() {
               </div>
             )}
           </div>
+          <p className="text-center text-xs text-gray-400 mt-6">© 2026 RFP-AI. Enterprise AI Platform.</p>
         </div>
       </div>
 

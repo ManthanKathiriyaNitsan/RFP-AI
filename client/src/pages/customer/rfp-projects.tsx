@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useStore } from "@/contexts/StoreContext";
@@ -45,6 +45,7 @@ import {
 } from "@/lib/export-proposal";
 import { COLLABORATOR_ROLE_OPTIONS, getPermissionsForRole, DEFAULT_COLLABORATOR_PERMISSIONS } from "@/lib/collaborator-roles";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { DataTablePagination } from "@/components/shared/data-table-pagination";
 
 type LayoutMode = "card" | "list" | "grid";
 
@@ -69,6 +70,8 @@ export default function RFPProjects() {
   const [inviteProjects, setInviteProjects] = useState<number[]>([]);
   const [selectedSearchUser, setSelectedSearchUser] = useState<{ id: number; email: string; firstName: string; lastName: string } | null>(null);
   const [exportDialogProject, setExportDialogProject] = useState<any>(null);
+  const [projectsPage, setProjectsPage] = useState(1);
+  const [projectsPageSize, setProjectsPageSize] = useState(10);
 
   const { data: proposalsData, isLoading: proposalsLoading } = useProposalsList();
   const proposals = proposalsData ?? [];
@@ -126,6 +129,13 @@ export default function RFPProjects() {
     const matchesStatus = statusFilter === "all" || project.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+  const paginatedProjects = filteredProjects.slice(
+    (projectsPage - 1) * projectsPageSize,
+    projectsPage * projectsPageSize
+  );
+  useEffect(() => {
+    setProjectsPage(1);
+  }, [searchTerm, statusFilter]);
 
   const getStatusBadgeClass = (status: string) => getProposalStatusBadgeClass(status);
   const getStatusLabel = (status: string) => {
@@ -442,7 +452,7 @@ export default function RFPProjects() {
               </tr>
             </thead>
             <tbody className="bg-card">
-              {filteredProjects.map((project: any) => {
+              {paginatedProjects.map((project: any) => {
                 const progress = project.questionCount ? Math.round(((project.answeredCount ?? 0) / project.questionCount) * 100) : 0;
                 return (
                   <tr key={project.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/50 transition-colors">
@@ -493,7 +503,7 @@ export default function RFPProjects() {
         </div>
       ) : (
         <div className={layout === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6" : "grid grid-cols-1 gap-4 sm:gap-6"}>
-          {filteredProjects.map((project: any) => {
+          {paginatedProjects.map((project: any) => {
             const daysUntilDeadline = Math.ceil(
               (new Date(project.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
             );
@@ -590,6 +600,16 @@ export default function RFPProjects() {
             );
           })}
         </div>
+      )}
+      {filteredProjects.length > 0 && (
+        <DataTablePagination
+          totalItems={filteredProjects.length}
+          page={projectsPage}
+          pageSize={projectsPageSize}
+          onPageChange={setProjectsPage}
+          onPageSizeChange={setProjectsPageSize}
+          itemLabel="projects"
+        />
       )}
 
       {/* Import Dialog */}

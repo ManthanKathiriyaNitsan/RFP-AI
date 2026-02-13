@@ -21,7 +21,8 @@ import {
   Timer,
   Network,
   ScrollText,
-  LogIn
+  LogIn,
+  ExternalLink
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -432,11 +433,21 @@ export default function AdminSecurity() {
 
           <Card className="border shadow-sm">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <Network className="w-4 h-4" />
-                Allow IP listing
-              </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Restrict access by IP allowlist and denylist.</CardDescription>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                    <Network className="w-4 h-4" />
+                    Allow IP listing
+                  </CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">Restrict access by IP allowlist and denylist. {ipAllowlist.length > 0 || ipDenylist.length > 0 ? `${ipAllowlist.length} allowed, ${ipDenylist.length} blocked.` : ""}</CardDescription>
+                </div>
+                <Link href="/admin/security/ip-access">
+                  <Button variant="outline" size="sm" className="w-full sm:w-auto shrink-0">
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    View & manage
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0 space-y-4">
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">

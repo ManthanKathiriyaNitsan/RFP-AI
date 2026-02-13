@@ -24,6 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Grid3X3,
+  List,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,6 +71,7 @@ export default function AdminCredits() {
   const [selectedRecipientId, setSelectedRecipientId] = useState<number | null>(null);
   const [folderSearch, setFolderSearch] = useState("");
   const [folderSort, setFolderSort] = useState<"a-z" | "z-a">("a-z");
+  const [folderViewMode, setFolderViewMode] = useState<"grid" | "list">("grid");
   const [activityPurchasePage, setActivityPurchasePage] = useState(1);
   const [activityAllocationPage, setActivityAllocationPage] = useState(1);
   const [, setLocation] = useLocation();
@@ -529,41 +532,41 @@ export default function AdminCredits() {
           <p className="text-muted-foreground text-sm sm:text-base max-w-2xl">See which admins bought credits and how much they allocated to customers and collaborators.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border shadow-sm overflow-hidden rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
-                <TrendingUp className="h-5 w-5" />
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-full">
+          <Card className="border shadow-sm overflow-hidden rounded-xl">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                <TrendingUp className="h-4 w-4" />
               </div>
-              <p className="text-2xl font-bold tabular-nums">{analytics.totalCreditsPurchased.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Total credits purchased</p>
+              <p className="text-lg font-bold tabular-nums">{analytics.totalCreditsPurchased.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Total credits purchased</p>
             </CardContent>
           </Card>
-          <Card className="border shadow-sm overflow-hidden rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
-                <ShoppingCart className="h-5 w-5" />
+          <Card className="border shadow-sm overflow-hidden rounded-xl">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                <ShoppingCart className="h-4 w-4" />
               </div>
-              <p className="text-2xl font-bold tabular-nums">{analytics.totalPurchaseTx.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Purchase transactions</p>
+              <p className="text-lg font-bold tabular-nums">{analytics.totalPurchaseTx.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Purchase transactions</p>
             </CardContent>
           </Card>
-          <Card className="border shadow-sm overflow-hidden rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
-                <UserPlus className="h-5 w-5" />
+          <Card className="border shadow-sm overflow-hidden rounded-xl">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                <UserPlus className="h-4 w-4" />
               </div>
-              <p className="text-2xl font-bold tabular-nums">{analytics.totalAllocationTx.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Allocation transactions</p>
+              <p className="text-lg font-bold tabular-nums">{analytics.totalAllocationTx.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Allocation transactions</p>
             </CardContent>
           </Card>
-          <Card className="border shadow-sm overflow-hidden rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
-                <Users className="h-5 w-5" />
+          <Card className="border shadow-sm overflow-hidden rounded-xl">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                <Users className="h-4 w-4" />
               </div>
-              <p className="text-2xl font-bold tabular-nums">{analytics.adminsCount.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Admins with activity</p>
+              <p className="text-lg font-bold tabular-nums">{analytics.adminsCount.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Admins with activity</p>
             </CardContent>
           </Card>
         </div>
@@ -591,6 +594,14 @@ export default function AdminCredits() {
                   <SelectItem value="z-a">Z → A</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="flex items-center border rounded-lg overflow-hidden shrink-0 ml-auto">
+                <Button variant={folderViewMode === "grid" ? "secondary" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setFolderViewMode("grid")} title="Grid view">
+                  <Grid3X3 className="w-4 h-4" />
+                </Button>
+                <Button variant={folderViewMode === "list" ? "secondary" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setFolderViewMode("list")} title="List view">
+                  <List className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
           {analytics.adminList.length === 0 ? (
@@ -603,7 +614,7 @@ export default function AdminCredits() {
             </Card>
           ) : (
             <TooltipProvider>
-              <div className="flex flex-wrap gap-6 sm:gap-8">
+              <div className="flex flex-wrap gap-2">
                 {filteredAdminList.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4">No admins match your search.</p>
                 ) : (

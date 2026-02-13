@@ -118,8 +118,8 @@ export default function Register() {
       </div>
 
       {/* Right panel – form (compact so no scroll) */}
-      <div className="order-1 lg:order-2 flex flex-1 flex-col justify-center min-h-0 overflow-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6 lg:py-6 w-full min-w-0 lg:max-w-[52rem] xl:max-w-[58rem]">
-        <div className="w-full max-w-[min(100%,22rem)] sm:max-w-[26rem] md:max-w-[30rem] lg:max-w-[34rem] xl:max-w-[36rem] mx-auto lg:ml-auto lg:mr-0 my-auto">
+      <div className="order-1 lg:order-2 flex flex-1 flex-col justify-center items-center min-h-0 overflow-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6 lg:py-6 w-full min-w-0 lg:max-w-[52rem] xl:max-w-[58rem]">
+        <div className="w-full max-w-[min(100%,22rem)] sm:max-w-[26rem] md:max-w-[30rem] lg:max-w-[34rem] xl:max-w-[36rem] mx-auto my-auto">
           <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 md:p-7 lg:p-8 shadow-sm">
             <div className="flex items-center gap-3 mb-5 sm:mb-6">
               {primaryLogoUrl ? (
@@ -299,6 +299,7 @@ export default function Register() {
               </p>
             </form>
           </div>
+          <p className="text-center text-xs text-gray-400 mt-6">© 2026 RFP-AI. Enterprise AI Platform.</p>
         </div>
       </div>
     </div>

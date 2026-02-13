@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
-import { Bot, Send, MessageSquare, Clock } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useLocation, useSearch, Link } from "wouter";
+import { Bot, Send, MessageSquare, Clock, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,18 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { fetchChatMessages } from "@/api/proposals";
+import { useProposalsList } from "@/hooks/use-proposals-api";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 import { parseApiError } from "@/lib/utils";
 import { authStorage } from "@/lib/auth";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { AiChatConfig } from "@/config/ai-chat.types";
 
 /** Minimal default when backend does not return config; all data should come from backend. */
@@ -68,10 +76,25 @@ function initialMessagesFromConfig(config: AiChatConfig): Array<{ id: number; is
   return out;
 }
 
+const NO_PROPOSAL_MESSAGE = "Select a proposal above to get answers based on your knowledge base, or open a proposal and use the chat there.";
+const NO_AI_RESPONSE_FALLBACK = "Sorry, I couldn't generate a response. Please try again.";
+
 export default function AIChat() {
   const { currentRole, user, updateUser } = useAuth();
   const { toast } = useToast();
-  const [proposalId] = useState<number | null>(null);
+  const search = useSearch();
+  const searchParams = useMemo(() => new URLSearchParams(search && search.startsWith("?") ? search.slice(1) : search || ""), [search]);
+  const proposalIdFromUrl = useMemo(() => {
+    const id = searchParams.get("proposalId");
+    if (id == null || id === "") return null;
+    const n = parseInt(id, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [searchParams]);
+  const [proposalIdState, setProposalIdState] = useState<number | null>(null);
+  const proposalId = proposalIdFromUrl ?? proposalIdState;
+  const [, setLocation] = useLocation();
+  const { data: proposalsList = [] } = useProposalsList();
+  const proposals = useMemo(() => proposalsList as { id: number; title: string }[], [proposalsList]);
   const credits = user?.credits ?? 0;
   const noCredits = credits <= 0;
   const isAdmin = (currentRole || "").toLowerCase() === "admin" || (currentRole || "").toLowerCase() === "super_admin";
@@ -117,6 +140,20 @@ export default function AIChat() {
       })));
     }
   }, [chatMessages]);
+
+  const PROPOSAL_NONE_VALUE = "__none__";
+  const onProposalSelect = (value: string) => {
+    if (value === PROPOSAL_NONE_VALUE) {
+      setProposalIdState(null);
+      setLocation("/ai-chat");
+      return;
+    }
+    const id = parseInt(value, 10);
+    if (Number.isFinite(id)) {
+      setProposalIdState(id);
+      setLocation(`/ai-chat?proposalId=${id}`);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -169,11 +206,11 @@ export default function AIChat() {
             {
               id: messages.length + 2,
               isAi: true,
-              message: "That's a great question! Based on your project requirements, I'd recommend focusing on scalability and security. Would you like me to elaborate on specific technical requirements?",
+              message: NO_AI_RESPONSE_FALLBACK,
               timestamp: new Date(),
             },
           ]);
-        }, 1500);
+        }, 500);
       }
     },
     onError: (error: unknown) => {
@@ -229,16 +266,18 @@ export default function AIChat() {
       };
       setMessages(prev => [...prev, newMessage]);
       setInputMessage("");
+      setIsAiThinking(false);
       setTimeout(() => {
-        setIsAiThinking(false);
-        const aiResponse = {
-          id: messages.length + 2,
-          isAi: true,
-          message: "That's a great question! Let me provide you with some detailed guidance on that topic. Based on best practices and industry standards, here's what I recommend...",
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, aiResponse]);
-      }, 1000);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: messages.length + 2,
+            isAi: true,
+            message: NO_PROPOSAL_MESSAGE,
+            timestamp: new Date(),
+          },
+        ]);
+      }, 400);
     }
   };
 
@@ -258,6 +297,35 @@ export default function AIChat() {
       <div>
         <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2">{page.title}</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">{page.subtitle}</p>
+      </div>
+
+      {/* Proposal selector: RAG uses knowledge base scoped to a proposal */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground">Proposal (for knowledge-base answers):</span>
+        <Select
+          value={proposalId != null ? String(proposalId) : PROPOSAL_NONE_VALUE}
+          onValueChange={onProposalSelect}
+        >
+          <SelectTrigger className="w-[220px] sm:w-[280px]">
+            <SelectValue placeholder="Select a proposal" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={PROPOSAL_NONE_VALUE}>None</SelectItem>
+            {proposals.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>
+                <span className="truncate block max-w-[200px] sm:max-w-[240px]" title={p.title}>{p.title || `Proposal #${p.id}`}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {proposalId != null && (
+          <Link href={`/rfp/${proposalId}`}>
+            <Button variant="outline" size="sm" className="gap-1">
+              <FileText className="w-3.5 h-3.5" />
+              Open proposal
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">

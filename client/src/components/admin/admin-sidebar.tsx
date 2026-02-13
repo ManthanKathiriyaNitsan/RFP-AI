@@ -400,52 +400,54 @@ export function AdminSidebar({ open = false, onOpenChange }: AdminSidebarProps) 
         </div>
       </div>
 
-      <div className="p-4 border-t border-border">
-        <div className="rounded-xl overflow-hidden sidebar-widget-bg border border-border/60">
-          <div className="px-3.5 py-2.5 border-b border-border/50 bg-muted/20">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg sidebar-widget-icon-bg">
-                <CreditCard className="w-3.5 h-3.5 sidebar-widget-icon" />
+      {!isSuperAdmin && (
+        <div className="p-4 border-t border-border">
+          <div className="rounded-xl overflow-hidden sidebar-widget-bg border border-border/60">
+            <div className="px-3.5 py-2.5 border-b border-border/50 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg sidebar-widget-icon-bg">
+                  <CreditCard className="w-3.5 h-3.5 sidebar-widget-icon" />
+                </div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{creditsTitle}</span>
               </div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{creditsTitle}</span>
             </div>
-          </div>
-          <div className="p-3.5">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground tabular-nums tracking-tight">
-                {typeof credits === "number" ? credits.toLocaleString() : credits}
-              </span>
-              <span className="text-[11px] text-muted-foreground font-medium">{creditsLabel}</span>
-            </div>
-            <div className="mt-2.5 space-y-1">
-              <p className="text-[11px] text-muted-foreground">Used this month: {(typeof usedThisMonth === "number" ? usedThisMonth : 0).toLocaleString()}</p>
-              {isSuperAdmin && typeof creditsDistributed === "number" && (
-                <p className="text-[11px] text-muted-foreground">Distributed: {creditsDistributed.toLocaleString()}</p>
-              )}
-            </div>
-            <div className="mt-3 flex flex-col gap-1.5">
-              <Link
-                href="/admin/credits"
-                onClick={handleLinkClick}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium theme-gradient-bg text-white hover:opacity-95 transition-opacity"
-              >
-                <CreditCard className="w-3.5 h-3.5 opacity-90" />
-                Manage credits
-              </Link>
-              {usageDetailHref && (
+            <div className="p-3.5">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-foreground tabular-nums tracking-tight">
+                  {typeof credits === "number" ? credits.toLocaleString() : credits}
+                </span>
+                <span className="text-[11px] text-muted-foreground font-medium">{creditsLabel}</span>
+              </div>
+              <div className="mt-2.5 space-y-1">
+                <p className="text-[11px] text-muted-foreground">Used this month: {(typeof usedThisMonth === "number" ? usedThisMonth : 0).toLocaleString()}</p>
+                {typeof creditsDistributed === "number" && (
+                  <p className="text-[11px] text-muted-foreground">Distributed: {creditsDistributed.toLocaleString()}</p>
+                )}
+              </div>
+              <div className="mt-3 flex flex-col gap-1.5">
                 <Link
-                  href={usageDetailHref}
+                  href="/admin/credits"
                   onClick={handleLinkClick}
-                  className="inline-flex items-center justify-center gap-1 text-[11px] font-medium text-primary hover:underline text-center"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium theme-gradient-bg text-white hover:opacity-95 transition-opacity"
                 >
-                  See where credits are used
-                  <ChevronRight className="w-3 h-3 shrink-0" />
+                  <CreditCard className="w-3.5 h-3.5 opacity-90" />
+                  Manage credits
                 </Link>
-              )}
+                {usageDetailHref && (
+                  <Link
+                    href={usageDetailHref}
+                    onClick={handleLinkClick}
+                    className="inline-flex items-center justify-center gap-1 text-[11px] font-medium text-primary hover:underline text-center"
+                  >
+                    See where credits are used
+                    <ChevronRight className="w-3 h-3 shrink-0" />
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 

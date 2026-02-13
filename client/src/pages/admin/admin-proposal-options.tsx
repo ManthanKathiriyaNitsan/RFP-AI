@@ -14,7 +14,7 @@ import {
   deleteIndustry,
   type OptionItem,
 } from "@/api/admin-data";
-import { Tag, Building2, Plus, Pencil, Trash2, Loader2, ArrowLeft, FolderOpen, Search } from "lucide-react";
+import { Tag, Building2, Plus, Pencil, Trash2, Loader2, ArrowLeft, FolderOpen, Search, Grid3X3, List } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,7 @@ export default function AdminProposalOptions() {
   const [selectedAdmin, setSelectedAdmin] = useState<AdminFolder | null>(null);
   const [folderSearch, setFolderSearch] = useState("");
   const [folderSort, setFolderSort] = useState<"a-z" | "z-a">("a-z");
+  const [folderViewMode, setFolderViewMode] = useState<"grid" | "list">("grid");
 
   const { data: usersRaw = [] } = useQuery({
     queryKey: ["/api/v1/users"],
@@ -220,8 +221,37 @@ export default function AdminProposalOptions() {
           <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-proposal-options-title">Proposal Options</h1>
           <p className="text-muted-foreground text-sm mt-1">Select an admin to manage categories and industries for proposal forms.</p>
         </div>
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-full">
+          <Card className="border shadow-sm overflow-hidden rounded-xl">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                <FolderOpen className="h-4 w-4" />
+              </div>
+              <p className="text-lg font-bold tabular-nums">{adminFolders.length}</p>
+              <p className="text-xs text-muted-foreground">Admins</p>
+            </CardContent>
+          </Card>
+          <Card className="border shadow-sm overflow-hidden rounded-xl">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                <Tag className="h-4 w-4" />
+              </div>
+              <p className="text-lg font-bold tabular-nums">{categories.length}</p>
+              <p className="text-xs text-muted-foreground">Categories</p>
+            </CardContent>
+          </Card>
+          <Card className="border shadow-sm overflow-hidden rounded-xl">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                <Building2 className="h-4 w-4" />
+              </div>
+              <p className="text-lg font-bold tabular-nums">{industries.length}</p>
+              <p className="text-xs text-muted-foreground">Industries</p>
+            </CardContent>
+          </Card>
+        </div>
         {adminFolders.length > 0 && (
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:gap-4">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:gap-2">
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -240,6 +270,26 @@ export default function AdminProposalOptions() {
                 <SelectItem value="z-a">Z → A</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center border rounded-lg overflow-hidden shrink-0 sm:ml-auto">
+              <Button
+                variant={folderViewMode === "grid" ? "secondary" : "ghost"}
+                size="icon"
+                className="rounded-none h-9 w-9"
+                onClick={() => setFolderViewMode("grid")}
+                title="Grid view"
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={folderViewMode === "list" ? "secondary" : "ghost"}
+                size="icon"
+                className="rounded-none h-9 w-9"
+                onClick={() => setFolderViewMode("list")}
+                title="List view"
+              >
+                <List className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         )}
         {adminFolders.length === 0 ? (
@@ -252,12 +302,33 @@ export default function AdminProposalOptions() {
               </div>
             </CardContent>
           </Card>
+        ) : filteredAdminFolders.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">No admins match your search.</p>
+        ) : folderViewMode === "list" ? (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <ul className="divide-y divide-border">
+              {filteredAdminFolders.map((admin) => (
+                <li key={admin.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAdmin(admin)}
+                    className="flex items-center gap-3 w-full p-3 text-left hover:bg-muted/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    data-testid={`folder-admin-${admin.id}`}
+                  >
+                    <img src="/icons8-folder-48.png" alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm text-foreground truncate">{admin.name}</p>
+                      {admin.email && <p className="text-xs text-muted-foreground truncate">{admin.email}</p>}
+                    </div>
+                    {admin.role && <span className="text-xs text-muted-foreground shrink-0">{admin.role}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : (
-          <div className="flex flex-wrap gap-6 sm:gap-8">
-            {filteredAdminFolders.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">No admins match your search.</p>
-            ) : (
-            filteredAdminFolders.map((admin) => (
+          <div className="flex flex-wrap gap-2 sm:gap-2">
+            {filteredAdminFolders.map((admin) => (
               <button
                 key={admin.id}
                 type="button"
@@ -274,7 +345,7 @@ export default function AdminProposalOptions() {
                   {admin.name}
                 </span>
               </button>
-            )))}
+            ))}
           </div>
         )}
       </div>

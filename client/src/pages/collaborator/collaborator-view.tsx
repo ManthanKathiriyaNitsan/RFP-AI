@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, FileText, Calendar, DollarSign, Edit, Eye, LayoutGrid, List, LayoutDashboard, MessageSquare, CheckCircle, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { DataTablePagination } from "@/components/shared/data-table-pagination";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -37,6 +38,8 @@ export default function CollaboratorView() {
   const statusFilterOptions = options.statusFilterOptions ?? collaboratorOptionsFallback.statusFilterOptions;
   const defaultStatusFilter = options.defaultStatusFilter ?? collaboratorOptionsFallback.defaultStatusFilter;
   const [statusFilter, setStatusFilter] = useState<string>(defaultStatusFilter);
+  const [collabViewPage, setCollabViewPage] = useState(1);
+  const [collabViewPageSize, setCollabViewPageSize] = useState(10);
   const statusDisplay = options.statusDisplay ?? collaboratorOptionsFallback.statusDisplay;
   const roleDisplay = options.roleDisplay ?? collaboratorOptionsFallback.roleDisplay;
   const permissionLabelsMap = options.permissionLabels ?? collaboratorOptionsFallback.permissionLabels;
@@ -52,6 +55,13 @@ export default function CollaboratorView() {
       statusFilter === "all" || (proposal?.status || "draft") === statusFilter;
     return matchesSearch && matchesStatus;
   });
+  const paginatedCollaborations = filteredCollaborations.slice(
+    (collabViewPage - 1) * collabViewPageSize,
+    collabViewPage * collabViewPageSize
+  );
+  useEffect(() => {
+    setCollabViewPage(1);
+  }, [searchTerm, statusFilter]);
 
   const getStatusColor = (status: string) => {
     const config = statusDisplay[status as keyof typeof statusDisplay] ?? statusDisplay.default;
@@ -199,7 +209,7 @@ export default function CollaboratorView() {
             </div>
           ) : layout === "card" ? (
             <div className="space-y-3 sm:space-y-4">
-              {filteredCollaborations.map((item: MyCollaborationItem) => {
+              {paginatedCollaborations.map((item: MyCollaborationItem) => {
                 const { proposal, collaboration } = item;
                 return (
                   <Card key={`${proposal.id}-${collaboration.id}`} className="proposal-card overflow-hidden">
@@ -275,7 +285,7 @@ export default function CollaboratorView() {
                 <div className="sm:col-span-1 hidden sm:block">Updated</div>
                 <div className="sm:col-span-1 text-right">Action</div>
               </div>
-              {filteredCollaborations.map((item: MyCollaborationItem) => {
+              {paginatedCollaborations.map((item: MyCollaborationItem) => {
                 const { proposal, collaboration } = item;
                 return (
                   <div
@@ -317,7 +327,7 @@ export default function CollaboratorView() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredCollaborations.map((item: MyCollaborationItem) => {
+              {paginatedCollaborations.map((item: MyCollaborationItem) => {
                 const { proposal, collaboration } = item;
                 return (
                   <Card
@@ -369,6 +379,16 @@ export default function CollaboratorView() {
                 );
               })}
             </div>
+          )}
+          {filteredCollaborations.length > 0 && (
+            <DataTablePagination
+              totalItems={filteredCollaborations.length}
+              page={collabViewPage}
+              pageSize={collabViewPageSize}
+              onPageChange={setCollabViewPage}
+              onPageSizeChange={setCollabViewPageSize}
+              itemLabel="proposals"
+            />
           )}
         </CardContent>
       </Card>

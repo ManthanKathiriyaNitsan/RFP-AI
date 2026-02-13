@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { QueryErrorState } from "@/components/shared/query-error-state";
+import { DataTablePagination } from "@/components/shared/data-table-pagination";
 
 type LayoutMode = "card" | "list" | "grid";
 
@@ -79,6 +80,8 @@ export default function KnowledgeBase() {
   const [selectedDocument, setSelectedDocument] = useState<KbDocument | null>(null);
   const [activeTab, setActiveTab] = useState("documents");
   const [layout, setLayout] = useState<LayoutMode>("list");
+  const [docPage, setDocPage] = useState(1);
+  const [docPageSize, setDocPageSize] = useState(10);
 
   const { data: documentsFromApi = [], isLoading: documentsLoading, isError: documentsError, error: documentsErrorObj, refetch: refetchDocuments } = useQuery({
     queryKey: ["customer", "knowledge-base", "documents"],
@@ -239,6 +242,13 @@ export default function KnowledgeBase() {
       return matchesSearch && matchesTag;
     });
   }, [documents, searchTerm, tagFilter]);
+  const paginatedDocuments = useMemo(
+    () => filteredDocuments.slice((docPage - 1) * docPageSize, docPage * docPageSize),
+    [filteredDocuments, docPage, docPageSize]
+  );
+  useEffect(() => {
+    setDocPage(1);
+  }, [searchTerm, tagFilter]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + " B";
@@ -440,7 +450,7 @@ export default function KnowledgeBase() {
                   </tr>
                 </thead>
                 <tbody className="bg-card">
-                  {filteredDocuments.map((doc) => (
+                  {paginatedDocuments.map((doc) => (
                     <tr key={doc.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/50 transition-colors">
                       <td className="px-2 py-1.5 align-middle min-w-0 max-w-0 w-[22%]">
                         <p className="font-medium text-sm truncate" title={doc.name}>{doc.name}</p>
@@ -480,7 +490,7 @@ export default function KnowledgeBase() {
             </div>
           ) : (
             <div className={layout === "card" ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4"}>
-              {filteredDocuments.map((doc) => (
+              {paginatedDocuments.map((doc) => (
                 <Card key={doc.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="p-3 sm:p-4 pb-2">
                     <div className="flex items-start justify-between gap-2">
@@ -563,6 +573,16 @@ export default function KnowledgeBase() {
                 </Card>
               ))}
             </div>
+          )}
+          {filteredDocuments.length > 0 && (
+            <DataTablePagination
+              totalItems={filteredDocuments.length}
+              page={docPage}
+              pageSize={docPageSize}
+              onPageChange={setDocPage}
+              onPageSizeChange={setDocPageSize}
+              itemLabel="documents"
+            />
           )}
         </TabsContent>
 

@@ -5,6 +5,7 @@ import { FileText, Send, CheckCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { QueryErrorState } from "@/components/shared/query-error-state";
+import { CopyrightFooter } from "@/components/shared/copyright-footer";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
@@ -42,63 +43,76 @@ export default function PublicProposalAnswer() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground text-center">Invalid or missing link.</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex flex-col bg-muted/30">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="pt-6">
+              <p className="text-muted-foreground text-center">Invalid or missing link.</p>
+            </CardContent>
+          </Card>
+        </div>
+        <CopyrightFooter />
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground text-center">Loading...</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex flex-col bg-muted/30">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="pt-6">
+              <p className="text-muted-foreground text-center">Loading...</p>
+            </CardContent>
+          </Card>
+        </div>
+        <CopyrightFooter />
       </div>
     );
   }
   if (isError || !proposal) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6">
-            {isError ? (
-              <QueryErrorState
-                refetch={refetch}
-                error={error instanceof Error ? error : undefined}
-                message={error instanceof Error ? error.message : "Unable to load this proposal."}
-              />
-            ) : (
-              <p className="text-muted-foreground text-center">This share link is invalid or has expired.</p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex flex-col bg-muted/30">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="pt-6">
+              {isError ? (
+                <QueryErrorState
+                  refetch={refetch}
+                  error={error instanceof Error ? error : undefined}
+                  message={error instanceof Error ? error.message : "Unable to load this proposal."}
+                />
+              ) : (
+                <p className="text-muted-foreground text-center">This share link is invalid or has expired.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+        <CopyrightFooter />
       </div>
     );
   }
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6 text-center">
-            <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Thank you</h2>
-            <p className="text-muted-foreground">Your answers have been submitted successfully.</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex flex-col bg-muted/30">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="pt-6 text-center">
+              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">Thank you</h2>
+              <p className="text-muted-foreground">Your answers have been submitted successfully.</p>
+            </CardContent>
+          </Card>
+        </div>
+        <CopyrightFooter />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 py-8 px-4">
+    <div className="min-h-screen flex flex-col bg-muted/30">
+      <div className="flex-1 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <Card className="border shadow-sm mb-6">
           <CardHeader className="border-b bg-muted/50">
@@ -143,6 +157,8 @@ export default function PublicProposalAnswer() {
           </CardContent>
         </Card>
       </div>
+      </div>
+      <CopyrightFooter />
     </div>
   );
 }

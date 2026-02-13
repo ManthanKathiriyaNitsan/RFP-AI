@@ -12,6 +12,7 @@ import { BrandingProvider } from "@/contexts/BrandingContext";
 import { ApiStatusProvider } from "@/contexts/ApiStatusContext";
 import { ApiStatusBanner } from "@/components/shared/api-status-banner";
 import { AppLoader } from "@/components/shared/app-loader";
+import { CopyrightFooter } from "@/components/shared/copyright-footer";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { Navigation } from "@/components/layout/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
@@ -39,6 +40,8 @@ import Auth from "@/pages/auth";
 import ForgotPassword from "@/pages/forgot-password";
 import Register from "@/pages/register";
 import ResetPassword from "@/pages/reset-password";
+import VerifyEmail from "@/pages/verify-email";
+import VerifyEmailPending from "@/pages/verify-email-pending";
 import AccountSettings from "@/pages/account-settings";
 import AIChat from "@/pages/ai-chat";
 import NotFound from "@/pages/not-found";
@@ -59,6 +62,7 @@ import AdminUsage from "@/pages/admin/admin-usage";
 import AdminIntegrations from "@/pages/admin/admin-integrations";
 import AdminIntegrationSetup from "@/pages/admin/admin-integration-setup";
 import AdminSecurity from "@/pages/admin/admin-security";
+import AdminIpAccess from "@/pages/admin/admin-ip-access";
 import AdminSettings from "@/pages/admin/admin-settings";
 import AdminOrganizations from "@/pages/admin/admin-organizations";
 import AdminOrganizationDetail from "@/pages/admin/admin-organization-detail";
@@ -194,14 +198,15 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   }
 
   return (
-    <div className="bg-background w-full max-w-full overflow-x-hidden">
+    <div className="bg-background w-full max-w-full overflow-x-hidden min-h-screen flex flex-col">
       <Navigation sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-      <div className="flex w-full max-w-full overflow-x-hidden">
+      <div className="flex flex-1 w-full max-w-full overflow-x-hidden">
         <AdminSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
         <main className="flex-1 flex flex-col min-h-[calc(100vh-var(--navbar-height))] p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
           <Component />
         </main>
       </div>
+      <CopyrightFooter />
     </div>
   );
 }
@@ -233,7 +238,14 @@ function PublicRoute({ component: Component }: { component: React.ComponentType 
     }
   }
   
-  return <Component />;
+  return (
+    <div className="min-h-screen flex flex-col bg-background">
+      <div className="flex-1">
+        <Component />
+      </div>
+      <CopyrightFooter />
+    </div>
+  );
 }
 
 function CustomerRoute({ component: Component }: { component: React.ComponentType }) {
@@ -338,14 +350,15 @@ function CustomerRoute({ component: Component }: { component: React.ComponentTyp
   }
 
   return (
-    <div className="bg-background w-full max-w-full overflow-x-hidden">
+    <div className="bg-background w-full max-w-full overflow-x-hidden min-h-screen flex flex-col">
       <Navigation sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-      <div className="flex w-full max-w-full overflow-x-hidden">
+      <div className="flex flex-1 w-full max-w-full overflow-x-hidden">
         <CustomerSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
         <main className="flex-1 flex flex-col min-h-[calc(100vh-var(--navbar-height))] p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
           <Component />
         </main>
       </div>
+      <CopyrightFooter />
     </div>
   );
 }
@@ -469,14 +482,15 @@ function CollaboratorRoute({ component: Component }: { component: React.Componen
   }
 
   return (
-    <div className="bg-background w-full max-w-full overflow-x-hidden">
+    <div className="bg-background w-full max-w-full overflow-x-hidden min-h-screen flex flex-col">
       <Navigation sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-      <div className="flex w-full max-w-full overflow-x-hidden">
+      <div className="flex flex-1 w-full max-w-full overflow-x-hidden">
         <CollaboratorSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
         <main className="flex-1 flex flex-col min-h-[calc(100vh-var(--navbar-height))] p-4 sm:p-6 md:ml-64 w-full max-w-full overflow-x-hidden" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
           <Component />
         </main>
       </div>
+      <CopyrightFooter />
     </div>
   );
 }
@@ -494,15 +508,16 @@ function AuthenticatedRoute({ component: Component }: { component: React.Compone
   const isAccountSettings = location === "/account-settings";
   
   return (
-    <div className="bg-background">
+    <div className="bg-background min-h-screen flex flex-col">
       <Navigation sidebarOpen={isAccountSettings ? sidebarOpen : undefined} setSidebarOpen={isAccountSettings ? setSidebarOpen : undefined} />
-      <main className="p-4 sm:p-6" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
+      <main className="flex-1 p-4 sm:p-6" style={{ paddingTop: 'calc(var(--navbar-height) + 16px)' }}>
         {isAccountSettings ? (
           <Component sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         ) : (
           <Component />
         )}
       </main>
+      <CopyrightFooter />
     </div>
   );
 }
@@ -515,6 +530,8 @@ function Router() {
       <Route path="/forgot-password" component={() => <PublicRoute component={ForgotPassword} />} />
       <Route path="/register" component={() => <PublicRoute component={Register} />} />
       <Route path="/reset-password" component={() => <PublicRoute component={ResetPassword} />} />
+      <Route path="/verify-email" component={() => <PublicRoute component={VerifyEmail} />} />
+      <Route path="/verify-email-pending" component={() => <PublicRoute component={VerifyEmailPending} />} />
 
       {/* Admin routes */}
       <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
@@ -539,6 +556,7 @@ function Router() {
       <Route path="/admin/usage" component={() => <AdminRoute component={AdminUsage} />} />
       <Route path="/admin/integrations" component={() => <AdminRoute component={AdminIntegrations} />} />
       <Route path="/admin/integrations/setup" component={() => <AdminRoute component={AdminIntegrationSetup} />} />
+      <Route path="/admin/security/ip-access" component={() => <AdminRoute component={AdminIpAccess} />} />
       <Route path="/admin/security" component={() => <AdminRoute component={AdminSecurity} />} />
       <Route path="/admin/audit-logs" component={() => <AdminRoute component={AdminAuditLogs} />} />
       <Route path="/admin/proposal-options" component={() => <AdminRoute component={AdminProposalOptions} />} />

@@ -48,6 +48,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DataTablePagination } from "@/components/shared/data-table-pagination";
 
 import type { LucideIcon } from "lucide-react";
 
@@ -102,6 +103,9 @@ export default function AdminContent() {
 
   const [folderSearch, setFolderSearch] = useState("");
   const [folderSort, setFolderSort] = useState<"a-z" | "z-a">("a-z");
+  const [folderViewMode, setFolderViewMode] = useState<"grid" | "list">("grid");
+  const [contentPage, setContentPage] = useState(1);
+  const [contentPageSize, setContentPageSize] = useState(10);
   const contentCreators = useMemo(() => {
     const byName = new Map<string, number>();
     // Only show folders for admin content
@@ -261,6 +265,14 @@ export default function AdminContent() {
     );
   }
 
+  const paginatedContent = filteredContent.slice(
+    (contentPage - 1) * contentPageSize,
+    contentPage * contentPageSize
+  );
+  useEffect(() => {
+    setContentPage(1);
+  }, [searchTerm, activeTab]);
+
   if (isError) {
     return (
       <div className="p-4">
@@ -280,16 +292,31 @@ export default function AdminContent() {
             <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-content-title">Content Library</h1>
             <p className="text-muted-foreground text-sm mt-1">View and manage admin content.</p>
           </div>
-
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full max-w-full">
+            <Card className="border shadow-sm overflow-hidden rounded-xl">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                  <FolderOpen className="h-4 w-4" />
+                </div>
+                <p className="text-lg font-bold tabular-nums">{contentCreators.length}</p>
+                <p className="text-xs text-muted-foreground">Creators</p>
+              </CardContent>
+            </Card>
+            <Card className="border shadow-sm overflow-hidden rounded-xl">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <p className="text-lg font-bold tabular-nums">{adminContentItems.length}</p>
+                <p className="text-xs text-muted-foreground">Content items</p>
+              </CardContent>
+            </Card>
+          </div>
           {/* Admin Content Section */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <FolderOpen className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Admin Content</h2>
-              <Badge variant="secondary" className="ml-auto">{adminContentItems.length}</Badge>
-            </div>
+      
             {contentCreators.length > 0 && (
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:gap-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:gap-2">
                 <div className="relative flex-1 max-w-xs">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <Input
@@ -308,6 +335,14 @@ export default function AdminContent() {
                     <SelectItem value="z-a">Z → A</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="flex items-center border rounded-lg overflow-hidden shrink-0 sm:ml-auto">
+                  <Button variant={folderViewMode === "grid" ? "secondary" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setFolderViewMode("grid")} title="Grid view">
+                    <Grid3X3 className="w-4 h-4" />
+                  </Button>
+                  <Button variant={folderViewMode === "list" ? "secondary" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setFolderViewMode("list")} title="List view">
+                    <List className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             )}
             {contentCreators.length === 0 ? (
@@ -320,13 +355,39 @@ export default function AdminContent() {
                   </div>
                 </CardContent>
               </Card>
+            ) : filteredContentCreators.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No creators match your search.</p>
+            ) : folderViewMode === "list" ? (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <ul className="divide-y divide-border">
+                  {filteredContentCreators.map(({ name, count }) => {
+                    const u = getUserByCreatorName(name);
+                    const role = u ? roleLabel(u.role) : "Creator";
+                    return (
+                      <li key={name}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCreatorName(name)}
+                          className="flex items-center gap-3 w-full p-3 text-left hover:bg-muted/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                          data-testid={`folder-creator-${name.replace(/\s+/g, "-")}`}
+                        >
+                          <img src="/icons8-folder-48.png" alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm text-foreground truncate">{name}</p>
+                            {u?.email && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
+                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0">{role}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">{count} item{count !== 1 ? "s" : ""}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             ) : (
               <TooltipProvider>
                 <div className="flex flex-wrap gap-2 sm:gap-2">
-                  {filteredContentCreators.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4">No creators match your search.</p>
-                  ) : (
-                  filteredContentCreators.map(({ name, count }) => (
+                  {filteredContentCreators.map(({ name, count }) => (
                     <Tooltip key={name}>
                       <TooltipTrigger asChild>
                         <button
@@ -366,8 +427,7 @@ export default function AdminContent() {
                         })()}
                       </TooltipContent>
                     </Tooltip>
-                  ))
-                  )}
+                  ))}
                 </div>
               </TooltipProvider>
             )}
@@ -622,7 +682,7 @@ export default function AdminContent() {
                             </td>
                           </tr>
                         ) : (
-                        filteredContent.map((item) => {
+                        paginatedContent.map((item) => {
                           const statusConfig = getStatusConfig(item.status);
                           return (
                             <tr 
@@ -820,7 +880,7 @@ export default function AdminContent() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full max-w-full overflow-x-hidden">
-              {filteredContent.map((item) => {
+              {paginatedContent.map((item) => {
                 const statusConfig = getStatusConfig(item.status);
                 const isProposal = (item as { source?: string; proposalId?: number }).source === "proposal" && (item as { proposalId?: number }).proposalId != null;
                 const href = isProposal ? `/admin/proposals/${(item as { proposalId: number }).proposalId}` : `/admin/content/editor?id=${item.id}`;
@@ -858,6 +918,16 @@ export default function AdminContent() {
                 );
               })}
             </div>
+          )}
+          {filteredContent.length > 0 && (
+            <DataTablePagination
+              totalItems={filteredContent.length}
+              page={contentPage}
+              pageSize={contentPageSize}
+              onPageChange={setContentPage}
+              onPageSizeChange={setContentPageSize}
+              itemLabel="items"
+            />
           )}
         </TabsContent>
         ))}

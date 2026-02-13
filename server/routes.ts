@@ -2465,6 +2465,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     { value: "won", label: "Won" },
     { value: "lost", label: "Lost" },
   ];
+  const dateRangesUsage: OptionItem[] = [
+    { value: "day", label: "Today" },
+    { value: "7days", label: "Last 7 days" },
+    { value: "30days", label: "Last 30 days" },
+    { value: "3months", label: "Last 3 months" },
+    { value: "6months", label: "Last 6 months" },
+    { value: "year", label: "Last 1 year" },
+  ];
   app.get("/api/v1/admin/options", async (_req, res) => {
     try {
       res.json({
@@ -2475,6 +2483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contentStatuses: [],
         termTypes: [],
         proposalStatuses: [...defaultProposalStatuses],
+        dateRangesUsage: [...dateRangesUsage],
         pageTitles: {},
       });
     } catch (error) {
@@ -3273,15 +3282,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         case "day":
           startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
           break;
+        case "7days":
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 7);
+          break;
         case "week":
           startDate = new Date(now);
           startDate.setDate(now.getDate() - 7);
           break;
+        case "30days":
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 30);
+          break;
         case "month":
           startDate = new Date(now.getFullYear(), now.getMonth(), 1);
           break;
+        case "3months":
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 90);
+          break;
+        case "6months":
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 180);
+          break;
         case "year":
-          startDate = new Date(now.getFullYear(), 0, 1);
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 365);
           break;
         default:
           startDate = new Date(now);
@@ -3295,20 +3321,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return t >= startTime;
       };
 
-      // Admin list for super_admin folder view (no adminId selected). Normalize role so "Super Administrator" / "super admin" match.
-      const isAdminRole = (role: string | null | undefined) => {
+      // Admin list for super_admin folder view (no adminId selected). Only "admin" role – exclude super_admin, customer, collaborator.
+      const isAdminOnlyRole = (role: string | null | undefined) => {
         const r = (role ?? "").toLowerCase().replace(/\s+/g, "_");
-        return r === "admin" || r === "super_admin" || r === "super_administrator";
+        return r === "admin";
       };
       let adminList: { id: number; name: string; email?: string | null; role: string }[] = [];
       if (isSuperAdmin && selectedAdminId == null) {
         adminList = allUsers
-          .filter((u) => isAdminRole(u.role))
+          .filter((u) => isAdminOnlyRole(u.role))
           .map((u) => ({ id: u.id, name: displayName(u), email: u.email ?? null, role: roleLabel(u.role ?? "") }));
-        // If still empty, include current user so super_admin always sees at least themselves
-        if (adminList.length === 0 && currentUser) {
-          adminList = [{ id: currentUser.id, name: displayName(currentUser), email: currentUser.email ?? null, role: roleLabel(currentUser.role ?? "") }];
-        }
       }
 
       // Scope: which user IDs to include in analytics (selected admin + their collaborators/customers, or current admin only)
@@ -3409,7 +3431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const u = userById.get(userId);
         const name = u ? displayName(u) : `User ${userId}`;
         const initials = name.split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
-        const proposals = v.proposals.size || proposalsByOwner.get(userId) ?? 0;
+        const proposals = v.proposals.size || (proposalsByOwner.get(userId) ?? 0);
         const credits = v.credits;
         const efficiency = proposals > 0 ? Math.round(credits / proposals) : 0;
         return { name, avatar: initials, credits, proposals, efficiency, userId, role: u?.role ?? "" };
@@ -3454,6 +3476,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { label: "AI Messages", value: String(usageInRange.length), trend: "usage events", trendUp: true, icon: "Clock", iconColor: "text-amber-500", bgColor: "bg-amber-500/10" },
       ];
 
+      const dateRanges = [
+        { value: "day", label: "Today" },
+        { value: "7days", label: "Last 7 days" },
+        { value: "30days", label: "Last 30 days" },
+        { value: "week", label: "This week" },
+        { value: "month", label: "This month" },
+        { value: "3months", label: "Last 3 months" },
+        { value: "6months", label: "Last 6 months" },
+        { value: "year", label: "Last 1 year" },
+      ];
+
       res.json({
         adminList,
         summaryCards,
@@ -3463,6 +3496,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hourlyPeaks,
         usersInScope,
         selectedAdminId: selectedAdminId ?? null,
+        dateRanges,
+        pageTitle: "Usage Analytics",
+        isSuperAdmin,
+        currentUserRole: userRoleRaw,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to fetch usage";

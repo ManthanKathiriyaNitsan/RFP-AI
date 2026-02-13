@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQueries } from "@tanstack/react-query";
 import {
   Search,
@@ -58,9 +58,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DataTablePagination } from "@/components/shared/data-table-pagination";
 import { Switch } from "@/components/ui/switch";
 import type { Collaboration as ApiCollaboration, CollaboratorUserInfo } from "@/api/proposals";
 import { useCollaboratorRoleOptions } from "@/hooks/use-collaborator-role-options";
+import { isValidEmail } from "@/api/auth";
 
 type CollaboratorAggregate = {
   user: CollaboratorUserInfo;
@@ -102,6 +104,8 @@ export default function CollaboratorManagement() {
     proposalTitle: string;
   } | null>(null);
   const [removeFromProposalDialogAgg, setRemoveFromProposalDialogAgg] = useState<CollaboratorAggregate | null>(null);
+  const [collabPage, setCollabPage] = useState(1);
+  const [collabPageSize, setCollabPageSize] = useState(10);
 
   const { data: proposalsData, isError: proposalsError, error: proposalsErrorObj, refetch: refetchProposals } = useProposalsList();
   const myProposals = proposalsData ?? [];
@@ -147,9 +151,16 @@ export default function CollaboratorManagement() {
     const matchesRole = roleFilter === "all" || primaryRole === roleFilter;
     return matchesSearch && matchesRole;
   });
+  const paginatedCollaborators = filteredCollaborators.slice(
+    (collabPage - 1) * collabPageSize,
+    collabPage * collabPageSize
+  );
+  useEffect(() => {
+    setCollabPage(1);
+  }, [searchTerm, roleFilter]);
 
   const { data: searchResults = [] } = useSearchUsers({
-    email: inviteEmail.trim() || null,
+    email: inviteEmail.trim() && isValidEmail(inviteEmail.trim()) ? inviteEmail.trim() : null,
     role: "collaborator",
   });
 
@@ -471,7 +482,7 @@ export default function CollaboratorManagement() {
                   </tr>
                 </thead>
                 <tbody className="bg-card">
-                  {filteredCollaborators.map((agg) => {
+                  {paginatedCollaborators.map((agg) => {
                     const primaryRole = agg.assignments[0]?.role ?? "viewer";
                     const roleConfig = getRoleConfig(primaryRole);
                     const enabled = agg.assignments[0]?.collaboration.enabled !== false;
@@ -499,7 +510,9 @@ export default function CollaboratorManagement() {
                         <td className="px-2 py-1.5 align-middle min-w-0 hidden sm:table-cell">
                           <div className="flex flex-wrap gap-1 min-w-0">
                             {agg.assignments.slice(0, 2).map(({ proposalId, title, role }) => (
-                              <Badge key={proposalId} variant="secondary" className="text-[11px] max-w-[8rem] truncate" title={`${title} (${role})`}>{title} ({role})</Badge>
+                              <Badge key={proposalId} variant="secondary" className="text-[11px] max-w-[10rem] min-w-0 overflow-hidden" title={`${title} (${role})`}>
+                                <span className="block truncate">{title} ({role})</span>
+                              </Badge>
                             ))}
                             {agg.assignments.length > 2 && <span className="text-[13px] text-muted-foreground shrink-0">+{agg.assignments.length - 2}</span>}
                           </div>
@@ -544,7 +557,7 @@ export default function CollaboratorManagement() {
             </div>
           ) : (
             <div className={layout === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6" : "grid grid-cols-1 gap-4 sm:gap-6"}>
-              {filteredCollaborators.map((agg) => {
+              {paginatedCollaborators.map((agg) => {
                 const primaryRole = agg.assignments[0]?.role ?? "viewer";
                 const roleConfig = getRoleConfig(primaryRole);
                 const RoleIcon = roleConfig.icon;
@@ -577,10 +590,10 @@ export default function CollaboratorManagement() {
                               </Badge>
                             </div>
                             {agg.assignments.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mt-2">
+                              <div className="flex flex-wrap gap-1.5 mt-2 min-w-0">
                                 {agg.assignments.map(({ proposalId, title, role, collaboration }) => (
-                                  <Badge key={proposalId} variant="secondary" className="text-xs">
-                                    {title} ({role})
+                                  <Badge key={proposalId} variant="secondary" className="text-xs max-w-[10rem] min-w-0 overflow-hidden" title={`${title} (${role})`}>
+                                    <span className="block truncate">{title} ({role})</span>
                                   </Badge>
                                 ))}
                               </div>
@@ -648,6 +661,16 @@ export default function CollaboratorManagement() {
               })}
             </div>
           )}
+          {filteredCollaborators.length > 0 && (
+            <DataTablePagination
+              totalItems={filteredCollaborators.length}
+              page={collabPage}
+              pageSize={collabPageSize}
+              onPageChange={setCollabPage}
+              onPageSizeChange={setCollabPageSize}
+              itemLabel="collaborators"
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="roles" className="space-y-4 sm:space-y-6">
@@ -699,8 +722,11 @@ export default function CollaboratorManagement() {
                   setSelectedSearchUser(null);
                 }}
               />
+              {inviteEmail.trim() && !isValidEmail(inviteEmail.trim()) && (
+                <p className="text-sm text-amber-600 dark:text-amber-500">Please enter a valid email address to search.</p>
+              )}
             </div>
-            {inviteEmail.trim() && searchResults.length > 0 && (
+            {inviteEmail.trim() && isValidEmail(inviteEmail.trim()) && searchResults.length > 0 && (
               <div className="space-y-2">
                 <Label>Select user</Label>
                 <div className="border rounded-lg divide-y max-h-32 overflow-y-auto">
@@ -725,7 +751,7 @@ export default function CollaboratorManagement() {
                 </div>
               </div>
             )}
-            {inviteEmail.trim() && searchResults.length === 0 && !selectedSearchUser && (
+            {inviteEmail.trim() && isValidEmail(inviteEmail.trim()) && searchResults.length === 0 && !selectedSearchUser && (
               <p className="text-sm text-muted-foreground">No collaborator found with this email. They must register first.</p>
             )}
             <div className="space-y-2">

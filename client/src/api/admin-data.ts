@@ -60,6 +60,14 @@ export interface UsageData {
   /** Users in scope (admin + customers/collaborators) with role and usage */
   usersInScope?: { userId: number; name: string; email?: string | null; role: string; roleLabel: string; credits: number; proposals: number; efficiency: number }[];
   selectedAdminId?: number | null;
+  /** Dynamic: date range options for the filter dropdown */
+  dateRanges?: { value: string; label: string }[];
+  /** Dynamic: page title (e.g. "Usage Analytics") */
+  pageTitle?: string;
+  /** Backend-reported: true when current user is super_admin */
+  isSuperAdmin?: boolean;
+  /** Backend-reported: current user role (e.g. admin, super_admin) */
+  currentUserRole?: string;
 }
 
 export interface AdminUsageParams {
@@ -156,6 +164,8 @@ export interface KnowledgeBaseDocument {
   embeddingStatus: "indexed" | "pending" | "failed";
   chunkCount?: number;
   lastIndexedAt?: string;
+  /** Creator/owner name (for super admin folder view). */
+  creator?: string;
 }
 
 /** Index version for version control */

@@ -66,6 +66,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataTablePagination } from "@/components/shared/data-table-pagination";
 
 export default function AdminUsers() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -84,6 +85,8 @@ export default function AdminUsers() {
   const [subUsersAdmin, setSubUsersAdmin] = useState<any>(null);
   const [editRoleDialogOpen, setEditRoleDialogOpen] = useState(false);
   const [editRoleTarget, setEditRoleTarget] = useState<string | null>(null);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersPageSize, setUsersPageSize] = useState(10);
 
   const ROLE_PERMISSIONS_STORAGE_KEY = "admin-role-permissions";
   const { data: permissionsData } = useQuery({
@@ -271,6 +274,13 @@ export default function AdminUsers() {
   const filteredUsers = allUsers.filter((user: any) =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  useEffect(() => {
+    setUsersPage(1);
+  }, [searchTerm]);
+  const paginatedUsers = filteredUsers.slice(
+    (usersPage - 1) * usersPageSize,
+    usersPage * usersPageSize
   );
 
   /** Map a raw sub-user (from API list) to the same shape as main table user for dialogs/actions. */
@@ -772,7 +782,7 @@ export default function AdminUsers() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredUsers.map((user) => {
+                      {paginatedUsers.map((user) => {
                         const roleConfig = getRoleConfig(user.role);
                         const statusConfig = getStatusConfig(user.status);
                         const RoleIcon = roleConfig.icon;
@@ -813,13 +823,16 @@ export default function AdminUsers() {
                               </div>
                             </td>
                             <td className="py-3 px-4">
-                              <div className="min-w-[140px] text-xs">
+                              <div className="min-w-[100px] text-xs">
                                 {isSuperAdmin && (user.role || "").toLowerCase() === "admin" ? (
-                                  <div className="font-medium text-foreground">Pool: {user.credits.toLocaleString()}</div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-semibold tabular-nums text-foreground">{user.credits.toLocaleString()}</span>
+                                    <span className="text-muted-foreground">available</span>
+                                  </div>
                                 ) : (
-                                  <div className="flex items-baseline gap-1.5">
-                                    <span className="text-muted-foreground">Used: {user.creditsUsed}</span>
-                                    <span className="font-medium">{user.credits.toLocaleString()} total</span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-muted-foreground">{user.creditsUsed} used</span>
+                                    <span className="font-medium tabular-nums">{user.credits.toLocaleString()} total</span>
                                   </div>
                                 )}
                               </div>
@@ -884,7 +897,7 @@ export default function AdminUsers() {
               ) : (
                 /* Mobile Card View */
                 <div className="divide-y divide-border">
-                  {filteredUsers.map((user) => {
+                  {paginatedUsers.map((user) => {
                     const roleConfig = getRoleConfig(user.role);
                     const statusConfig = getStatusConfig(user.status);
                     const RoleIcon = roleConfig.icon;
@@ -974,9 +987,9 @@ export default function AdminUsers() {
                         <div className="space-y-1">
                           <p className="text-xs text-muted-foreground">Credits</p>
                           {isSuperAdmin && (user.role || "").toLowerCase() === "admin" ? (
-                            <div className="text-xs font-medium">Pool: {user.credits.toLocaleString()}</div>
+                            <p className="text-sm font-semibold tabular-nums">{user.credits.toLocaleString()} <span className="text-muted-foreground font-normal">available</span></p>
                           ) : (
-                            <p className="text-sm font-medium">Used: {user.creditsUsed} / {user.credits.toLocaleString()} total</p>
+                            <p className="text-sm font-medium"><span className="text-muted-foreground">{user.creditsUsed} used</span> · {user.credits.toLocaleString()} total</p>
                           )}
                         </div>
                       </div>
@@ -984,6 +997,14 @@ export default function AdminUsers() {
                   })}
                 </div>
               )}
+              <DataTablePagination
+                totalItems={filteredUsers.length}
+                page={usersPage}
+                pageSize={usersPageSize}
+                onPageChange={setUsersPage}
+                onPageSizeChange={setUsersPageSize}
+                itemLabel="users"
+              />
             </CardContent>
           </Card>
           )}
