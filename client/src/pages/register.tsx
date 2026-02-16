@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { Brain, Eye, EyeOff, Mail, Lock, User, Sparkles, FileText, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ export default function Register() {
   });
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirm?: string }>({});
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const name = formData.name.trim();
     const email = formData.email.trim();
@@ -67,16 +67,61 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [formData, navigate, toast]);
+
+  const handleNameChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFormData((prev) => ({ ...prev, name: e.target.value }));
+      if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+    },
+    [errors.name]
+  );
+
+  const handleEmailChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFormData((prev) => ({ ...prev, email: e.target.value }));
+      if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+    },
+    [errors.email]
+  );
+
+  const handlePasswordChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFormData((prev) => ({ ...prev, password: e.target.value }));
+      if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+    },
+    [errors.password]
+  );
+
+  const handleConfirmPasswordChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }));
+      if (errors.confirm) setErrors((prev) => ({ ...prev, confirm: undefined }));
+    },
+    [errors.confirm]
+  );
+
+  const toggleShowPassword = useCallback(() => {
+    setShowPassword((prev) => !prev);
+  }, []);
+
+  const toggleShowConfirm = useCallback(() => {
+    setShowConfirm((prev) => !prev);
+  }, []);
+
+  const leftPanelStyle = useMemo(
+    () => ({
+      background: "linear-gradient(180deg, var(--primary) 0%, var(--primary-shade) 50%, var(--primary) 100%)",
+    }),
+    []
+  );
 
   return (
     <div className="flex h-dvh min-h-0 font-sans bg-[#fafafa] dark:bg-gray-950 flex-col lg:flex-row overflow-hidden">
       {/* Left panel – promotional content (form on right) */}
       <div
         className="order-2 lg:order-1 hidden lg:flex flex-1 flex-col justify-center px-8 xl:px-12 py-8 xl:py-10 min-h-0 shrink-0 overflow-auto"
-        style={{
-          background: "linear-gradient(180deg, var(--primary) 0%, var(--primary-shade) 50%, var(--primary) 100%)",
-        }}
+        style={leftPanelStyle}
       >
         <div className="max-w-md xl:max-w-lg">
           <h2 className="text-2xl xl:text-3xl font-bold text-white leading-tight mb-6 xl:mb-8">
@@ -148,10 +193,7 @@ export default function Register() {
                     type="text"
                     placeholder="Enter your name"
                     value={formData.name}
-                    onChange={(e) => {
-                      setFormData((prev) => ({ ...prev, name: e.target.value }));
-                      if (errors.name) setErrors((e) => ({ ...e, name: undefined }));
-                    }}
+                    onChange={handleNameChange}
                     required
                     autoComplete="name"
                     className={`h-10 sm:h-11 pl-10 pr-4 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-sm ${errors.name ? "border-destructive" : "border-gray-200 dark:border-gray-700"}`}
@@ -175,10 +217,7 @@ export default function Register() {
                     type="email"
                     placeholder="Enter your email"
                     value={formData.email}
-                    onChange={(e) => {
-                      setFormData((prev) => ({ ...prev, email: e.target.value }));
-                      if (errors.email) setErrors((e) => ({ ...e, email: undefined }));
-                    }}
+                    onChange={handleEmailChange}
                     required
                     autoComplete="email"
                     className={`h-10 sm:h-11 pl-10 pr-4 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-sm ${errors.email ? "border-destructive" : "border-gray-200 dark:border-gray-700"}`}
@@ -202,10 +241,7 @@ export default function Register() {
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     value={formData.password}
-                    onChange={(e) => {
-                      setFormData((prev) => ({ ...prev, password: e.target.value }));
-                      if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
-                    }}
+                    onChange={handlePasswordChange}
                     required
                     minLength={PASSWORD_MIN_LENGTH}
                     autoComplete="new-password"
@@ -216,7 +252,7 @@ export default function Register() {
                     variant="ghost"
                     size="icon"
                     className="absolute right-0 top-0 h-full w-10 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={toggleShowPassword}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -240,10 +276,7 @@ export default function Register() {
                     type={showConfirm ? "text" : "password"}
                     placeholder="Confirm your password"
                     value={formData.confirmPassword}
-                    onChange={(e) => {
-                      setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }));
-                      if (errors.confirm) setErrors((e) => ({ ...e, confirm: undefined }));
-                    }}
+                    onChange={handleConfirmPasswordChange}
                     required
                     minLength={PASSWORD_MIN_LENGTH}
                     autoComplete="new-password"
@@ -254,7 +287,7 @@ export default function Register() {
                     variant="ghost"
                     size="icon"
                     className="absolute right-0 top-0 h-full w-10 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800"
-                    onClick={() => setShowConfirm(!showConfirm)}
+                    onClick={toggleShowConfirm}
                     aria-label={showConfirm ? "Hide password" : "Show password"}
                   >
                     {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

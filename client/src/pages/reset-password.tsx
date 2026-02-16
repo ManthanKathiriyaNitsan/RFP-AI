@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { Brain, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ export default function ResetPassword() {
     setToken(getResetTokenFromUrl());
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
     setConfirmError("");
@@ -65,7 +65,29 @@ export default function ResetPassword() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, password, confirmPassword, toast]);
+
+  const handlePasswordChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+    if (passwordError) setPasswordError("");
+  }, [passwordError]);
+
+  const handleConfirmPasswordChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfirmPassword(e.target.value);
+    if (confirmError) setConfirmError("");
+  }, [confirmError]);
+
+  const toggleShowPassword = useCallback(() => {
+    setShowPassword((p) => !p);
+  }, []);
+
+  const toggleShowConfirmPassword = useCallback(() => {
+    setShowConfirmPassword((p) => !p);
+  }, []);
+
+  const goToAuth = useCallback(() => {
+    navigate("/auth");
+  }, [navigate]);
 
   if (success) {
     return (
@@ -77,7 +99,7 @@ export default function ResetPassword() {
               <CardDescription>Your password has been updated. Sign in with your new password.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full gap-2" onClick={() => navigate("/auth")}>
+              <Button className="w-full gap-2" onClick={goToAuth}>
                 <ArrowLeft className="w-4 h-4" />
                 Back to sign in
               </Button>
@@ -103,7 +125,7 @@ export default function ResetPassword() {
                   Forgot password
                 </Button>
               </Link>
-              <Button variant="ghost" className="w-full gap-2 mt-2" onClick={() => navigate("/auth")}>
+              <Button variant="ghost" className="w-full gap-2 mt-2" onClick={goToAuth}>
                 <ArrowLeft className="w-4 h-4" />
                 Back to sign in
               </Button>
@@ -145,10 +167,7 @@ export default function ResetPassword() {
                     type={showPassword ? "text" : "password"}
                     placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
                     value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (passwordError) setPasswordError("");
-                    }}
+                    onChange={handlePasswordChange}
                     required
                     minLength={PASSWORD_MIN_LENGTH}
                     autoComplete="new-password"
@@ -161,7 +180,7 @@ export default function ResetPassword() {
                     variant="ghost"
                     size="icon"
                     className="absolute right-0 top-0 h-full px-3"
-                    onClick={() => setShowPassword((p) => !p)}
+                    onClick={toggleShowPassword}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </Button>
@@ -180,10 +199,7 @@ export default function ResetPassword() {
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm new password"
                     value={confirmPassword}
-                    onChange={(e) => {
-                      setConfirmPassword(e.target.value);
-                      if (confirmError) setConfirmError("");
-                    }}
+                    onChange={handleConfirmPasswordChange}
                     required
                     minLength={PASSWORD_MIN_LENGTH}
                     autoComplete="new-password"
@@ -196,7 +212,7 @@ export default function ResetPassword() {
                     variant="ghost"
                     size="icon"
                     className="absolute right-0 top-0 h-full px-3"
-                    onClick={() => setShowConfirmPassword((p) => !p)}
+                    onClick={toggleShowConfirmPassword}
                   >
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </Button>
@@ -214,7 +230,7 @@ export default function ResetPassword() {
                 type="button"
                 variant="ghost"
                 className="w-full gap-2 text-muted-foreground"
-                onClick={() => navigate("/auth")}
+                onClick={goToAuth}
               >
                 <ArrowLeft className="w-4 h-4" />
                 Back to sign in

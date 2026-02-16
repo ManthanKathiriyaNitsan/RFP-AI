@@ -35,7 +35,6 @@ import {
   showCreditAlertBrowserNotification,
 } from "@/lib/utils";
 
-// Pages
 import Auth from "@/pages/auth";
 import ForgotPassword from "@/pages/forgot-password";
 import Register from "@/pages/register";
@@ -45,8 +44,6 @@ import VerifyEmailPending from "@/pages/verify-email-pending";
 import AccountSettings from "@/pages/account-settings";
 import AIChat from "@/pages/ai-chat";
 import NotFound from "@/pages/not-found";
-
-// Admin Pages
 import AdminDashboard from "@/pages/admin/admin-dashboard";
 import AdminAnalytics from "@/pages/admin/admin-analytics";
 import AdminProposals from "@/pages/admin/admin-proposals";
@@ -71,8 +68,6 @@ import AdminKnowledgeBase from "@/pages/admin/admin-knowledge-base";
 import AdminSubscriptionBilling from "@/pages/admin/admin-subscription-billing";
 import AdminAuditLogs from "@/pages/admin/admin-audit-logs";
 import AdminProposalOptions from "@/pages/admin/admin-proposal-options";
-
-// Customer Pages
 import CustomerDashboard from "@/pages/customer/customer-dashboard";
 import CollaboratorView from "@/pages/collaborator/collaborator-view";
 import CollaboratorAnalytics from "@/pages/collaborator/collaborator-analytics";
@@ -88,7 +83,6 @@ import PublicProposalAnswer from "@/pages/customer/public-proposal-answer";
 import CustomerCreditUsage from "@/pages/customer/credit-usage";
 import CollaboratorCreditUsage from "@/pages/collaborator/credit-usage";
 
-/** True if user can access the admin panel (admin or super_admin). */
 function isAdminPanelRole(role: string) {
   const r = (role || "").toLowerCase();
   return r === "admin" || r === "super_admin";
@@ -211,7 +205,6 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   );
 }
 
-/** Admin routes that only super_admin may access; admin is redirected to /admin. */
 function SuperAdminOnlyRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, currentRole } = useAuth();
   const role = (currentRole || "").toLowerCase();
@@ -224,9 +217,12 @@ function SuperAdminOnlyRoute({ component: Component }: { component: React.Compon
   return <AdminRoute component={Component} />;
 }
 
+const FOOTER_HIDDEN_PATHS = ["/auth", "/register", "/forgot-password"];
+
 function PublicRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, currentRole } = useAuth();
-  
+  const [location] = useLocation();
+
   if (user) {
     const role = (currentRole || "").toLowerCase();
     if (isAdminPanelRole(role)) {
@@ -237,13 +233,15 @@ function PublicRoute({ component: Component }: { component: React.ComponentType 
       return <Redirect to="/dashboard" />;
     }
   }
-  
+
+  const showFooter = !FOOTER_HIDDEN_PATHS.includes(location);
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <div className="flex-1">
         <Component />
       </div>
-      <CopyrightFooter />
+      {showFooter && <CopyrightFooter />}
     </div>
   );
 }
@@ -608,14 +606,11 @@ function Router() {
           }
         }}
       </Route>
-      
-      {/* 404 */}
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-/** Toast styles using CSS variables so they update with theme without refresh. */
 const TOAST_OPTIONS = {
   duration: 4500,
   style: {
@@ -633,7 +628,6 @@ const TOAST_OPTIONS = {
   error: { iconTheme: { primary: "var(--destructive)", secondary: "var(--muted)" } },
 };
 
-/** Renders app content or full-page loader while session is initializing (e.g. token refresh on refresh). */
 function AppContent() {
   const { isInitializing } = useAuth();
   if (isInitializing) {

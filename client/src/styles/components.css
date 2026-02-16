@@ -107,6 +107,13 @@
   .search-box input {
     @apply pl-9;
   }
+  /* Larger variant for global search modal */
+  .search-box.search-box-lg .search-box-icon {
+    @apply left-4 h-5 w-5;
+  }
+  .search-box.search-box-lg input {
+    @apply pl-12;
+  }
 
   /* Form inputs */
   .modern-input {

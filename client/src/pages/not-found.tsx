@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Home } from "lucide-react";
@@ -7,13 +8,13 @@ import { CopyrightFooter } from "@/components/shared/copyright-footer";
 
 export default function NotFound() {
   const { user, currentRole } = useAuth();
-  
-  const getHomeRoute = () => {
+
+  const homeRoute = useMemo(() => {
     if (!user) return "/auth";
-    if (currentRole === 'admin') return "/admin";
-    if (currentRole === 'collaborator') return "/collaborator";
+    if (currentRole === "admin") return "/admin";
+    if (currentRole === "collaborator") return "/collaborator";
     return "/dashboard";
-  };
+  }, [user, currentRole]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -32,7 +33,7 @@ export default function NotFound() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-              <Link href={getHomeRoute()} className="flex-1">
+              <Link href={homeRoute} className="flex-1">
                 <Button className="w-full text-xs sm:text-sm">
                   <Home className="w-4 h-4 mr-2" />
                   Go to Home

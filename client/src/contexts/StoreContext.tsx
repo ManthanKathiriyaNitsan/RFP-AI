@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 import * as store from "@/lib/localStore";
 import type {
   StoreUser,
@@ -65,7 +65,7 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const unsub = store.subscribeStore(() => setTick((t) => t + 1));
@@ -76,7 +76,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     store.notifyStore();
   }, []);
 
-  const value: StoreContextValue = {
+  const value = useMemo<StoreContextValue>(
+    () => ({
     proposals: store.getProposals(),
     getProposals: store.getProposals,
     getProposal: store.getProposal,
@@ -118,7 +119,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     getCollaboratorsForProposalIds: store.getCollaboratorsForProposalIds,
 
     generateProposalDocument: store.generateProposalDocument,
-  };
+  }),
+    [tick, refreshProposals]
+  );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

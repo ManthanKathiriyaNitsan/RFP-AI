@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { Brain, Eye, EyeOff, Mail, Lock, Sparkles, FileText, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ export default function Auth() {
     password: "",
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
@@ -86,7 +86,26 @@ export default function Auth() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [formData.email, formData.password, login, navigate, toast]);
+
+  const handleEmailChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData((prev) => ({ ...prev, email: e.target.value }));
+  }, []);
+
+  const handlePasswordChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData((prev) => ({ ...prev, password: e.target.value }));
+  }, []);
+
+  const toggleShowPassword = useCallback(() => {
+    setShowPassword((prev) => !prev);
+  }, []);
+
+  const rightPanelStyle = useMemo(
+    () => ({
+      background: "linear-gradient(180deg, var(--primary) 0%, var(--primary-shade) 50%, var(--primary) 100%)",
+    }),
+    []
+  );
 
   return (
     <div className="flex min-h-dvh font-sans bg-[#fafafa] dark:bg-gray-950 flex-col lg:flex-row">
@@ -125,7 +144,7 @@ export default function Auth() {
                   type="email"
                   placeholder="Enter your email"
                   value={formData.email}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+                  onChange={handleEmailChange}
                   required
                   className="h-11 sm:h-12 pl-10 pr-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
                   style={{ borderColor: undefined }}
@@ -144,7 +163,7 @@ export default function Auth() {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={formData.password}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                  onChange={handlePasswordChange}
                   required
                   className="h-11 sm:h-12 pl-10 pr-11 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-base"
                   style={{ borderColor: undefined }}
@@ -154,7 +173,7 @@ export default function Auth() {
                   variant="ghost"
                   size="icon"
                   className="absolute right-0 top-0 h-full w-10 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={toggleShowPassword}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -193,9 +212,7 @@ export default function Auth() {
       {/* Right panel – promotional; uses admin-chosen theme */}
       <div
         className="hidden lg:flex flex-1 flex-col justify-center px-10 xl:px-16 py-12 xl:py-16 min-h-0 lg:min-h-dvh shrink-0 bg-primary"
-        style={{
-          background: "linear-gradient(180deg, var(--primary) 0%, var(--primary-shade) 50%, var(--primary) 100%)",
-        }}
+        style={rightPanelStyle}
       >
         <div className="max-w-md xl:max-w-lg">
           <h2 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-12">

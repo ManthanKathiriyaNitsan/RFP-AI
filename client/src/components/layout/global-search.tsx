@@ -187,36 +187,36 @@ export function GlobalSearch() {
   const displayItems = hasQuery ? items : predefinedSuggestions;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-4 pt-4 pb-2">
+    <Dialog open={open} onOpenChange={setOpen} >
+      <DialogContent className="sm:max-w-2xl !p-0 gap-0 overflow-hidden min-h-[280px]">
+        <DialogHeader className="px-4 pt-4 pb-0">
           <DialogTitle className="sr-only">Search</DialogTitle>
         </DialogHeader>
-        <div className="search-box mx-4 mb-3">
+        <div className="search-box search-box-lg mx-4 mb-2">
           <Search className="search-box-icon" />
           <Input
             placeholder="Search pages and proposals..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-9 bg-transparent"
+            className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-12 text-base bg-transparent placeholder:text-base"
             autoFocus
           />
         </div>
-        <div className="max-h-[60vh] overflow-y-auto p-2">
+        <div className="max-h-[65vh] overflow-y-auto px-3 pb-3">
           {loading && (
             <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Loader2 className="w-6 h-6 animate-spin" />
+              <Loader2 className="w-8 h-8 animate-spin" />
             </div>
           )}
           {!loading && hasQuery && items.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
+            <p className="py-6 text-center text-base text-muted-foreground">
               No results found.
             </p>
           )}
           {!loading && displayItems.length > 0 && (
             <ul className="space-y-0.5">
               {!hasQuery && (
-                <li key="suggestions-header" className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <li key="suggestions-header" className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Suggestions
                 </li>
               )}
@@ -224,17 +224,17 @@ export function GlobalSearch() {
                 <li key={String(item.id)}>
                   <button
                     type="button"
-                    className="w-full flex items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                    className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-base hover:bg-accent transition-colors"
                     onClick={() => handleSelect(item)}
                   >
                     {item.type === "Proposal" ? (
-                      <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
                     ) : (
-                      <LayoutDashboard className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <LayoutDashboard className="w-5 h-5 text-muted-foreground shrink-0" />
                     )}
                     <span className="truncate">{item.title}</span>
                     {item.type && (
-                      <span className="text-xs text-muted-foreground shrink-0">
+                      <span className="text-sm text-muted-foreground shrink-0">
                         {item.type}
                       </span>
                     )}

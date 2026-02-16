@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 
 const API_UNAVAILABLE_EVENT = "api-unavailable";
 const API_OK_EVENT = "api-ok";
@@ -41,14 +41,17 @@ export function ApiStatusProvider({ children }: { children: ReactNode }) {
 
   const showBanner = apiUnavailable && !dismissed;
 
+  const value = useMemo(
+    () => ({
+      apiUnavailable: showBanner,
+      dismiss,
+      retry,
+    }),
+    [showBanner, dismiss, retry]
+  );
+
   return (
-    <ApiStatusContext.Provider
-      value={{
-        apiUnavailable: showBanner,
-        dismiss,
-        retry,
-      }}
-    >
+    <ApiStatusContext.Provider value={value}>
       {children}
     </ApiStatusContext.Provider>
   );

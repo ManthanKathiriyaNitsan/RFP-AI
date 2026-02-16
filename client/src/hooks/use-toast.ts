@@ -1,7 +1,6 @@
 import * as React from "react";
 import hotToast, { type ToastOptions, type DefaultToastOptions } from "react-hot-toast";
 
-/** Duration only; style/iconTheme come from HotToaster in App (theme-aware). */
 const TOAST_OPTIONS: DefaultToastOptions = {
   duration: 4500,
 };

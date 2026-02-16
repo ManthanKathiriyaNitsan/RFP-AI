@@ -15,12 +15,9 @@ export function log(message: string, source = "express") {
     second: "2-digit",
     hour12: true,
   });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
 }
 
 export async function setupVite(app: Express, server: Server) {
-  console.log(">>> Vite middleware enabled");
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },

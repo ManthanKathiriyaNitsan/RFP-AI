@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { fetchBranding, DEFAULT_COLOR_PRESETS, type BrandingData, type BrandingColorPreset } from "@/api/admin-data";
 import { useOrganizationId } from "@/hooks/use-organization-id";
 import { useAuth } from "@/hooks/use-auth";
@@ -110,24 +110,18 @@ export function BrandingProvider({
     }
   }, [effectiveOrgId]);
 
-  // When logged out: fetch default org branding so login/register/forgot-password use admin-chosen theme.
-  // When logged in: fetch org branding for current user/admin context.
-  // If fetch fails when logged out, keep previous branding so theme does not flash back to default.
   useEffect(() => {
     if (!user) {
       setIsLoading(true);
       fetchBranding(undefined)
         .then((next) => setData(next))
-        .catch(() => {
-          // Keep current data so theme (e.g. Rose) persists on login page after logout; do not reset to default
-        })
+        .catch(() => {})
         .finally(() => setIsLoading(false));
     } else {
       refetch();
     }
   }, [user, refetch]);
 
-  // Apply color theme (CSS variables) site-wide (including login/register/forgot-password when logged out).
   useEffect(() => {
     const root = document.documentElement;
 
@@ -157,11 +151,14 @@ export function BrandingProvider({
     }
   }, [data.colorTheme, data.colorPresets]);
 
-  const value: BrandingContextValue = {
-    ...data,
-    isLoading,
-    refetch,
-  };
+  const value = useMemo<BrandingContextValue>(
+    () => ({
+      ...data,
+      isLoading,
+      refetch,
+    }),
+    [data, isLoading, refetch]
+  );
 
   return (
     <BrandingContext.Provider value={value}>

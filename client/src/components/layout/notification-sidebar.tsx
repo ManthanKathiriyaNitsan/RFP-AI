@@ -5,7 +5,6 @@ import { Bell, Check, X, Clock, AlertCircle, Info, CheckCircle2, Trash2, AtSign,
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -145,7 +144,6 @@ export function NotificationSidebar({ open = false, onOpenChange }: Notification
       };
     });
   }, [apiNotifications]);
-  const isMobile = useIsMobile();
   const { confirm, ConfirmDialog } = useConfirm();
 
   const readMutation = useMutation({
@@ -341,8 +339,7 @@ export function NotificationSidebar({ open = false, onOpenChange }: Notification
       <SheetContent 
         side="right" 
         className={cn(
-          "w-80 sm:w-96 p-0 bg-sidebar text-sidebar-foreground border-l [&>button]:hidden h-full !top-0 !inset-y-0",
-          !isMobile && "sm:max-w-sm"
+          "w-full max-w-[100vw] sm:w-[500px] sm:max-w-[500px] p-0 bg-sidebar text-sidebar-foreground border-l [&>button]:hidden h-full !top-0 !inset-y-0"
         )}
         style={{ 
           backgroundColor: 'var(--sidebar-bg)',

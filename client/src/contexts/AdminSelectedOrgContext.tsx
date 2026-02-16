@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "admin_selected_org_id";
 const EVENT_NAME = "admin_selected_org_changed";
@@ -52,8 +52,13 @@ export function AdminSelectedOrgProvider({ children }: { children: React.ReactNo
     return () => window.removeEventListener(EVENT_NAME, handle);
   }, []);
 
+  const value = useMemo(
+    () => ({ adminSelectedOrgId, setAdminSelectedOrgId }),
+    [adminSelectedOrgId, setAdminSelectedOrgId]
+  );
+
   return (
-    <AdminSelectedOrgContext.Provider value={{ adminSelectedOrgId, setAdminSelectedOrgId }}>
+    <AdminSelectedOrgContext.Provider value={value}>
       {children}
     </AdminSelectedOrgContext.Provider>
   );

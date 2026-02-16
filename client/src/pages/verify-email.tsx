@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { CheckCircle, XCircle, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,15 @@ export default function VerifyEmail() {
   const { primaryLogoUrl } = useBranding();
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [errorMessage, setErrorMessage] = useState("");
-  
-  const token = new URLSearchParams(location.split("?")[1] || "").get("token") || "";
+
+  const token = useMemo(
+    () => new URLSearchParams(location.split("?")[1] || "").get("token") || "",
+    [location]
+  );
+
+  const goToDashboard = useCallback(() => {
+    navigate("/customer/dashboard");
+  }, [navigate]);
 
   useEffect(() => {
     const verify = async () => {
@@ -44,7 +51,7 @@ export default function VerifyEmail() {
         
         // Redirect to dashboard after 2 seconds
         setTimeout(() => {
-          navigate("/customer/dashboard");
+          goToDashboard();
         }, 2000);
       } catch (error) {
         setStatus("error");
@@ -60,7 +67,7 @@ export default function VerifyEmail() {
     };
 
     verify();
-  }, [token, toast, navigate]);
+  }, [token, toast, goToDashboard]);
 
   return (
     <div className="flex h-dvh min-h-0 items-center justify-center bg-gradient-to-b from-teal-50 to-white px-4">
@@ -109,7 +116,7 @@ export default function VerifyEmail() {
                 Your account has been successfully activated. You will be redirected to your dashboard shortly.
               </p>
               <Button
-                onClick={() => navigate("/customer/dashboard")}
+                onClick={goToDashboard}
                 className="w-full bg-teal-600 hover:bg-teal-700"
               >
                 Go to Dashboard

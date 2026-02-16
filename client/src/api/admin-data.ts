@@ -1,12 +1,6 @@
-/**
- * Admin data layer: fetch from backend API only. All admin data is dynamic.
- * Set VITE_API_BASE_URL in .env to point at the RFP backend (e.g. http://localhost:8000 or http://192.168.0.119:8000).
- */
 import { getApiUrl } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
 import { notifyApiUnavailable } from "@/contexts/ApiStatusContext";
-
-// --- Response types (match backend /api/v1/admin/* response shapes) ---
 
 export interface OptionItem {
   value: string;
@@ -188,7 +182,6 @@ export interface KnowledgeBaseVersionsData {
   versions: KnowledgeBaseVersion[];
 }
 
-/** Single model in modelsByProvider (no provider field; provider comes from key) */
 export interface AIModelItem {
   id: string;
   name: string;
@@ -325,14 +318,12 @@ export interface OrganizationItem {
 
 export type OrganizationsData = OrganizationItem[];
 
-/** Branding – org-level logo, favicon, color theme; used app-wide */
 export interface BrandingColorPreset {
   name: string;
   primary: string;
   secondary: string;
 }
 
-/** Curated color presets that work well in both light and dark mode. Teal is the default. */
 export const DEFAULT_COLOR_PRESETS: BrandingColorPreset[] = [
   { name: "Teal", primary: "#00796b", secondary: "#4db6ac" },
   { name: "Indigo", primary: "#4f46e5", secondary: "#818cf8" },
@@ -350,7 +341,6 @@ export interface BrandingData {
   colorPresets: BrandingColorPreset[];
 }
 
-/** Fetch branding for app-wide use. Optional organizationId (number or string e.g. UUID); otherwise first org. No auth required so auth page can use it. */
 export async function fetchBranding(organizationId?: number | string): Promise<BrandingData> {
   const params: Record<string, string> = {};
   if (organizationId != null && organizationId !== "") params.organizationId = String(organizationId);
@@ -367,7 +357,6 @@ export async function fetchBranding(organizationId?: number | string): Promise<B
   };
 }
 
-/** Upload logo for an org; returns the stored URL (data URL in stub). Favicon is fixed to default app icon. */
 export async function uploadOrgBrandingAsset(
   organizationId: number | string,
   type: "logo",
@@ -391,7 +380,6 @@ export async function uploadOrgBrandingAsset(
   }
 }
 
-/** Audit log entry – used for login, data access, file activity, AI usage */
 export interface AuditLogEntry {
   id: string;
   type: "login" | "data_access" | "file" | "ai_usage";
@@ -412,8 +400,6 @@ export interface AuditLogsData {
   entries: AuditLogEntry[];
   total?: number;
 }
-
-// --- Fetch helper (API only; throws on non-OK so React Query can show error/retry) ---
 
 async function fetchWithAuth(url: string): Promise<Response> {
   const token = authStorage.getAccessToken();

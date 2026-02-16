@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { Mail, ArrowLeft, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,13 @@ export default function VerifyEmailPending() {
   const { toast } = useToast();
   const { primaryLogoUrl } = useBranding();
   const [loading, setLoading] = useState(false);
-  
-  const email = new URLSearchParams(location.split("?")[1] || "").get("email") || "";
 
-  const handleResend = async () => {
+  const email = useMemo(
+    () => new URLSearchParams(location.split("?")[1] || "").get("email") || "",
+    [location]
+  );
+
+  const handleResend = useCallback(async () => {
     if (!email) {
       toast({
         title: "Error",
@@ -41,7 +44,7 @@ export default function VerifyEmailPending() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, toast]);
 
   return (
     <div className="flex h-dvh min-h-0 items-center justify-center bg-gradient-to-b from-teal-50 to-white px-4">

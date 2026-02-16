@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { Brain, ArrowLeft, Mail, Lock, ShieldCheck, Sparkles, FileText, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,13 +43,13 @@ export default function ForgotPassword() {
     }
   }, [step, timeRemaining]);
 
-  const formatTime = (seconds: number) => {
+  const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
+  }, []);
 
-  const handleSendOTP = async (e?: React.FormEvent) => {
+  const handleSendOTP = useCallback(async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = email.trim();
     setEmailError("");
@@ -81,9 +81,9 @@ export default function ForgotPassword() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, toast]);
 
-  const handleVerifyOTP = async (e: React.FormEvent) => {
+  const handleVerifyOTP = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedOtp = otp.trim();
     setOtpError("");
@@ -114,9 +114,9 @@ export default function ForgotPassword() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, otp, toast]);
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const handleResetPassword = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
     if (!newPassword) {
@@ -149,31 +149,76 @@ export default function ForgotPassword() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, newPassword, confirmPassword, otp, toast]);
 
-  const handleResendOTP = async () => {
+  const handleResendOTP = useCallback(async () => {
     setCanResend(false);
     setOtp("");
     setOtpError("");
     await handleSendOTP();
-  };
+  }, [handleSendOTP]);
 
-  const stepTitle =
-    step === "email"
-      ? "Forgot password"
-      : step === "otp"
-        ? "Verify code"
-        : step === "password"
-          ? "Set new password"
-          : "Success!";
-  const stepDescription =
-    step === "email"
-      ? "Enter your email to receive a verification code."
-      : step === "otp"
-        ? "Enter the 6-digit code sent to your email."
-        : step === "password"
-          ? "Choose a strong password for your account."
-          : "Your password has been reset successfully.";
+  const handleEmailChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value);
+    if (emailError) setEmailError("");
+  }, [emailError]);
+
+  const handleOtpChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+    setOtp(value);
+    if (otpError) setOtpError("");
+  }, [otpError]);
+
+  const handleNewPasswordChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewPassword(e.target.value);
+    if (passwordError) setPasswordError("");
+  }, [passwordError]);
+
+  const handleConfirmPasswordChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfirmPassword(e.target.value);
+    if (passwordError) setPasswordError("");
+  }, [passwordError]);
+
+  const handleChangeEmail = useCallback(() => {
+    setStep("email");
+    setOtp("");
+    setOtpError("");
+  }, []);
+
+  const handleGoToSignIn = useCallback(() => {
+    navigate("/auth");
+  }, [navigate]);
+
+  const stepTitle = useMemo(
+    () =>
+      step === "email"
+        ? "Forgot password"
+        : step === "otp"
+          ? "Verify code"
+          : step === "password"
+            ? "Set new password"
+            : "Success!",
+    [step]
+  );
+
+  const stepDescription = useMemo(
+    () =>
+      step === "email"
+        ? "Enter your email to receive a verification code."
+        : step === "otp"
+          ? "Enter the 6-digit code sent to your email."
+          : step === "password"
+            ? "Choose a strong password for your account."
+            : "Your password has been reset successfully.",
+    [step]
+  );
+
+  const rightPanelStyle = useMemo(
+    () => ({
+      background: "linear-gradient(180deg, var(--primary) 0%, var(--primary-shade) 50%, var(--primary) 100%)",
+    }),
+    []
+  );
 
   return (
     <div className="flex min-h-dvh font-sans bg-[#fafafa] dark:bg-gray-950 flex-col lg:flex-row">
@@ -212,10 +257,7 @@ export default function ForgotPassword() {
                       type="email"
                       placeholder="Enter your email"
                       value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (emailError) setEmailError("");
-                      }}
+                      onChange={handleEmailChange}
                       required
                       autoComplete="email"
                       className={`h-11 sm:h-12 pl-10 pr-4 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-base ${emailError ? "border-destructive" : "border-gray-200 dark:border-gray-700"}`}
@@ -256,11 +298,7 @@ export default function ForgotPassword() {
                     type="text"
                     placeholder="Enter 6-digit code"
                     value={otp}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, "").slice(0, 6);
-                      setOtp(value);
-                      if (otpError) setOtpError("");
-                    }}
+                    onChange={handleOtpChange}
                     required
                     maxLength={6}
                     className={`h-11 sm:h-12 text-center text-xl tracking-widest rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus-visible:ring-2 focus-visible:ring-offset-0 ${otpError ? "border-destructive" : "border-gray-200 dark:border-gray-700"}`}
@@ -302,11 +340,7 @@ export default function ForgotPassword() {
                   type="button"
                   variant="ghost"
                   className="w-full gap-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
-                  onClick={() => {
-                    setStep("email");
-                    setOtp("");
-                    setOtpError("");
-                  }}
+                  onClick={handleChangeEmail}
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Change email
@@ -327,10 +361,7 @@ export default function ForgotPassword() {
                       type="password"
                       placeholder="Enter new password"
                       value={newPassword}
-                      onChange={(e) => {
-                        setNewPassword(e.target.value);
-                        if (passwordError) setPasswordError("");
-                      }}
+                      onChange={handleNewPasswordChange}
                       required
                       minLength={PASSWORD_MIN_LENGTH}
                       className={`h-11 sm:h-12 pl-10 pr-4 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-base ${passwordError ? "border-destructive" : "border-gray-200 dark:border-gray-700"}`}
@@ -348,10 +379,7 @@ export default function ForgotPassword() {
                       type="password"
                       placeholder="Confirm new password"
                       value={confirmPassword}
-                      onChange={(e) => {
-                        setConfirmPassword(e.target.value);
-                        if (passwordError) setPasswordError("");
-                      }}
+                      onChange={handleConfirmPasswordChange}
                       required
                       minLength={PASSWORD_MIN_LENGTH}
                       className={`h-11 sm:h-12 pl-10 pr-4 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-offset-0 text-base ${passwordError ? "border-destructive" : "border-gray-200 dark:border-gray-700"}`}
@@ -388,7 +416,7 @@ export default function ForgotPassword() {
                 </p>
                 <Button
                   className="w-full h-11 sm:h-12 rounded-lg bg-primary text-primary-foreground font-semibold text-[15px] sm:text-base hover:opacity-95"
-                  onClick={() => navigate("/auth")}
+                  onClick={handleGoToSignIn}
                 >
                   Go to sign in
                 </Button>
@@ -402,9 +430,7 @@ export default function ForgotPassword() {
       {/* Right panel – promotional; uses admin-chosen theme */}
       <div
         className="hidden lg:flex flex-1 flex-col justify-center px-10 xl:px-16 py-12 xl:py-16 min-h-0 lg:min-h-dvh shrink-0"
-        style={{
-          background: "linear-gradient(180deg, var(--primary) 0%, var(--primary-shade) 50%, var(--primary) 100%)",
-        }}
+        style={rightPanelStyle}
       >
         <div className="max-w-md xl:max-w-lg">
           <h2 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-12">
